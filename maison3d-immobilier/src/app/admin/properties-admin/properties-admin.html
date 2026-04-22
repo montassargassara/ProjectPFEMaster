@@ -1,0 +1,184 @@
+<section class="properties-admin">
+	<header class="page-header">
+		<div>
+			<p class="eyebrow">Biens immobiliers</p>
+			<h2>Gestion des proprietes</h2>
+			<p class="subtext">Suivi du catalogue immobilier en temps reel.</p>
+		</div>
+		<div class="header-actions">
+			<button class="ghost-btn" type="button" (click)="resetFilters()">
+				<i class="fas fa-filter-circle-xmark"></i>
+				Reinitialiser
+			</button>
+			<a class="primary-btn" routerLink="/admin/properties/new">
+				<i class="fas fa-plus"></i>
+				Nouveau bien
+			</a>
+		</div>
+	</header>
+
+	<!-- Toast d'erreur -->
+	<div *ngIf="errorMessage && errorMessage.includes('statut')" class="error-toast">
+		<i class="fas fa-exclamation-circle"></i>
+		<span>{{ errorMessage }}</span>
+		<button (click)="errorMessage = ''">×</button>
+	</div>
+
+	<section class="filters">
+		<div class="filter">
+			<label>Recherche</label>
+			<div class="input">
+				<i class="fas fa-search"></i>
+				<input type="text" placeholder="Titre ou reference" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" />
+			</div>
+		</div>
+		<div class="filter">
+			<label>Type</label>
+			<select [(ngModel)]="typeFilter" (ngModelChange)="applyFilters()">
+				<option value="">Tous</option>
+				<option *ngFor="let type of availableTypes" [value]="type">{{ type }}</option>
+			</select>
+		</div>
+		<div class="filter">
+			<label>Statut</label>
+			<select [(ngModel)]="statusFilter" (ngModelChange)="applyFilters()">
+				<option value="">Tous</option>
+				<option *ngFor="let status of saleStatuses" [value]="status.value">{{ status.label }}</option>
+				<option *ngFor="let status of rentalStatuses" [value]="status.value">{{ status.label }}</option>
+				<option value="RESERVE">Réservé</option>
+			</select>
+		</div>
+		<div class="filter">
+			<label>Ville</label>
+			<select [(ngModel)]="cityFilter" (ngModelChange)="applyFilters()">
+				<option value="">Toutes</option>
+				<option *ngFor="let city of availableCities" [value]="city">{{ city }}</option>
+			</select>
+		</div>
+		<div class="filter">
+			<label>Vente / location</label>
+			<select [(ngModel)]="categoryFilter" (ngModelChange)="applyFilters()">
+				<option value="">Toutes</option>
+				<option value="VENTE">Vente</option>
+				<option value="LOCATION">Location</option>
+			</select>
+		</div>
+		<div class="filter">
+			<label>Prix min</label>
+			<input type="number" [(ngModel)]="minPrice" (ngModelChange)="applyFilters()" />
+		</div>
+		<div class="filter">
+			<label>Prix max</label>
+			<input type="number" [(ngModel)]="maxPrice" (ngModelChange)="applyFilters()" />
+		</div>
+	</section>
+
+	<section class="content">
+		<div *ngIf="loading" class="state loading">
+			<div class="spinner"></div>
+			<p>Chargement des biens...</p>
+		</div>
+
+		<div *ngIf="!loading && errorMessage && !errorMessage.includes('statut')" class="state error">
+			<i class="fas fa-triangle-exclamation"></i>
+			<p>{{ errorMessage }}</p>
+		</div>
+
+		<div *ngIf="!loading && !errorMessage && paginatedProperties.length === 0" class="state empty">
+			<i class="fas fa-house-circle-xmark"></i>
+			<p>Aucun bien ne correspond aux criteres.</p>
+		</div>
+
+		<div class="cards" *ngIf="!loading && !errorMessage && paginatedProperties.length">
+			<article class="property-card" *ngFor="let property of paginatedProperties; trackBy: trackById">
+				<div class="media">
+					<img *ngIf="getImageUrl(property)" [src]="getImageUrl(property)" [alt]="property.titre" (error)="onImageError(property)" />
+					<div *ngIf="!getImageUrl(property)" class="placeholder">
+						<i class="fas fa-image"></i>
+					</div>
+					<span class="status" [class.status-sale]="getPropertyCategory(property) === 'VENTE'" [class.status-rental]="getPropertyCategory(property) === 'LOCATION'">
+						{{ getStatusLabel(property.statut) }}
+					</span>
+				</div>
+				<div class="card-body">
+					<div class="card-header">
+						<div>
+							<p class="reference">{{ getReference(property) }}</p>
+							<h3>{{ property.titre }}</h3>
+						</div>
+						<div class="badges">
+							<span class="tag">{{ property.type }}</span>
+							<span class="tag-category" [class.sale]="getPropertyCategory(property) === 'VENTE'" [class.rental]="getPropertyCategory(property) === 'LOCATION'">
+								<i class="fas" [class.fa-tag]="getPropertyCategory(property) === 'VENTE'" [class.fa-key]="getPropertyCategory(property) === 'LOCATION'"></i>
+								{{ getCategoryLabel(property) }}
+							</span>
+						</div>
+					</div>
+					<p class="meta">{{ getLocation(property) }} · {{ property.surface || '—' }} m²</p>
+					<div class="price-row">
+						<div>
+							<p class="label">Categorie</p>
+							<p class="value">{{ getCategoryLabel(property) }}</p>
+						</div>
+						<div>
+							<p class="label">Prix</p>
+							<p class="value price-highlight">{{ formatPrice(property) }}</p>
+						</div>
+						<div>
+							<p class="label">Cree le</p>
+							<p class="value">{{ formatDate(property.createdAt) }}</p>
+						</div>
+					</div>
+					<div class="actions">
+						<a class="btn-outline" [routerLink]="['/property', property.id]">
+							<i class="fas fa-eye"></i>
+							Voir
+						</a>
+						<a class="btn-outline" [routerLink]="['/admin/properties/edit', property.id]">
+							<i class="fas fa-pen"></i>
+							Modifier
+						</a>
+						<a class="btn-outline" [routerLink]="['/admin/properties/edit', property.id]">
+							<i class="fas fa-photo-film"></i>
+							Medias
+						</a>
+						<button class="btn-danger" type="button" (click)="deleteProperty(property)">
+							<i class="fas fa-trash"></i>
+							Supprimer
+						</button>
+					</div>
+					<div class="status-selector">
+						<label>
+							<i class="fas fa-exchange-alt"></i>
+							Changer statut
+						</label>
+						<select [ngModel]="property.statut" (ngModelChange)="updateStatus(property, $event)">
+							<option *ngFor="let statusOption of getStatusesForProperty(property)" 
+									[value]="statusOption.value"
+									[title]="statusOption.description">
+								{{ statusOption.label }}
+							</option>
+						</select>
+						<small class="status-hint" *ngIf="getPropertyCategory(property) === 'VENTE'">
+							<i class="fas fa-info-circle"></i>
+							Statuts disponibles: Disponible, En attente, Vendu
+						</small>
+						<small class="status-hint" *ngIf="getPropertyCategory(property) === 'LOCATION'">
+							<i class="fas fa-info-circle"></i>
+							Statuts disponibles: Disponible, En attente, Loué
+						</small>
+					</div>
+				</div>
+			</article>
+		</div>
+
+		<div class="pagination" *ngIf="!loading && !errorMessage && collectionSize">
+			<span>Affichage {{ (page - 1) * pageSize + 1 }} - {{ Math.min(page * pageSize, collectionSize) }} sur {{ collectionSize }}</span>
+			<div class="pager">
+				<button type="button" [disabled]="page === 1" (click)="page = page - 1">Precedent</button>
+				<span>Page {{ page }} / {{ Math.ceil(collectionSize / pageSize) || 1 }}</span>
+				<button type="button" [disabled]="page === Math.ceil(collectionSize / pageSize)" (click)="page = page + 1">Suivant</button>
+			</div>
+		</div>
+	</section>
+</section>

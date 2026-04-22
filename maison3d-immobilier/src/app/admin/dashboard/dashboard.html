@@ -1,0 +1,315 @@
+<section class="dashboard" *ngIf="!loading && snapshot; else loadingState">
+	<header class="dashboard-header">
+		<div>
+			<p class="eyebrow">Administration</p>
+			<h2>Vue generale</h2>
+			<p class="subtext">Suivi des indicateurs cles et des activites recentes.</p>
+		</div>
+		<div class="header-actions">
+			<button class="ghost-btn" type="button" (click)="toggleTheme()">
+				<i class="fas" [class.fa-moon]="!isDarkTheme" [class.fa-sun]="isDarkTheme"></i>
+				<span>{{ isDarkTheme ? 'Mode clair' : 'Mode sombre' }}</span>
+			</button>
+			<a class="primary-btn" routerLink="/admin/properties/new">
+				<i class="fas fa-plus"></i>
+				Nouveau bien
+			</a>
+		</div>
+	</header>
+
+	<section class="stats-grid">
+		<article class="stat-card">
+			<div class="stat-header">
+				<p>Total biens</p>
+				<span class="pill pill-available">Actifs</span>
+			</div>
+			<h3>{{ getStatValue(snapshot.stats.totalProperties) }}</h3>
+			<p class="stat-foot">Dont {{ getStatValue(snapshot.stats.availableProperties) }} disponibles</p>
+		</article>
+		<article class="stat-card">
+			<div class="stat-header">
+				<p>Transactions vendues</p>
+				<span class="pill pill-sold">Vendu</span>
+			</div>
+			<h3>{{ getStatValue(snapshot.stats.soldProperties) }}</h3>
+			<p class="stat-foot">En attente: {{ getStatValue(snapshot.stats.pendingTransactions) }}</p>
+		</article>
+		<article class="stat-card">
+			<div class="stat-header">
+				<p>Locations</p>
+				<span class="pill pill-rented">Loue</span>
+			</div>
+			<h3>{{ getStatValue(snapshot.stats.rentedProperties) }}</h3>
+			<p class="stat-foot">Reserve: {{ getStatValue(snapshot.stats.reservedProperties) }}</p>
+		</article>
+		<article class="stat-card">
+			<div class="stat-header">
+				<p>Revenus annuels</p>
+				<span class="pill pill-highlight">YTD</span>
+			</div>
+			<h3>{{ formatCurrency(snapshot.stats.yearlyRevenue) }}</h3>
+			<p class="stat-foot">Dernier mois: {{ formatCurrency(snapshot.stats.monthlyRevenue) }}</p>
+		</article>
+		<article class="stat-card" *ngIf="snapshot.stats.totalClients !== null">
+			<div class="stat-header">
+				<p>Clients</p>
+				<span class="pill pill-available">Actifs</span>
+			</div>
+			<h3>{{ getStatValue(snapshot.stats.totalClients) }}</h3>
+			<p class="stat-foot">Suivi depuis le back-office</p>
+		</article>
+		<article class="stat-card" *ngIf="snapshot.stats.totalAffiliates !== null">
+			<div class="stat-header">
+				<p>Affilies</p>
+				<span class="pill pill-highlight">Partenaires</span>
+			</div>
+			<h3>{{ getStatValue(snapshot.stats.totalAffiliates) }}</h3>
+			<p class="stat-foot">Programme en croissance</p>
+		</article>
+		<article class="stat-card">
+			<div class="stat-header">
+				<p>Chiffre total</p>
+				<span class="pill pill-highlight">Global</span>
+			</div>
+			<h3>{{ formatCurrency(snapshot.stats.totalRevenue) }}</h3>
+			<p class="stat-foot">Depuis le debut de l'annee</p>
+		</article>
+	</section>
+
+	<section class="charts-grid">
+		<article class="panel">
+			<div class="panel-header">
+				<div>
+					<h4>Ventes et locations mensuelles</h4>
+					<p>Evolution des transactions sur 12 mois</p>
+				</div>
+				<span class="badge-outline">2026</span>
+			</div>
+            <apx-chart
+            *ngIf="salesChartOptions"
+            [series]="salesChartOptions.series"
+            [chart]="salesChartOptions.chart"
+            [xaxis]="salesChartOptions.xaxis!"
+            [yaxis]="salesChartOptions.yaxis!"
+            [dataLabels]="salesChartOptions.dataLabels!"
+            [stroke]="salesChartOptions.stroke!"
+            [fill]="salesChartOptions.fill!"
+            [colors]="salesChartOptions.colors || []"
+            [grid]="salesChartOptions.grid!"
+            [tooltip]="salesChartOptions.tooltip!"
+            [legend]="salesChartOptions.legend!"
+            ></apx-chart>
+		</article>
+		<article class="panel">
+			<div class="panel-header">
+				<div>
+					<h4>Revenus</h4>
+					<p>Revenus par mois pour les biens vendus</p>
+				</div>
+				<span class="badge-outline">TND</span>
+			</div>
+            <apx-chart
+            *ngIf="revenueChartOptions"
+            [series]="revenueChartOptions.series"
+            [chart]="revenueChartOptions.chart"
+            [xaxis]="revenueChartOptions.xaxis!"
+            [yaxis]="revenueChartOptions.yaxis!"
+            [dataLabels]="revenueChartOptions.dataLabels!"
+            [plotOptions]="revenueChartOptions.plotOptions!"
+            [colors]="revenueChartOptions.colors || []"
+            [grid]="revenueChartOptions.grid!"
+            [tooltip]="revenueChartOptions.tooltip!"
+            ></apx-chart>
+		</article>
+		<article class="panel">
+			<div class="panel-header">
+				<div>
+					<h4>Types de biens</h4>
+					<p>Repartition du catalogue actuel</p>
+				</div>
+			</div>
+            <apx-chart
+            *ngIf="typesChartOptions"
+            [series]="typesChartOptions.series"
+            [chart]="typesChartOptions.chart"
+            [labels]="typesChartOptions.labels || []"
+            [colors]="typesChartOptions.colors || []"
+            [legend]="typesChartOptions.legend!"
+            [dataLabels]="typesChartOptions.dataLabels!"
+            ></apx-chart>
+		</article>
+		<article class="panel">
+			<div class="panel-header">
+				<div>
+					<h4>Statuts des transactions</h4>
+					<p>Pipeline des biens en traitement</p>
+				</div>
+			</div>
+            <apx-chart
+            *ngIf="statusChartOptions"
+            [series]="statusChartOptions.series"
+            [chart]="statusChartOptions.chart"
+            [xaxis]="statusChartOptions.xaxis!"
+            [plotOptions]="statusChartOptions.plotOptions!"
+            [colors]="statusChartOptions.colors || []"
+            [grid]="statusChartOptions.grid!"
+            [dataLabels]="statusChartOptions.dataLabels!"
+            ></apx-chart>
+		</article>
+	</section>
+
+	<section class="activity-grid">
+		<article class="panel">
+			<div class="panel-header">
+				<div>
+					<h4>Derniers biens ajoutes</h4>
+					<p>Dernieres annonces mises en ligne</p>
+				</div>
+				<a routerLink="/admin/properties" class="link">Voir tout</a>
+			</div>
+			<div class="list" *ngIf="snapshot.recentProperties.length; else emptyRecent">
+				<div class="list-row" *ngFor="let property of snapshot.recentProperties; trackBy: trackById">
+					<div class="list-main">
+						<p class="title">{{ formatPropertyTitle(property) }}</p>
+						<p class="meta">{{ property.city || property.country || '—' }} · {{ formatDate(property.createdAt) }}</p>
+					</div>
+					<span class="pill" [ngClass]="getStatusPillClass(property.statut)">
+						{{ getStatusLabel(property.statut) }}
+					</span>
+				</div>
+			</div>
+		</article>
+		<article class="panel">
+			<div class="panel-header">
+				<div>
+					<h4>Dernieres ventes</h4>
+					<p>Transactions conclues recemment</p>
+				</div>
+			</div>
+			<div class="list" *ngIf="snapshot.recentSales.length; else emptySales">
+				<div class="list-row" *ngFor="let property of snapshot.recentSales; trackBy: trackById">
+					<div class="list-main">
+						<p class="title">{{ formatPropertyTitle(property) }}</p>
+						<p class="meta">{{ formatCurrency(property.prixVente || 0) }} · {{ formatDate(property.updatedAt) }}</p>
+					</div>
+					<span class="pill pill-sold">Vendu</span>
+				</div>
+			</div>
+		</article>
+		<article class="panel" *ngIf="snapshot.isSuperAdmin">
+			<div class="panel-header">
+				<div>
+					<h4>Nouveaux clients</h4>
+					<p>Derniers comptes client</p>
+				</div>
+			</div>
+			<div class="list" *ngIf="snapshot.recentClients.length; else emptyClients">
+				<div class="list-row" *ngFor="let client of snapshot.recentClients">
+					<div class="list-main">
+						<p class="title">{{ client.prenom }} {{ client.nom }}</p>
+						<p class="meta">{{ client.email }} · {{ formatDate(client.createdAt) }}</p>
+					</div>
+					<span class="pill pill-available">Client</span>
+				</div>
+			</div>
+		</article>
+		<article class="panel" *ngIf="snapshot.isSuperAdmin">
+			<div class="panel-header">
+				<div>
+					<h4>Demandes affilies</h4>
+					<p>Inscriptions recentes d'affilies</p>
+				</div>
+			</div>
+			<div class="list" *ngIf="snapshot.recentAffiliates.length; else emptyAffiliates">
+				<div class="list-row" *ngFor="let affiliate of snapshot.recentAffiliates">
+					<div class="list-main">
+						<p class="title">{{ affiliate.prenom }} {{ affiliate.nom }}</p>
+						<p class="meta">{{ affiliate.email }} · {{ formatDate(affiliate.createdAt) }}</p>
+					</div>
+					<span class="pill pill-highlight">Affilie</span>
+				</div>
+			</div>
+		</article>
+		<article class="panel">
+			<div class="panel-header">
+				<div>
+					<h4>Validations en attente</h4>
+					<p>Biens a valider ou en cours</p>
+				</div>
+			</div>
+			<div class="list" *ngIf="snapshot.pendingValidations.length; else emptyPending">
+				<div class="list-row" *ngFor="let property of snapshot.pendingValidations; trackBy: trackById">
+					<div class="list-main">
+						<p class="title">{{ formatPropertyTitle(property) }}</p>
+						<p class="meta">{{ property.city || '—' }} · {{ formatDate(property.createdAt) }}</p>
+					</div>
+					<span class="pill pill-pending">{{ getStatusLabel(property.statut) }}</span>
+				</div>
+			</div>
+		</article>
+		<article class="panel quick-panel">
+			<div class="panel-header">
+				<div>
+					<h4>Operations rapides</h4>
+					<p>Flux de travail prioritaire</p>
+				</div>
+			</div>
+			<div class="quick-list">
+				<div class="quick-item">
+					<div>
+						<h5>Messages non lus</h5>
+						<p>Boite de reception a traiter</p>
+					</div>
+					<span class="pill pill-highlight">Support</span>
+				</div>
+				<div class="quick-item">
+					<div>
+						<h5>Contrats a renouveler</h5>
+						<p>Verifier les mandats a echeance</p>
+					</div>
+					<span class="pill pill-pending">Alerte</span>
+				</div>
+				<div class="quick-item">
+					<div>
+						<h5>Taches urgentes</h5>
+						<p>Suivi des visites planifiees</p>
+					</div>
+					<span class="pill pill-available">Priorite</span>
+				</div>
+				<div class="quick-item">
+					<div>
+						<h5>Validations rapides</h5>
+						<p>Verifier les nouveaux biens soumis</p>
+					</div>
+					<span class="pill pill-sold">Action</span>
+				</div>
+			</div>
+		</article>
+	</section>
+
+	<ng-template #emptyRecent>
+		<div class="empty">Aucun bien recent.</div>
+	</ng-template>
+	<ng-template #emptySales>
+		<div class="empty">Aucune vente recente.</div>
+	</ng-template>
+	<ng-template #emptyClients>
+		<div class="empty">Aucun client recent.</div>
+	</ng-template>
+	<ng-template #emptyAffiliates>
+		<div class="empty">Aucun affilie recent.</div>
+	</ng-template>
+	<ng-template #emptyPending>
+		<div class="empty">Aucune validation en attente.</div>
+	</ng-template>
+</section>
+
+<ng-template #loadingState>
+	<section class="dashboard loading">
+		<div class="loading-card" *ngFor="let item of [1,2,3,4,5,6]">
+			<div class="loading-line"></div>
+			<div class="loading-line short"></div>
+		</div>
+		<p *ngIf="errorMessage" class="error">{{ errorMessage }}</p>
+	</section>
+</ng-template>

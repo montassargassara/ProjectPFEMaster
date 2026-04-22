@@ -1,0 +1,439 @@
+<div class="pe-shell" [class.loading-mode]="loading">
+
+  <!-- ── TOP BAR ── -->
+  <header class="pe-topbar">
+    <button class="back-btn" type="button" (click)="cancel()">
+      <i class="fas fa-arrow-left"></i>
+    </button>
+    <div class="pe-title-block">
+      <span class="pe-eyebrow">{{ isEditMode ? 'Modifier le bien' : 'Nouveau bien' }}</span>
+      <h1 class="pe-title">{{ isEditMode ? (form.get('titre')?.value || 'Bien sans titre') : 'Ajouter un bien' }}</h1>
+    </div>
+    <div class="pe-topbar-actions">
+      <button class="btn-ghost" type="button" (click)="cancel()">Annuler</button>
+      <button class="btn-primary" type="button" [disabled]="saving" (click)="onSubmit()">
+        <i class="fas" [class.fa-save]="!saving" [class.fa-spinner]="saving" [class.fa-spin]="saving"></i>
+        {{ saving ? 'Enregistrement…' : (isEditMode ? 'Sauvegarder' : 'Créer le bien') }}
+      </button>
+    </div>
+  </header>
+
+  <!-- ── ALERTS ── -->
+  <div class="pe-alerts" *ngIf="successMessage || errorMessage">
+    <div class="alert alert-success" *ngIf="successMessage">
+      <i class="fas fa-check-circle"></i> {{ successMessage }}
+    </div>
+    <div class="alert alert-error" *ngIf="errorMessage">
+      <i class="fas fa-exclamation-circle"></i> {{ errorMessage }}
+      <button class="alert-close" type="button" (click)="errorMessage = ''">×</button>
+    </div>
+  </div>
+
+  <!-- ── LOADING SKELETON ── -->
+  <div class="pe-skeleton" *ngIf="loading">
+    <div class="skel-nav"></div>
+    <div class="skel-body">
+      <div class="skel-line long"></div>
+      <div class="skel-line"></div>
+      <div class="skel-line short"></div>
+    </div>
+  </div>
+
+  <!-- ── MAIN CONTENT ── -->
+  <div class="pe-body" *ngIf="!loading" [formGroup]="form">
+
+    <!-- SIDEBAR NAV -->
+    <nav class="pe-sidenav">
+      <button
+        *ngFor="let s of sections"
+        class="snav-item"
+        [class.active]="activeSection === s.id"
+        type="button"
+        (click)="setSection(s.id)">
+        <i class="fas" [ngClass]="s.icon"></i>
+        <span>{{ s.label }}</span>
+      </button>
+    </nav>
+
+    <!-- FORM PANELS -->
+    <div class="pe-panels">
+
+      <!-- ── GENERAL ── -->
+      <section class="pe-panel" [class.hidden]="activeSection !== 'general'">
+        <div class="panel-head">
+          <h2><i class="fas fa-file-alt"></i> Informations générales</h2>
+          <p>Titre, description, type et statut du bien.</p>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label required">Titre du bien</label>
+          <input
+            class="field-input"
+            [class.field-error]="isInvalid('titre')"
+            type="text"
+            formControlName="titre"
+            placeholder="ex. Appartement F3 lumineux, centre Tunis">
+          <span class="error-msg" *ngIf="getFieldError('titre')">{{ getFieldError('titre') }}</span>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">Description</label>
+          <textarea
+            class="field-textarea"
+            formControlName="description"
+            rows="5"
+            placeholder="Décrivez le bien : caractéristiques, atouts, environnement…"></textarea>
+          <span class="char-count">{{ form.get('description')?.value?.length || 0 }} / 2000</span>
+        </div>
+
+        <div class="fields-row">
+          <div class="field-group">
+            <label class="field-label required">Type de bien</label>
+            <select class="field-select" formControlName="type">
+              <option *ngFor="let t of propertyTypes" [value]="t.value">{{ t.label }}</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label required">Statut</label>
+            <select class="field-select" formControlName="statut">
+              <option *ngFor="let s of availableStatusOptions" [value]="s.value">{{ s.label }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="fields-row">
+          <div class="field-group">
+            <label class="field-label">Surface (m²)</label>
+            <input class="field-input" type="number" formControlName="surface" placeholder="ex. 85" min="1">
+            <span class="error-msg" *ngIf="getFieldError('surface')">{{ getFieldError('surface') }}</span>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Chambres</label>
+            <input class="field-input" type="number" formControlName="nbChambres" placeholder="ex. 3" min="0">
+          </div>
+        </div>
+
+        <!-- Category toggle -->
+        <div class="field-group">
+          <label class="field-label">Catégorie</label>
+          <div class="toggle-group">
+            <button
+              type="button"
+              class="toggle-btn"
+              [class.active]="form.get('categorie')?.value === 'VENTE'"
+              (click)="form.get('categorie')?.setValue('VENTE')">
+              <i class="fas fa-hand-holding-usd"></i> Vente
+            </button>
+            <button
+              type="button"
+              class="toggle-btn"
+              [class.active]="form.get('categorie')?.value === 'LOCATION'"
+              (click)="form.get('categorie')?.setValue('LOCATION')">
+              <i class="fas fa-key"></i> Location
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── LOCATION ── -->
+      <section class="pe-panel" [class.hidden]="activeSection !== 'location'">
+        <div class="panel-head">
+          <h2><i class="fas fa-map-marker-alt"></i> Localisation</h2>
+          <p>Adresse, ville et coordonnées géographiques.</p>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label required">Adresse complète</label>
+          <input
+            class="field-input"
+            [class.field-error]="isInvalid('adresse')"
+            type="text"
+            formControlName="adresse"
+            placeholder="ex. 12 Rue de la République, Tunis">
+          <span class="error-msg" *ngIf="getFieldError('adresse')">{{ getFieldError('adresse') }}</span>
+        </div>
+
+        <div class="fields-row">
+          <div class="field-group">
+            <label class="field-label">Pays</label>
+            <input class="field-input" type="text" formControlName="country" placeholder="Tunisie">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Ville</label>
+            <input class="field-input" type="text" formControlName="city" placeholder="ex. Tunis, Sousse…">
+          </div>
+        </div>
+
+        <div class="fields-row">
+          <div class="field-group">
+            <label class="field-label">Latitude</label>
+            <input class="field-input" type="number" step="0.000001" formControlName="latitude" placeholder="ex. 36.8189">
+          </div>
+          <div class="field-group">
+            <label class="field-label">Longitude</label>
+            <input class="field-input" type="number" step="0.000001" formControlName="longitude" placeholder="ex. 10.1658">
+          </div>
+        </div>
+
+        <div class="map-hint" *ngIf="form.get('latitude')?.value && form.get('longitude')?.value">
+          <i class="fas fa-map-pin"></i>
+          Coordonnées enregistrées : {{ form.get('latitude')?.value | number:'1.4-6' }}, {{ form.get('longitude')?.value | number:'1.4-6' }}
+        </div>
+
+        <div class="location-map-card">
+          <div class="location-map-toolbar">
+            <div class="location-search">
+              <i class="fas fa-search"></i>
+              <input
+                class="field-input"
+                type="text"
+                [formControl]="searchControl"
+                placeholder="Rechercher une adresse, ville ou pays"
+                (keyup.enter)="onSearchLocation()">
+            </div>
+            <div class="location-actions">
+              <button class="btn-ghost" type="button" (click)="onSearchLocation()" [disabled]="isGeocoding">
+                <i class="fas" [class.fa-spinner]="isGeocoding" [class.fa-spin]="isGeocoding" [class.fa-search]="!isGeocoding"></i>
+                {{ isGeocoding ? 'Recherche…' : 'Rechercher' }}
+              </button>
+              <button class="btn-ghost" type="button" (click)="onUseCurrentLocation()">
+                <i class="fas fa-location-arrow"></i>
+                Ma position
+              </button>
+            </div>
+          </div>
+
+          <div class="location-map" #mapContainer></div>
+
+          <div class="map-status" *ngIf="isReverseGeocoding">
+            <i class="fas fa-sync fa-spin"></i>
+            Mise a jour de l'adresse…
+          </div>
+        </div>
+      </section>
+
+      <!-- ── PRICING ── -->
+      <section class="pe-panel" [class.hidden]="activeSection !== 'pricing'">
+        <div class="panel-head">
+          <h2><i class="fas fa-tag"></i> Tarification & Commission</h2>
+          <p>Prix de vente ou de location et paramètres de commission.</p>
+        </div>
+
+        <div class="field-group" *ngIf="isVente">
+          <label class="field-label required">Prix de vente (TND)</label>
+          <div class="input-with-unit">
+            <input
+              class="field-input"
+              [class.field-error]="isInvalid('prixVente')"
+              type="number"
+              formControlName="prixVente"
+              placeholder="ex. 350000"
+              min="0">
+            <span class="unit">TND</span>
+          </div>
+          <span class="error-msg" *ngIf="getFieldError('prixVente')">{{ getFieldError('prixVente') }}</span>
+        </div>
+
+        <div class="field-group" *ngIf="!isVente">
+          <label class="field-label required">Prix de location / mois (TND)</label>
+          <div class="input-with-unit">
+            <input
+              class="field-input"
+              [class.field-error]="isInvalid('prixLocation')"
+              type="number"
+              formControlName="prixLocation"
+              placeholder="ex. 1200"
+              min="0">
+            <span class="unit">TND/mois</span>
+          </div>
+          <span class="error-msg" *ngIf="getFieldError('prixLocation')">{{ getFieldError('prixLocation') }}</span>
+        </div>
+
+        <div class="separator"></div>
+        <h3 class="sub-heading">Commission</h3>
+
+        <div class="fields-row">
+          <div class="field-group">
+            <label class="field-label">Type de commission</label>
+            <select class="field-select" formControlName="commissionType">
+              <option *ngFor="let ct of commissionTypes" [value]="ct.value">{{ ct.label }}</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">
+              Valeur
+              <span class="badge-unit">{{ form.get('commissionType')?.value === 'PERCENTAGE' ? '%' : 'TND' }}</span>
+            </label>
+            <input
+              class="field-input"
+              type="number"
+              step="0.1"
+              formControlName="commissionPercentage"
+              placeholder="{{ form.get('commissionType')?.value === 'PERCENTAGE' ? 'ex. 5.0' : 'ex. 2000' }}"
+              min="0">
+          </div>
+        </div>
+      </section>
+
+      <!-- ── MEDIA ── -->
+      <section class="pe-panel" [class.hidden]="activeSection !== 'media'">
+        <div class="panel-head">
+          <h2><i class="fas fa-images"></i> Image principale</h2>
+          <p>Image de couverture affichée en liste, carte et détail.</p>
+        </div>
+
+        <div class="image-drop-zone" [class.has-image]="mainImagePreview" (click)="mainImageInput.click()">
+          <img *ngIf="mainImagePreview" [src]="mainImagePreview" alt="Aperçu" class="img-preview">
+          <div class="drop-placeholder" *ngIf="!mainImagePreview">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Cliquer pour choisir l'image principale</span>
+            <small>JPG, PNG, WebP · max 50 Mo</small>
+          </div>
+          <button *ngIf="mainImagePreview" class="remove-img" type="button" (click)="$event.stopPropagation(); clearMainImage()">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <input #mainImageInput type="file" accept="image/*" style="display:none" (change)="onMainImageSelect($event)">
+
+        <div class="panel-head gallery-head">
+          <h2><i class="fas fa-th"></i> Galerie d'images</h2>
+          <p>Ajoutez plusieurs photos pour enrichir la fiche.</p>
+        </div>
+
+        <div class="gallery-drop" (dragover)="$event.preventDefault()" (drop)="onGalleryDrop($event)">
+          <div class="gallery-empty" *ngIf="!galleryItems.length">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <span>Glisser-deposer vos photos ici</span>
+            <small>ou cliquer pour selectionner plusieurs images</small>
+          </div>
+          <input #galleryInput type="file" accept="image/*" multiple (change)="onGallerySelect($event)">
+          <button class="media-cta" type="button" (click)="galleryInput.click()">Choisir des images</button>
+        </div>
+
+        <div class="gallery-grid" *ngIf="galleryItems.length">
+          <div class="gallery-card" *ngFor="let item of galleryItems; let i = index">
+            <img
+              [src]="item.kind === 'new' ? item.previewUrl : item.url"
+              [alt]="item.kind === 'new' ? item.file.name : (item.fileName || 'Image')">
+            <div class="gallery-actions">
+              <button class="btn-ghost" type="button" (click)="moveGalleryItem(i, i - 1)" [disabled]="i === 0">
+                <i class="fas fa-arrow-up"></i>
+              </button>
+              <button class="btn-ghost" type="button" (click)="moveGalleryItem(i, i + 1)" [disabled]="i === galleryItems.length - 1">
+                <i class="fas fa-arrow-down"></i>
+              </button>
+              <button class="btn-ghost" type="button" *ngIf="item.kind === 'existing'" (click)="setGalleryPrimary(i)">
+                <i class="fas fa-star"></i>
+              </button>
+              <button class="btn-ghost danger" type="button" (click)="removeGalleryItem(i)">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+            <div class="gallery-meta">
+              <span>{{ item.kind === 'new' ? item.file.name : (item.fileName || 'Image existante') }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="media-note">
+          <i class="fas fa-info-circle"></i>
+          L'image principale est stockee comme `isPrimary = true` et liee au `mainImageId`.
+        </div>
+      </section>
+
+      <!-- ── ADVANCED MEDIA ── -->
+      <section class="pe-panel" [class.hidden]="activeSection !== 'advanced-media'">
+        <div class="panel-head">
+          <h2><i class="fas fa-cube"></i> Advanced Media</h2>
+          <p>Ajoutez un modele 3D ou une video pour enrichir la visite.</p>
+        </div>
+
+        <div class="media-grid">
+          <div class="media-card">
+            <div class="media-card-head">
+              <div>
+                <h3><i class="fas fa-cubes"></i> Modele 3D</h3>
+                <p>Formats supportes: GLB, GLTF, OBJ, FBX.</p>
+              </div>
+              <span class="media-pill" *ngIf="uploadingModel">Upload…</span>
+            </div>
+
+            <div class="media-drop" (dragover)="$event.preventDefault()" (drop)="onModelDrop($event)">
+              <div class="media-empty" *ngIf="!selectedModelFile && !modelPreviewName">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <span>Glisser-deposer un fichier 3D</span>
+                <small>ou cliquer pour selectionner</small>
+              </div>
+              <div class="media-file" *ngIf="selectedModelFile || modelPreviewName">
+                <div class="file-meta">
+                  <i class="fas fa-cube"></i>
+                  <div>
+                    <strong>{{ selectedModelFile?.name || modelPreviewName }}</strong>
+                    <small>{{ modelSizeLabel }}</small>
+                  </div>
+                </div>
+                <div class="file-actions">
+                  <button class="btn-ghost" type="button" (click)="clearModel()">Retirer</button>
+                </div>
+              </div>
+              <input #modelInput type="file" accept=".glb,.gltf,.obj,.fbx" (change)="onModelSelect($event)">
+              <button class="media-cta" type="button" (click)="modelInput.click()">Choisir un fichier</button>
+            </div>
+          </div>
+
+          <div class="media-card">
+            <div class="media-card-head">
+              <div>
+                <h3><i class="fas fa-video"></i> Video</h3>
+                <p>Formats supportes: MP4. (Backend requis pour l'upload)</p>
+              </div>
+              <span class="media-pill" *ngIf="uploadingVideo">Upload…</span>
+            </div>
+
+            <div class="media-preview" *ngIf="videoPreviewUrl">
+              <video [src]="videoPreviewUrl" controls preload="metadata"></video>
+            </div>
+
+            <div class="media-drop" (dragover)="$event.preventDefault()" (drop)="onVideoDrop($event)">
+              <div class="media-empty" *ngIf="!selectedVideoFile && !videoPreviewName">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <span>Glisser-deposer une video</span>
+                <small>ou cliquer pour selectionner</small>
+              </div>
+              <div class="media-file" *ngIf="selectedVideoFile || videoPreviewName">
+                <div class="file-meta">
+                  <i class="fas fa-film"></i>
+                  <div>
+                    <strong>{{ selectedVideoFile?.name || videoPreviewName }}</strong>
+                    <small>{{ videoSizeLabel }}</small>
+                  </div>
+                </div>
+                <div class="file-actions">
+                  <button class="btn-ghost" type="button" (click)="clearVideo()">Retirer</button>
+                </div>
+              </div>
+              <input #videoInput type="file" accept="video/mp4" (change)="onVideoSelect($event)">
+              <button class="media-cta" type="button" (click)="videoInput.click()">Choisir un fichier</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="media-note">
+          <i class="fas fa-info-circle"></i>
+          Les medias sont envoyes apres la creation du bien et remplacent le contenu existant.
+        </div>
+      </section>
+
+    </div><!-- /pe-panels -->
+  </div><!-- /pe-body -->
+
+  <!-- BOTTOM BAR (mobile) -->
+  <div class="pe-bottombar" *ngIf="!loading">
+    <button class="btn-ghost" type="button" (click)="cancel()">Annuler</button>
+    <button class="btn-primary" type="button" [disabled]="saving" (click)="onSubmit()">
+      <i class="fas" [class.fa-save]="!saving" [class.fa-spinner]="saving" [class.fa-spin]="saving"></i>
+      {{ saving ? 'Enregistrement…' : (isEditMode ? 'Sauvegarder' : 'Créer le bien') }}
+    </button>
+  </div>
+
+</div>
