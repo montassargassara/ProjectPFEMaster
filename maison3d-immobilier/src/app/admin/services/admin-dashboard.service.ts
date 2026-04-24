@@ -1,3 +1,4 @@
+// admin-dashboard.service.ts - Version corrigée
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, forkJoin, of } from 'rxjs';
@@ -96,8 +97,9 @@ export class AdminDashboardService {
     const role = this.authService.getCurrentUser()?.role?.toUpperCase() || '';
     const isSuperAdmin = role === 'SUPER_ADMIN' || role === 'SUPERADMIN';
 
+    // Correction: Utiliser /api/users au lieu de /api/super-admin
     const stats$ = isSuperAdmin
-      ? this.http.get<AdminStatsResponse>(`${apiBaseUrl}/api/super-admin/dashboard/stats`).pipe(
+      ? this.http.get<AdminStatsResponse>(`${apiBaseUrl}/api/users/dashboard/stats`).pipe(
           catchError(() => of(null))
         )
       : of(null);
@@ -112,15 +114,17 @@ export class AdminDashboardService {
       })
       .pipe(catchError(() => of([])));
 
+    // Correction: Utiliser /api/users/role/CLIENT
     const clients$ = isSuperAdmin
       ? this.http
-          .get<DashboardUser[]>(`${apiBaseUrl}/api/super-admin/users/role/CLIENT`)
+          .get<DashboardUser[]>(`${apiBaseUrl}/api/users/role/CLIENT`)
           .pipe(catchError(() => of([])))
       : of([]);
 
+    // Correction: Utiliser /api/users/role/AFFILIATE
     const affiliates$ = isSuperAdmin
       ? this.http
-          .get<DashboardUser[]>(`${apiBaseUrl}/api/super-admin/affiliates`)
+          .get<DashboardUser[]>(`${apiBaseUrl}/api/users/role/AFFILIATE`)
           .pipe(catchError(() => of([])))
       : of([]);
 

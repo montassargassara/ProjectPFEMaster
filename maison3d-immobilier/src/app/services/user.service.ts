@@ -1,6 +1,6 @@
 // services/user.service.ts
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, map, catchError, of } from 'rxjs';
 import { AdminAuthService } from '../admin/services/admin-auth';
 import { apiBaseUrl } from './api-config';
@@ -14,7 +14,17 @@ export interface User {
   role: string;
   isActive: boolean;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
+  parentId?: number;
+  parentName?: string;
+  childrenCount?: number;
+}
+
+export interface UserTree {
+  user: User;
+  children: UserTree[];
+  descendantCount: number;
+  roleCounts: { role: string; count: number }[];
 }
 
 export interface CreateUserRequest {
@@ -42,7 +52,7 @@ export interface ChangePasswordRequest {
   providedIn: 'root'
 })
 export class UserService {
-  private apiUrl = `${apiBaseUrl}/api`;
+  private apiUrl = `${apiBaseUrl}/api/users`;
 
   constructor(
     private http: HttpClient,
@@ -53,7 +63,7 @@ export class UserService {
 
   // Récupérer tous les utilisateurs
   getAllUsers(): Observable<User[]> {
-    return this.http.get<User[]>(`${this.apiUrl}/super-admin/users`).pipe(
+    return this.http.get<User[]>(`${this.apiUrl}`).pipe(
       catchError(error => {
         console.error('Erreur lors de la récupération des utilisateurs:', error);
         return of([]);
@@ -63,7 +73,7 @@ export class UserService {
 
   // Récupérer un utilisateur par ID
   getUserById(id: number): Observable<User> {
-    return this.http.get<User>(`${this.apiUrl}/super-admin/users/${id}`).pipe(
+    return this.http.get<User>(`${this.apiUrl}/${id}`).pipe(
       catchError(error => {
         console.error(`Erreur lors de la récupération de l'utilisateur ${id}:`, error);
         throw error;
@@ -73,7 +83,7 @@ export class UserService {
 
   // Récupérer les utilisateurs par rôle
   getUsersByRole(role: string): Observable<User[]> {
-    return this.http.get<User[]>(`${this.apiUrl}/super-admin/users/role/${role}`).pipe(
+    return this.http.get<User[]>(`${this.apiUrl}/role/${role}`).pipe(
       catchError(error => {
         console.error(`Erreur lors de la récupération des utilisateurs par rôle ${role}:`, error);
         return of([]);
@@ -83,7 +93,7 @@ export class UserService {
 
   // Récupérer les utilisateurs actifs
   getActiveUsers(): Observable<User[]> {
-    return this.http.get<User[]>(`${this.apiUrl}/super-admin/users/active`).pipe(
+    return this.http.get<User[]>(`${this.apiUrl}/active`).pipe(
       catchError(error => {
         console.error('Erreur lors de la récupération des utilisateurs actifs:', error);
         return of([]);
@@ -93,7 +103,7 @@ export class UserService {
 
   // Créer un nouvel utilisateur
   createUser(userData: CreateUserRequest): Observable<User> {
-    return this.http.post<User>(`${this.apiUrl}/super-admin/users`, userData).pipe(
+    return this.http.post<User>(`${this.apiUrl}`, userData).pipe(
       catchError(error => {
         console.error('Erreur lors de la création de l\'utilisateur:', error);
         throw error;
@@ -101,9 +111,19 @@ export class UserService {
     );
   }
 
+  // Créer un utilisateur avec hiérarchie
+  createUserWithHierarchy(userData: CreateUserRequest): Observable<User> {
+    return this.http.post<User>(`${this.apiUrl}/with-hierarchy`, userData).pipe(
+      catchError(error => {
+        console.error('Erreur lors de la création de l\'utilisateur avec hiérarchie:', error);
+        throw error;
+      })
+    );
+  }
+
   // Créer un administrateur
   createAdmin(userData: CreateUserRequest): Observable<User> {
-    return this.http.post<User>(`${this.apiUrl}/super-admin/users/admin`, userData).pipe(
+    return this.http.post<User>(`${this.apiUrl}/admin`, userData).pipe(
       catchError(error => {
         console.error('Erreur lors de la création de l\'admin:', error);
         throw error;
@@ -113,7 +133,7 @@ export class UserService {
 
   // Créer un responsable commercial
   createResponsable(userData: CreateUserRequest): Observable<User> {
-    return this.http.post<User>(`${this.apiUrl}/super-admin/users/responsable`, userData).pipe(
+    return this.http.post<User>(`${this.apiUrl}/responsable`, userData).pipe(
       catchError(error => {
         console.error('Erreur lors de la création du responsable:', error);
         throw error;
@@ -123,7 +143,7 @@ export class UserService {
 
   // Mettre à jour un utilisateur
   updateUser(id: number, userData: UpdateUserRequest): Observable<User> {
-    return this.http.put<User>(`${this.apiUrl}/super-admin/users/${id}`, userData).pipe(
+    return this.http.put<User>(`${this.apiUrl}/${id}`, userData).pipe(
       catchError(error => {
         console.error(`Erreur lors de la mise à jour de l'utilisateur ${id}:`, error);
         throw error;
@@ -133,7 +153,7 @@ export class UserService {
 
   // Changer le mot de passe
   changePassword(id: number, passwordData: ChangePasswordRequest): Observable<string> {
-    return this.http.put(`${this.apiUrl}/super-admin/users/${id}/password`, passwordData, {
+    return this.http.put(`${this.apiUrl}/${id}/password`, passwordData, {
       responseType: 'text'
     }).pipe(
       catchError(error => {
@@ -145,7 +165,7 @@ export class UserService {
 
   // Activer un utilisateur
   activateUser(id: number): Observable<User> {
-    return this.http.put<User>(`${this.apiUrl}/super-admin/users/${id}/activate`, {}).pipe(
+    return this.http.put<User>(`${this.apiUrl}/${id}/activate`, {}).pipe(
       catchError(error => {
         console.error(`Erreur lors de l'activation de l'utilisateur ${id}:`, error);
         throw error;
@@ -155,7 +175,7 @@ export class UserService {
 
   // Désactiver un utilisateur
   deactivateUser(id: number): Observable<User> {
-    return this.http.put<User>(`${this.apiUrl}/super-admin/users/${id}/deactivate`, {}).pipe(
+    return this.http.put<User>(`${this.apiUrl}/${id}/deactivate`, {}).pipe(
       catchError(error => {
         console.error(`Erreur lors de la désactivation de l'utilisateur ${id}:`, error);
         throw error;
@@ -165,12 +185,115 @@ export class UserService {
 
   // Supprimer (désactiver) un utilisateur
   deleteUser(id: number): Observable<string> {
-    return this.http.delete(`${this.apiUrl}/super-admin/users/${id}`, {
+    return this.http.delete(`${this.apiUrl}/${id}`, {
       responseType: 'text'
     }).pipe(
       catchError(error => {
         console.error(`Erreur lors de la suppression de l'utilisateur ${id}:`, error);
         throw error;
+      })
+    );
+  }
+
+  // ==================== MÉTHODES HIÉRARCHIQUES ====================
+
+  // Récupérer l'arbre hiérarchique complet (SUPER_ADMIN)
+  getFullHierarchy(): Observable<UserTree[]> {
+    return this.http.get<UserTree[]>(`${this.apiUrl}/full-tree`).pipe(
+      catchError(error => {
+        console.error('Erreur lors de la récupération de la hiérarchie complète:', error);
+        return of([]);
+      })
+    );
+  }
+
+  // Récupérer l'arbre de l'utilisateur connecté
+  getMyHierarchy(): Observable<UserTree> {
+    return this.http.get<UserTree>(`${this.apiUrl}/my-tree`).pipe(
+      catchError(error => {
+        console.error('Erreur lors de la récupération de ma hiérarchie:', error);
+        throw error;
+      })
+    );
+  }
+
+  // Récupérer l'arbre d'un utilisateur spécifique
+  getUserHierarchy(userId: number): Observable<UserTree> {
+    return this.http.get<UserTree>(`${this.apiUrl}/tree/${userId}`).pipe(
+      catchError(error => {
+        console.error(`Erreur lors de la récupération de la hiérarchie de l'utilisateur ${userId}:`, error);
+        throw error;
+      })
+    );
+  }
+
+  // Récupérer les enfants directs de l'utilisateur connecté
+  getMyChildren(): Observable<User[]> {
+    return this.http.get<User[]>(`${this.apiUrl}/my-children`).pipe(
+      catchError(error => {
+        console.error('Erreur lors de la récupération de mes enfants:', error);
+        return of([]);
+      })
+    );
+  }
+
+  // Récupérer les enfants d'un utilisateur
+  getUserChildren(userId: number): Observable<User[]> {
+    return this.http.get<User[]>(`${this.apiUrl}/children/${userId}`).pipe(
+      catchError(error => {
+        console.error(`Erreur lors de la récupération des enfants de l'utilisateur ${userId}:`, error);
+        return of([]);
+      })
+    );
+  }
+
+  // Récupérer les utilisateurs visibles
+  getViewableUsers(): Observable<User[]> {
+    return this.http.get<User[]>(`${this.apiUrl}/viewable`).pipe(
+      catchError(error => {
+        console.error('Erreur lors de la récupération des utilisateurs visibles:', error);
+        return of([]);
+      })
+    );
+  }
+
+  // Récupérer les utilisateurs disponibles pour le partage
+  getAvailableForSharing(): Observable<User[]> {
+    return this.http.get<User[]>(`${this.apiUrl}/available-for-sharing`).pipe(
+      catchError(error => {
+        console.error('Erreur lors de la récupération des utilisateurs pour partage:', error);
+        return of([]);
+      })
+    );
+  }
+
+  // Vérifier si un rôle peut être créé
+  canCreateRole(role: string): Observable<{ canCreate: boolean }> {
+    return this.http.get<{ canCreate: boolean }>(`${this.apiUrl}/can-create/${role}`).pipe(
+      catchError(error => {
+        console.error(`Erreur lors de la vérification du rôle ${role}:`, error);
+        return of({ canCreate: false });
+      })
+    );
+  }
+
+  // Récupérer les rôles créables
+  getCreatableRoles(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.apiUrl}/creatable-roles`).pipe(
+      catchError(error => {
+        console.error('Erreur lors de la récupération des rôles créables:', error);
+        return of([]);
+      })
+    );
+  }
+
+  // Récupérer les utilisateurs par plusieurs rôles
+  getUsersByRoles(roles: string[]): Observable<User[]> {
+    const params = new HttpParams().set('roles', roles.join(','));
+    return this.http.get<User[]>(`${this.apiUrl}/by-roles`, { params }).pipe(
+      catchError(error => {
+        console.error('Erreur lors de la récupération des utilisateurs par rôles:', error);
+        return of([]);
       })
     );
   }
@@ -195,42 +318,54 @@ export class UserService {
 
   // Obtenir le texte du rôle
   getRoleText(role: string): string {
-    switch(role?.toUpperCase()) {
-      case 'SUPER_ADMIN':
-        return 'Super Admin';
-      case 'ADMIN':
-        return 'Administrateur';
-      case 'RESPONSABLE_COMMERCIAL':
-        return 'Resp. Commercial';
-      case 'COMMERCIAL':
-        return 'Commercial';
-      case 'CLIENT':
-        return 'Client';
-      case 'AFFILIATE':
-        return 'Affilié';
-      default:
-        return role || 'Utilisateur';
-    }
+    const labels: { [key: string]: string } = {
+      'SUPER_ADMIN': 'Super Admin',
+      'ADMIN': 'Administrateur',
+      'RESPONSABLE_COMMERCIAL': 'Resp. Commercial',
+      'COMMERCIAL': 'Commercial',
+      'CLIENT': 'Client',
+      'AFFILIATE': 'Affilié'
+    };
+    return labels[role?.toUpperCase()] || role || 'Utilisateur';
   }
 
   // Obtenir la couleur du rôle
   getRoleColor(role: string): string {
-    switch(role?.toUpperCase()) {
-      case 'SUPER_ADMIN':
-        return '#dc3545';
-      case 'ADMIN':
-        return '#007bff';
-      case 'RESPONSABLE_COMMERCIAL':
-        return '#20c997';
-      case 'COMMERCIAL':
-        return '#28a745';
-      case 'CLIENT':
-        return '#17a2b8';
-      case 'AFFILIATE':
-        return '#fd7e14';
-      default:
-        return '#6c757d';
-    }
+    const colors: { [key: string]: string } = {
+      'SUPER_ADMIN': '#dc3545',
+      'ADMIN': '#007bff',
+      'RESPONSABLE_COMMERCIAL': '#fd7e14',
+      'COMMERCIAL': '#28a745',
+      'CLIENT': '#17a2b8',
+      'AFFILIATE': '#6f42c1'
+    };
+    return colors[role?.toUpperCase()] || '#6c757d';
+  }
+
+  // Obtenir l'icône du rôle
+  getRoleIcon(role: string): string {
+    const icons: { [key: string]: string } = {
+      'SUPER_ADMIN': 'fa-crown',
+      'ADMIN': 'fa-user-shield',
+      'RESPONSABLE_COMMERCIAL': 'fa-chart-line',
+      'COMMERCIAL': 'fa-user-tie',
+      'CLIENT': 'fa-user',
+      'AFFILIATE': 'fa-handshake'
+    };
+    return icons[role?.toUpperCase()] || 'fa-user';
+  }
+
+  // Obtenir le niveau du rôle
+  getRoleLevel(role: string): number {
+    const levels: { [key: string]: number } = {
+      'SUPER_ADMIN': 5,
+      'ADMIN': 4,
+      'RESPONSABLE_COMMERCIAL': 3,
+      'COMMERCIAL': 2,
+      'AFFILIATE': 1,
+      'CLIENT': 1
+    };
+    return levels[role?.toUpperCase()] || 0;
   }
 
   // Obtenir les initiales
@@ -250,9 +385,9 @@ export class UserService {
     return emailRegex.test(email);
   }
 
-  // Valider le téléphone (format français)
+  // Valider le téléphone (format tunisien/français)
   validatePhone(phone: string): boolean {
-    const phoneRegex = /^(?:(?:\+|00)33|0)\s*[1-9](?:[\s.-]*\d{2}){4}$/;
+    const phoneRegex = /^(?:(?:\+|00)216|0)?[2-9][0-9]{7}$/;
     return phoneRegex.test(phone);
   }
 

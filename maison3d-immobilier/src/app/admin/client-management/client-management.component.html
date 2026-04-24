@@ -1,0 +1,701 @@
+<!-- src/app/admin/client-management/client-management.component.html -->
+<div class="client-management-container">
+  <!-- Header -->
+  <div class="clients-header">
+    <div class="header-left">
+      <h1><i class="fas fa-users me-2"></i> Gestion des clients</h1>
+      <p class="text-muted">Gérez les clients acheteurs et affiliés pour les ventes immobilières</p>
+    </div>
+    <div class="header-right">
+      <button class="btn btn-primary" (click)="openCreateModal()">
+        <i class="fas fa-user-plus me-2"></i> Ajouter client
+      </button>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show">
+    <i class="fas fa-exclamation-circle me-2"></i>
+    {{ errorMessage }}
+    <button type="button" class="btn-close" (click)="errorMessage = ''"></button>
+  </div>
+
+  <div *ngIf="successMessage" class="alert alert-success alert-dismissible fade show">
+    <i class="fas fa-check-circle me-2"></i>
+    {{ successMessage }}
+    <button type="button" class="btn-close" (click)="successMessage = ''"></button>
+  </div>
+
+  <!-- Statistics Cards -->
+  <div class="stats-section">
+    <div class="row">
+      <div class="col-md-3">
+        <div class="stat-card bg-primary">
+          <div class="stat-icon"><i class="fas fa-user"></i></div>
+          <div class="stat-info">
+            <h3>{{ stats.totalClientsNormaux }}</h3>
+            <p>Clients normaux</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card bg-warning">
+          <div class="stat-icon"><i class="fas fa-handshake"></i></div>
+          <div class="stat-info">
+            <h3>{{ stats.totalClientsAffilies }}</h3>
+            <p>Clients affiliés</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card bg-success">
+          <div class="stat-icon"><i class="fas fa-user-check"></i></div>
+          <div class="stat-info">
+            <h3>{{ stats.totalClientsActifs }}</h3>
+            <p>Clients actifs</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card bg-danger">
+          <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+          <div class="stat-info">
+            <h3>{{ formatCurrency(stats.ventesMois) }}</h3>
+            <p>Ventes du mois</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="filters-section card mb-4">
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="input-group">
+            <span class="input-group-text"><i class="fas fa-search"></i></span>
+            <input type="text" class="form-control" [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" placeholder="Rechercher client...">
+          </div>
+        </div>
+        <div class="col-md-3">
+          <select class="form-select" [(ngModel)]="clientTypeFilter" (ngModelChange)="applyFilters()">
+            <option value="">Tous les types</option>
+            <option value="CLIENT">Client normal</option>
+            <option value="AFFILIATE">Client affilié</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <select class="form-select" [(ngModel)]="statusFilter" (ngModelChange)="applyFilters()">
+            <option value="">Tous statuts</option>
+            <option value="active">Actifs</option>
+            <option value="inactive">Inactifs</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button class="btn btn-outline-secondary w-100" (click)="resetFilters()">
+            <i class="fas fa-undo-alt me-1"></i> Réinitialiser
+          </button>
+        </div>
+      </div>
+      <div class="row g-3 mt-2">
+        <div class="col-md-4">
+          <div class="input-group">
+            <span class="input-group-text">Budget min</span>
+            <input type="number" class="form-control" [(ngModel)]="minBudget" (ngModelChange)="applyFilters()" placeholder="Min">
+            <span class="input-group-text">TND</span>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="input-group">
+            <span class="input-group-text">Budget max</span>
+            <input type="number" class="form-control" [(ngModel)]="maxBudget" (ngModelChange)="applyFilters()" placeholder="Max">
+            <span class="input-group-text">TND</span>
+          </div>
+        </div>
+        <div class="col-md-4 text-end">
+          <span class="text-muted">{{ filteredClients.length }} client(s) trouvé(s)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table Section -->
+  <div class="table-section card">
+    <div class="card-body p-0">
+      <div class="table-responsive" *ngIf="!loading; else loadingTemplate">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th (click)="sort('prenom')" style="cursor: pointer; width: 20%">Client</th>
+              <th (click)="sort('email')" style="cursor: pointer; width: 20%">Contact</th>
+              <th (click)="sort('role')" style="cursor: pointer; width: 10%">Type</th>
+              <th (click)="sort('visibilityType')" style="cursor: pointer; width: 12%">Visibilité</th>
+              <th (click)="sort('budgetEstime')" style="cursor: pointer; width: 13%">Budget</th>
+              <th (click)="sort('nombreAchats')" style="cursor: pointer; width: 8%">Achats</th>
+              <th (click)="sort('createdAt')" style="cursor: pointer; width: 10%">Date</th>
+              <th (click)="sort('isActive')" style="cursor: pointer; width: 7%">Statut</th>
+              <th class="text-end" style="width: 5%">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngIf="filteredClients.length === 0">
+              <td colspan="9" class="text-center text-muted py-5">
+                <i class="fas fa-users fa-3x mb-3"></i>
+                <p class="mb-0">Aucun client trouvé</p>
+                <button class="btn btn-sm btn-primary mt-3" (click)="openCreateModal()">
+                  <i class="fas fa-user-plus me-1"></i> Ajouter un client
+                </button>
+              </td>
+            </tr>
+            <tr *ngFor="let client of filteredClients | slice: (page * pageSize): ((page + 1) * pageSize)">
+              <td>
+                <div class="d-flex align-items-center">
+                  <div class="user-avatar me-3" [style.background-color]="getRoleColor(client.role)">
+                    {{ getInitials(client.prenom, client.nom) }}
+                  </div>
+                  <div>
+                    <strong>{{ client.prenom }} {{ client.nom }}</strong>
+                    <div class="text-muted small">{{ client.zoneRecherchee || 'Zone non définie' }}</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="small">{{ client.email }}</div>
+                <div class="text-muted small">{{ client.telephone || 'Tél. non renseigné' }}</div>
+              </td>
+              <td>
+                <span class="badge" [ngClass]="getClientTypeBadgeClass(client.role)">
+                  {{ getRoleText(client.role) }}
+                </span>
+              </td>
+              <td>
+                <span class="badge" [ngClass]="getVisibilityTypeClass(client.visibilityType)">
+                  <i [class]="'fas ' + getVisibilityTypeIcon(client.visibilityType)" class="me-1"></i>
+                  {{ getVisibilityTypeLabel(client.visibilityType) }}
+                </span>
+              </td>
+              <td>
+                <div *ngIf="client.budgetEstime">
+                  <strong>{{ formatCurrency(client.budgetEstime) }}</strong>
+                  <div class="budget-progress mt-1">
+                    <div class="progress">
+                      <div class="progress-bar" [style.width]="(client.budgetEstime / 1000000 * 100) + '%'"></div>
+                    </div>
+                  </div>
+                </div>
+                <span *ngIf="!client.budgetEstime" class="text-muted small">Non défini</span>
+              </td>
+              <td>
+                <div *ngIf="client.nombreAchats && client.nombreAchats > 0">
+                  <span class="badge bg-success">{{ client.nombreAchats }} achat(s)</span>
+                  <div class="small text-muted">{{ formatCurrency(client.totalAchats || 0) }}</div>
+                </div>
+                <span *ngIf="!client.nombreAchats || client.nombreAchats === 0" class="text-muted small">Aucun achat</span>
+              </td>
+              <td><div class="small">{{ formatDate(client.createdAt) }}</div></td>
+              <td>
+                <span class="status-badge" [class.active]="client.isActive" [class.inactive]="!client.isActive">
+                  <i class="fas fa-circle"></i> {{ client.isActive ? 'Actif' : 'Inactif' }}
+                </span>
+              </td>
+              <td class="text-end">
+                <div class="btn-group" (click)="$event.stopPropagation()">
+                  <button class="btn btn-sm btn-outline-primary" (click)="openDetailsModal(client)" title="Voir détails">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-primary" *ngIf="canEdit(client)" (click)="openEditModal(client)" title="Modifier">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-primary dropdown-toggle dropdown-toggle-split" 
+                          (click)="toggleDropdown($event, 'dropdown-' + client.id)">
+                  </button>
+                  <div class="dropdown-menu dropdown-menu-end" [id]="'dropdown-' + client.id">
+                    <button class="dropdown-item" (click)="openNoteModal(client)">
+                      <i class="fas fa-sticky-note me-2"></i> Ajouter une note
+                    </button>
+                    <button class="dropdown-item" (click)="openHistoryModal(client)">
+                      <i class="fas fa-history me-2"></i> Voir historique
+                    </button>
+                    <div class="dropdown-divider"></div>
+                    <button class="dropdown-item" *ngIf="canEdit(client)" (click)="toggleClientStatus(client)">
+                      <i class="fas" [class.fa-user-check]="!client.isActive" [class.fa-user-slash]="client.isActive" class="me-2"></i>
+                      {{ client.isActive ? 'Désactiver' : 'Activer' }}
+                    </button>
+                    <div class="dropdown-divider" *ngIf="canViewAffiliateDetails(client)"></div>
+                    <button class="dropdown-item" *ngIf="canViewAffiliateDetails(client)" (click)="viewAffiliateDetails(client)">
+                      <i class="fas fa-chart-line me-2"></i> Stats affiliation
+                    </button>
+                    <button class="dropdown-item" *ngIf="canManageSharing(client)" (click)="openShareModal(client)">
+                      <i class="fas fa-share-alt me-2"></i> Gérer le partage
+                    </button>
+                    <button class="dropdown-item text-danger" *ngIf="currentUser?.role === 'SUPER_ADMIN'" (click)="deleteClient(client)">
+                      <i class="fas fa-trash-alt me-2"></i> Supprimer
+                    </button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <ng-template #loadingTemplate>
+        <div class="text-center py-5">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Chargement...</span>
+          </div>
+          <p class="mt-3 text-muted">Chargement des clients...</p>
+        </div>
+      </ng-template>
+
+      <!-- Pagination -->
+      <div class="d-flex justify-content-between align-items-center p-3 border-top" *ngIf="!loading && filteredClients.length > 0">
+        <div class="pagination-info">
+          Affichage de {{ page * pageSize + 1 }} à {{ ((page + 1) * pageSize) > filteredClients.length ? filteredClients.length : (page + 1) * pageSize }} 
+          sur {{ filteredClients.length }} clients
+        </div>
+        <div class="pagination-controls">
+          <div class="btn-group me-3">
+            <button class="btn btn-sm btn-outline-secondary" (click)="changePageSize(10)" [class.active]="pageSize === 10">10</button>
+            <button class="btn btn-sm btn-outline-secondary" (click)="changePageSize(25)" [class.active]="pageSize === 25">25</button>
+            <button class="btn btn-sm btn-outline-secondary" (click)="changePageSize(50)" [class.active]="pageSize === 50">50</button>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary me-2" (click)="changePage(page - 1)" [disabled]="page === 0">
+            <i class="fas fa-chevron-left"></i>
+          </button>
+          <span class="page-info">Page {{ page + 1 }} / {{ Math.ceil(filteredClients.length / pageSize) || 1 }}</span>
+          <button class="btn btn-sm btn-outline-secondary ms-2" (click)="changePage(page + 1)" [disabled]="page >= Math.ceil(filteredClients.length / pageSize) - 1">
+            <i class="fas fa-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Création Client -->
+<div class="modal fade" tabindex="-1" #createClientModal>
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="modal-title"><i class="fas fa-user-plus me-2"></i>Ajouter un client</h4>
+        <button type="button" class="btn-close" (click)="closeCreateModal()"></button>
+      </div>
+      <div class="modal-body">
+        <form [formGroup]="clientForm">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Type de client *</label>
+              <select class="form-select" formControlName="clientType" (change)="onClientTypeChange()">
+                <option value="NORMAL">Client normal</option>
+                <option value="AFFILIATE">Client affilié</option>
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Email *</label>
+              <input type="email" class="form-control" formControlName="email" 
+                     [class.is-invalid]="clientForm.get('email')?.invalid && clientForm.get('email')?.touched">
+              <div class="invalid-feedback">Email invalide</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Nom *</label>
+              <input type="text" class="form-control" formControlName="nom" 
+                     [class.is-invalid]="clientForm.get('nom')?.invalid && clientForm.get('nom')?.touched">
+              <div class="invalid-feedback">Nom requis</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Prénom *</label>
+              <input type="text" class="form-control" formControlName="prenom" 
+                     [class.is-invalid]="clientForm.get('prenom')?.invalid && clientForm.get('prenom')?.touched">
+              <div class="invalid-feedback">Prénom requis</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Téléphone</label>
+              <input type="tel" class="form-control" formControlName="telephone" 
+                     [class.is-invalid]="clientForm.get('telephone')?.invalid && clientForm.get('telephone')?.touched">
+              <div class="invalid-feedback">Format invalide (ex: 062547413)</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Mot de passe *</label>
+              <div class="input-group">
+                <input [type]="showPassword ? 'text' : 'password'" class="form-control" formControlName="password" 
+                       [class.is-invalid]="clientForm.get('password')?.invalid && clientForm.get('password')?.touched">
+                <button class="btn btn-outline-secondary" type="button" (click)="togglePasswordVisibility()">
+                  <i class="fas" [class.fa-eye]="!showPassword" [class.fa-eye-slash]="showPassword"></i>
+                </button>
+                <button class="btn btn-outline-secondary" type="button" (click)="generatePassword()">
+                  <i class="fas fa-sync-alt"></i>
+                </button>
+              </div>
+              <div class="invalid-feedback">Minimum 6 caractères</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Confirmer mot de passe *</label>
+              <input [type]="showPassword ? 'text' : 'password'" class="form-control" formControlName="confirmPassword" 
+                     [class.is-invalid]="clientForm.hasError('passwordMismatch') && clientForm.get('confirmPassword')?.touched">
+              <div class="invalid-feedback">Les mots de passe ne correspondent pas</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Budget estimé (TND)</label>
+              <input type="number" class="form-control" formControlName="budgetEstime" placeholder="Ex: 500000">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Zone recherchée</label>
+              <input type="text" class="form-control" formControlName="zoneRecherchee" placeholder="Ex: Centre ville, Lac...">
+            </div>
+            
+            <!-- ========== VISIBILITÉ ========== -->
+            <div class="col-12 mb-3">
+              <label class="form-label">Type de visibilité *</label>
+              <div class="visibility-options">
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" formControlName="visibilityType" value="AGENCY_CLIENT" id="visibilityAgency">
+                  <label class="form-check-label" for="visibilityAgency">
+                    <i class="fas fa-building me-1"></i> Client agence
+                    <small class="d-block text-muted">Visible uniquement par votre agence</small>
+                  </label>
+                </div>
+                <div class="form-check form-check-inline" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
+                  <input class="form-check-input" type="radio" formControlName="visibilityType" value="PRIVATE_CLIENT" id="visibilityPrivate">
+                  <label class="form-check-label" for="visibilityPrivate">
+                    <i class="fas fa-lock me-1"></i> Client privé
+                    <small class="d-block text-muted">Visible uniquement par vous et les agences sélectionnées</small>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pour AGENCY_CLIENT - Sélection de l'agence cible (SUPER_ADMIN seulement) -->
+            <div class="col-12 mb-3" *ngIf="clientForm.get('visibilityType')?.value === 'AGENCY_CLIENT' && currentUser?.role === 'SUPER_ADMIN'">
+              <label class="form-label">Agence cible *</label>
+              <select class="form-select" formControlName="targetAgencyAdminId">
+                <option [value]="null">Sélectionner une agence</option>
+                <option *ngFor="let agency of agencies" [value]="agency.id">{{ agency.nom }} {{ agency.prenom }} ({{ agency.email }})</option>
+              </select>
+            </div>
+
+            <!-- Pour PRIVATE_CLIENT - Sélection des agences -->
+            <div class="col-12 mb-3" *ngIf="clientForm.get('visibilityType')?.value === 'PRIVATE_CLIENT' && currentUser?.role === 'SUPER_ADMIN'">
+              <label class="form-label">Partager avec les agences</label>
+              <div class="agencies-checkbox-list border rounded p-3" style="max-height: 200px; overflow-y: auto;">
+                <div *ngFor="let agency of agencies" class="form-check mb-2">
+                  <input class="form-check-input" type="checkbox" [value]="agency.id" (change)="toggleSharedAgency($event)" [checked]="isAgencySelected(agency.id)">
+                  <label class="form-check-label">
+                    <i class="fas fa-building me-1 text-primary"></i>
+                    {{ agency.nom }} {{ agency.prenom }} ({{ agency.email }})
+                  </label>
+                </div>
+              </div>
+              <small class="text-muted">Laissez vide pour garder le client privé uniquement pour vous</small>
+            </div>
+            
+            <!-- Affiliate fields -->
+            <div class="col-12" *ngIf="isAffiliateForm">
+              <div class="affiliate-fields border-top pt-3">
+                <h6 class="mb-3"><i class="fas fa-handshake me-2"></i>Informations d'affiliation</h6>
+                <div class="row">
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">Code d'affiliation</label>
+                    <input type="text" class="form-control" formControlName="codeAffiliation" readonly>
+                    <small class="text-muted">Code généré automatiquement</small>
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">Taux de commission (%)</label>
+                    <input type="number" class="form-control" formControlName="tauxCommission" step="0.5">
+                  </div>
+                  <div class="col-md-12 mb-3">
+                    <label class="form-label">Source / Canal d'acquisition</label>
+                    <input type="text" class="form-control" formControlName="source" placeholder="Ex: Réseau social, Parrainage, Site web...">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeCreateModal()">Annuler</button>
+        <button type="button" class="btn btn-primary" (click)="createClient()" [disabled]="clientForm.invalid || loading">
+          <i class="fas fa-save me-2"></i>Créer le client
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Édition Client -->
+<div class="modal fade" tabindex="-1" #editClientModal>
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="modal-title"><i class="fas fa-edit me-2"></i>Modifier client</h4>
+        <button type="button" class="btn-close" (click)="closeEditModal()"></button>
+      </div>
+      <div class="modal-body">
+        <form [formGroup]="editForm">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Nom *</label>
+              <input type="text" class="form-control" formControlName="nom" 
+                     [class.is-invalid]="editForm.get('nom')?.invalid && editForm.get('nom')?.touched">
+              <div class="invalid-feedback">Nom requis</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Prénom *</label>
+              <input type="text" class="form-control" formControlName="prenom" 
+                     [class.is-invalid]="editForm.get('prenom')?.invalid && editForm.get('prenom')?.touched">
+              <div class="invalid-feedback">Prénom requis</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Téléphone</label>
+              <input type="tel" class="form-control" formControlName="telephone" 
+                     [class.is-invalid]="editForm.get('telephone')?.invalid && editForm.get('telephone')?.touched">
+              <div class="invalid-feedback">Format invalide (ex: 062547413)</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Budget estimé (TND)</label>
+              <input type="number" class="form-control" formControlName="budgetEstime">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Zone recherchée</label>
+              <input type="text" class="form-control" formControlName="zoneRecherchee">
+            </div>
+            <div class="col-md-6 mb-3">
+              <div class="form-check form-switch mt-4">
+                <input class="form-check-input" type="checkbox" formControlName="isActive" id="isActiveSwitch">
+                <label class="form-check-label" for="isActiveSwitch">Compte actif</label>
+              </div>
+            </div>
+            
+            <!-- Affiliate fields -->
+            <div class="col-12" *ngIf="selectedClient?.role === 'AFFILIATE'">
+              <div class="affiliate-fields border-top pt-3">
+                <h6 class="mb-3"><i class="fas fa-handshake me-2"></i>Informations d'affiliation</h6>
+                <div class="row">
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">Code d'affiliation</label>
+                    <input type="text" class="form-control" formControlName="codeAffiliation">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">Taux de commission (%)</label>
+                    <input type="number" class="form-control" formControlName="tauxCommission" step="0.5">
+                  </div>
+                  <div class="col-md-12 mb-3">
+                    <label class="form-label">Source / Canal d'acquisition</label>
+                    <input type="text" class="form-control" formControlName="source">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeEditModal()">Annuler</button>
+        <button type="button" class="btn btn-primary" (click)="updateClient()" [disabled]="editForm.invalid || loading">
+          <i class="fas fa-save me-2"></i>Enregistrer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Détails Client - Version corrigée -->
+<div class="modal fade" tabindex="-1" #detailsModal>
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="modal-title"><i class="fas fa-user-circle me-2"></i>{{ selectedClient?.prenom }} {{ selectedClient?.nom }}</h4>
+        <button type="button" class="btn-close" (click)="closeDetailsModal()"></button>
+      </div>
+      <div class="modal-body" *ngIf="selectedClient">
+        <div class="text-center mb-4">
+          <div class="user-avatar-large mx-auto mb-3" [style.background-color]="getRoleColor(selectedClient.role)">
+            {{ getInitials(selectedClient.prenom, selectedClient.nom) }}
+          </div>
+          <h5 class="mb-1">{{ selectedClient.prenom }} {{ selectedClient.nom }}</h5>
+          <span class="badge me-1" [ngClass]="getClientTypeBadgeClass(selectedClient.role)">{{ getRoleText(selectedClient.role) }}</span>
+          <span class="badge me-1" [ngClass]="getVisibilityTypeClass(selectedClient.visibilityType)">
+            <i [class]="'fas ' + getVisibilityTypeIcon(selectedClient.visibilityType)" class="me-1"></i>
+            {{ getVisibilityTypeLabel(selectedClient.visibilityType) }}
+          </span>
+          <span class="badge" [ngClass]="selectedClient.isActive ? 'bg-success' : 'bg-danger'">
+            {{ selectedClient.isActive ? 'Actif' : 'Inactif' }}
+          </span>
+        </div>
+
+        <div class="detail-section">
+          <h6><i class="fas fa-address-card me-2"></i>Informations de contact</h6>
+          <div class="detail-row"><div class="detail-label">Email :</div><div class="detail-value">{{ selectedClient.email }}</div></div>
+          <div class="detail-row"><div class="detail-label">Téléphone :</div><div class="detail-value">{{ selectedClient.telephone || 'Non renseigné' }}</div></div>
+          <div class="detail-row"><div class="detail-label">Date d'inscription :</div><div class="detail-value">{{ formatDate(selectedClient.createdAt) }}</div></div>
+          <div class="detail-row"><div class="detail-label">Créé par :</div><div class="detail-value">{{ selectedClient.createdByName || 'Système' }}</div></div>
+        </div>
+
+        <div class="detail-section">
+          <h6><i class="fas fa-chart-line me-2"></i>Informations commerciales</h6>
+          <div class="detail-row"><div class="detail-label">Budget estimé :</div><div class="detail-value">{{ formatCurrency(selectedClient.budgetEstime || 0) }}</div></div>
+          <div class="detail-row"><div class="detail-label">Zone recherchée :</div><div class="detail-value">{{ selectedClient.zoneRecherchee || 'Non définie' }}</div></div>
+        </div>
+
+        <!-- ✅ SECTION CORRIGÉE - Partagé avec -->
+        <div class="detail-section" *ngIf="selectedClient && selectedClient.visibilityType === 'PRIVATE_CLIENT' && selectedClient.sharedWithAgencyIds && selectedClient.sharedWithAgencyIds.length > 0">
+          <h6><i class="fas fa-share-alt me-2"></i>Partagé avec</h6>
+          <div class="d-flex flex-wrap gap-2">
+            <span *ngFor="let agencyId of selectedClient.sharedWithAgencyIds" class="badge bg-info">
+              <i class="fas fa-building me-1"></i> Agence ID: {{ agencyId }}
+            </span>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <h6><i class="fas fa-shopping-cart me-2"></i>Statistiques d'achat</h6>
+          <div class="detail-row"><div class="detail-label">Nombre d'achats :</div><div class="detail-value">{{ selectedClient.nombreAchats || 0 }}</div></div>
+          <div class="detail-row"><div class="detail-label">Total des achats :</div><div class="detail-value">{{ formatCurrency(selectedClient.totalAchats || 0) }}</div></div>
+        </div>
+
+        <div class="detail-section" *ngIf="selectedClient.role === 'AFFILIATE'">
+          <h6><i class="fas fa-handshake me-2"></i>Informations d'affiliation</h6>
+          <div class="detail-row"><div class="detail-label">Code d'affiliation :</div><div class="detail-value">{{ selectedClient.codeAffiliation || 'Non défini' }}</div></div>
+          <div class="detail-row"><div class="detail-label">Taux de commission :</div><div class="detail-value">{{ selectedClient.tauxCommission || 0 }}%</div></div>
+          <div class="detail-row"><div class="detail-label">Commission générée :</div><div class="detail-value">{{ formatCurrency(selectedClient.commissionGeneree || 0) }}</div></div>
+          <div class="detail-row"><div class="detail-label">Source :</div><div class="detail-value">{{ selectedClient.source || 'Non spécifiée' }}</div></div>
+        </div>
+
+        <div class="detail-section" *ngIf="selectedClient.derniereNote">
+          <h6><i class="fas fa-sticky-note me-2"></i>Dernière note</h6>
+          <div class="note-item p-3 bg-light rounded">{{ selectedClient.derniereNote }}</div>
+          <div class="small text-muted mt-2">{{ formatDate(selectedClient.derniereNoteDate || '') }}</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeDetailsModal()">Fermer</button>
+        <button type="button" class="btn btn-primary" *ngIf="canEdit(selectedClient!)" (click)="closeDetailsModal(); openEditModal(selectedClient!)">
+          <i class="fas fa-edit me-2"></i>Modifier
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Gestion Partage (PRIVATE_CLIENT) -->
+<div class="modal fade" tabindex="-1" #shareModal>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="modal-title"><i class="fas fa-share-alt me-2"></i>Gérer le partage - {{ selectedClient?.prenom }} {{ selectedClient?.nom }}</h4>
+        <button type="button" class="btn-close" (click)="closeShareModal()"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-3">Ce client est privé. Partagez-le avec des agences pour leur donner accès.</p>
+        
+        <div class="mb-3">
+          <label class="form-label">Agences disponibles</label>
+          <div class="available-agencies border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+            <div *ngIf="availableAgencies.length === 0" class="text-center text-muted py-3">
+              <i class="fas fa-check-circle me-2"></i>Toutes les agences ont déjà accès
+            </div>
+            <div *ngFor="let agency of availableAgencies" class="d-flex justify-content-between align-items-center mb-2 p-2 border-bottom">
+              <div>
+                <strong>{{ agency.prenom }} {{ agency.nom }}</strong>
+                <div class="small text-muted">{{ agency.email }}</div>
+              </div>
+              <button class="btn btn-sm btn-primary" (click)="shareWithAgency(agency.id)">
+                <i class="fas fa-share me-1"></i> Partager
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ✅ SECTION CORRIGÉE - Agences avec accès -->
+        <div class="mb-3" *ngIf="selectedClient && selectedClient.sharedWithAgencyIds && selectedClient.sharedWithAgencyIds.length > 0">
+          <label class="form-label">Agences avec accès</label>
+          <div class="shared-agencies border rounded p-3">
+            <div *ngFor="let agencyId of selectedClient.sharedWithAgencyIds" class="d-flex justify-content-between align-items-center mb-2 p-2 border-bottom">
+              <div>
+                <i class="fas fa-building me-2 text-primary"></i>
+                <strong>Agence ID: {{ agencyId }}</strong>
+              </div>
+              <button class="btn btn-sm btn-danger" (click)="revokeSharing(agencyId)">
+                <i class="fas fa-trash me-1"></i> Révoquer
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeShareModal()">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Ajout Note -->
+<div class="modal fade" tabindex="-1" #noteModal>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="modal-title"><i class="fas fa-sticky-note me-2"></i>Ajouter une note - {{ selectedClient?.prenom }} {{ selectedClient?.nom }}</h4>
+        <button type="button" class="btn-close" (click)="closeNoteModal()"></button>
+      </div>
+      <div class="modal-body">
+        <form [formGroup]="noteForm">
+          <div class="mb-3">
+            <label class="form-label">Note *</label>
+            <textarea class="form-control" rows="5" formControlName="note" 
+                      placeholder="Saisissez votre note commerciale..."
+                      [class.is-invalid]="noteForm.get('note')?.invalid && noteForm.get('note')?.touched"></textarea>
+            <div class="invalid-feedback">Minimum 10 caractères requis</div>
+            <small class="text-muted mt-2 d-block">
+              <i class="fas fa-info-circle me-1"></i>
+              Cette note sera visible par tous les utilisateurs de votre agence.
+            </small>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeNoteModal()">Annuler</button>
+        <button type="button" class="btn btn-primary" (click)="addNote()" [disabled]="noteForm.invalid || loading">
+          <i class="fas fa-save me-2"></i>Ajouter la note
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Historique -->
+<div class="modal fade" tabindex="-1" #historyModal>
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h4 class="modal-title"><i class="fas fa-history me-2"></i>Historique - {{ selectedClient?.prenom }} {{ selectedClient?.nom }}</h4>
+        <button type="button" class="btn-close" (click)="closeHistoryModal()"></button>
+      </div>
+      <div class="modal-body">
+        <div class="history-list" *ngIf="clientNotes.length > 0; else noNotes">
+          <div class="history-item" *ngFor="let note of clientNotes">
+            <div class="history-icon"><i class="fas fa-sticky-note"></i></div>
+            <div class="history-content">
+              <div class="history-title">Note de {{ note.commercialPrenom }} {{ note.commercialNom }}</div>
+              <div class="history-detail">{{ note.note }}</div>
+              <div class="history-date">{{ formatDate(note.createdAt) }}</div>
+            </div>
+          </div>
+        </div>
+        <ng-template #noNotes>
+          <div class="text-center py-5">
+            <i class="fas fa-comment-slash fa-3x text-muted mb-3"></i>
+            <p class="text-muted">Aucune note pour ce client</p>
+          </div>
+        </ng-template>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" (click)="closeHistoryModal()">Fermer</button>
+        <button type="button" class="btn btn-primary" (click)="closeHistoryModal(); openNoteModal(selectedClient!)">
+          <i class="fas fa-plus me-2"></i>Ajouter une note
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

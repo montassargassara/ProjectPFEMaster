@@ -1,9 +1,10 @@
+// UserDTO amélioré
 package com.immobilier.backend.dto;
 
 import lombok.Data;
-import java.time.LocalDateTime;
-
 import com.immobilier.backend.enums.RoleType;
+import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class UserDTO {
@@ -15,4 +16,10 @@ public class UserDTO {
     private RoleType role;
     private Boolean isActive;
     private LocalDateTime createdAt;
+    
+    // Champs hiérarchiques
+    private Long parentId;
+    private String parentName;
+    private Integer childrenCount;
+    private List<RoleCountDTO> childrenByRole;
 }

@@ -1,5 +1,5 @@
 // admin/admin-component/admin-component.ts
-import { Component, HostListener, OnDestroy, OnInit, Renderer2, Inject, PLATFORM_ID } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, Renderer2, Inject, PLATFORM_ID, ChangeDetectorRef } from '@angular/core';
 import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { filter, Subscription } from 'rxjs';
 import { AdminAuthService } from '../services/admin-auth';
@@ -21,7 +21,7 @@ export class AdminComponent implements OnInit, OnDestroy {
   isDarkTheme = false;
   currentRoute = '';
   currentUser: any = null;
-  usersCount = 0;
+  customersCount = 0; // Renommé de usersCount
   propertiesCount = 0;
   agentsCount = 0;
   
@@ -35,6 +35,7 @@ export class AdminComponent implements OnInit, OnDestroy {
     private userService: UserService,
     private dashboardService: AdminDashboardService,
     private renderer: Renderer2,
+    private cdr: ChangeDetectorRef,  // ✅ Ajoutez ceci
     @Inject(PLATFORM_ID) private platformId: Object
   ) {
     this.isBrowser = isPlatformBrowser(this.platformId);
@@ -43,10 +44,9 @@ export class AdminComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.updateViewportState();
     this.restorePreferences();
-    this.applyTheme(); // Applique le thème au chargement
+    this.applyTheme();
     this.currentRoute = this.normalizeRoute(this.router.url);
 
-    // Suivre la route actuelle
     this.subscriptions.push(
       this.router.events.pipe(
         filter(event => event instanceof NavigationEnd)
@@ -56,7 +56,6 @@ export class AdminComponent implements OnInit, OnDestroy {
       })
     );
 
-    // Récupérer l'utilisateur actuel
     this.subscriptions.push(
       this.authService.currentUser.subscribe(user => {
         this.currentUser = user;
@@ -68,40 +67,45 @@ export class AdminComponent implements OnInit, OnDestroy {
   }
 
   loadCounts(): void {
-    // Charger le nombre d'utilisateurs (seulement pour SUPER_ADMIN et ADMIN)
+    // Charger le nombre de clients
     if (this.currentUser?.role === 'SUPER_ADMIN' || this.currentUser?.role === 'ADMIN') {
-      const usersSub = this.userService.getAllUsers().subscribe({
-        next: (users: any[]) => {
-          this.usersCount = users.length;
+      const customersSub = this.userService.getUsersByRoles(['CLIENT', 'AFFILIATE']).subscribe({
+        next: (customers: any[]) => {
+          this.customersCount = customers.length;
+          this.cdr.detectChanges();  // ✅ Force la détection des changements
         },
         error: (error: any) => {
-          console.error('Erreur lors du chargement du nombre d\'utilisateurs:', error);
-          this.usersCount = 0;
+          console.error('Erreur lors du chargement du nombre de clients:', error);
+          this.customersCount = 0;
+          this.cdr.detectChanges();
         }
       });
-      this.subscriptions.push(usersSub);
+      this.subscriptions.push(customersSub);
     }
 
     const propertiesSub = this.dashboardService.getDashboardSnapshot().subscribe({
       next: snapshot => {
         this.propertiesCount = snapshot.stats.totalProperties;
+        this.cdr.detectChanges();  // ✅ Force la détection des changements
       },
       error: error => {
         console.error('Erreur lors du chargement du nombre de propriétés:', error);
         this.propertiesCount = 0;
+        this.cdr.detectChanges();
       }
     });
     this.subscriptions.push(propertiesSub);
 
-    // Charger le nombre d'agents
     if (this.currentUser?.role === 'SUPER_ADMIN') {
       const agentsSub = this.userService.getUsersByRole('COMMERCIAL').subscribe({
         next: (agents: any[]) => {
           this.agentsCount = agents.length;
+          this.cdr.detectChanges();  // ✅ Force la détection des changements
         },
         error: (error: any) => {
           console.error('Erreur lors du chargement du nombre d\'agents:', error);
           this.agentsCount = 0;
+          this.cdr.detectChanges();
         }
       });
       this.subscriptions.push(agentsSub);
@@ -109,6 +113,7 @@ export class AdminComponent implements OnInit, OnDestroy {
       this.agentsCount = 0;
     }
   }
+
 
   toggleSidebar(): void {
     this.isSidebarCollapsed = !this.isSidebarCollapsed;
@@ -130,9 +135,7 @@ export class AdminComponent implements OnInit, OnDestroy {
   }
 
   toggleTheme(): void {
-    console.log('🔄 Toggle theme called, current isDarkTheme:', this.isDarkTheme);
     this.isDarkTheme = !this.isDarkTheme;
-    console.log('🔄 New isDarkTheme value:', this.isDarkTheme);
     this.applyTheme();
     this.savePreferences();
   }
@@ -147,9 +150,9 @@ export class AdminComponent implements OnInit, OnDestroy {
       { path: '/admin/properties/new', title: 'Nouveau bien' },
       { path: '/admin/properties/edit', title: 'Modifier un bien' },
       { path: '/admin/properties', title: 'Biens immobiliers' },
-      { path: '/admin/users', title: 'Clients' },
-      { path: '/admin/agents', title: 'Agents' },
-      { path: '/admin/statistics', title: 'Transactions' },
+      { path: '/admin/customers', title: 'Gestion des clients' }, // Changé
+      { path: '/admin/agents', title: 'Agents commerciaux' },
+      { path: '/admin/statistics', title: 'Transactions & Ventes' },
       { path: '/admin/settings', title: 'Paramètres' }
     ];
 
@@ -222,6 +225,7 @@ export class AdminComponent implements OnInit, OnDestroy {
       case 'EDITOR':
         return 'Éditeur';
       case 'AFFILIATE':
+      case 'AFFILIATE_CLIENT':
         return 'Affilié';
       case 'CLIENT':
         return 'Client';
@@ -241,6 +245,10 @@ export class AdminComponent implements OnInit, OnDestroy {
       return 'badge-admin';
     } else if (role === 'COMMERCIAL' || role === 'RESPONSABLE_COMMERCIAL') {
       return 'badge-commercial';
+    } else if (role === 'CLIENT') {
+      return 'badge-client';
+    } else if (role === 'AFFILIATE' || role === 'AFFILIATE_CLIENT') {
+      return 'badge-affiliate';
     }
     
     return 'badge-default';
@@ -272,25 +280,19 @@ export class AdminComponent implements OnInit, OnDestroy {
   private restorePreferences(): void {
     if (!this.isBrowser) return;
     
-    // Restaurer l'état du sidebar
     const collapsed = localStorage.getItem('adminSidebarCollapsed');
     if (collapsed !== null) {
       this.isSidebarCollapsed = collapsed === 'true';
     }
     
-    // Restaurer le thème
     const theme = localStorage.getItem('adminTheme');
-    console.log('🎨 Restored theme from localStorage:', theme);
-    
     if (theme === 'dark') {
       this.isDarkTheme = true;
     } else if (theme === 'light') {
       this.isDarkTheme = false;
     } else {
-      // Détection du thème système
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       this.isDarkTheme = prefersDark;
-      console.log('🎨 Using system preference:', prefersDark ? 'dark' : 'light');
     }
   }
 
@@ -298,47 +300,27 @@ export class AdminComponent implements OnInit, OnDestroy {
     if (!this.isBrowser) return;
     localStorage.setItem('adminSidebarCollapsed', String(this.isSidebarCollapsed));
     localStorage.setItem('adminTheme', this.isDarkTheme ? 'dark' : 'light');
-    console.log('💾 Saved preferences - Sidebar:', this.isSidebarCollapsed, 'Theme:', this.isDarkTheme ? 'dark' : 'light');
   }
 
   private applyTheme(): void {
     if (!this.isBrowser) return;
     
-    console.log('🎨 Applying theme, isDarkTheme:', this.isDarkTheme);
-    
-    // Méthode 1: Ajouter/retirer la classe sur body
     if (this.isDarkTheme) {
       document.body.classList.add('dark-mode');
       document.documentElement.classList.add('dark-mode');
-      console.log('🌙 Dark mode activated, classes added to body and html');
     } else {
       document.body.classList.remove('dark-mode');
       document.documentElement.classList.remove('dark-mode');
-      console.log('☀️ Light mode activated, classes removed from body and html');
     }
     
-    // Méthode 2: Alternative - définir directement l'attribut data-theme
     document.body.setAttribute('data-theme', this.isDarkTheme ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', this.isDarkTheme ? 'dark' : 'light');
     
-    // Vérifier que les classes sont bien appliquées
-    const hasDarkClass = document.body.classList.contains('dark-mode');
-    console.log('✅ Body has dark-mode class:', hasDarkClass);
-    console.log('✅ Body classes:', document.body.className);
-    
-    // Forcer une mise à jour du style
     this.forceStyleRecalculation();
   }
   
   private forceStyleRecalculation(): void {
-    // Force browser reflow to apply styles
-    const bodyStyles = getComputedStyle(document.body);
-    const bgColor = bodyStyles.getPropertyValue('--content-bg');
-    console.log('🎨 Current --content-bg:', bgColor);
-    
-    // Trigger reflow
     document.body.style.display = 'none';
-    // Force reflow
     void document.body.offsetHeight;
     document.body.style.display = '';
   }

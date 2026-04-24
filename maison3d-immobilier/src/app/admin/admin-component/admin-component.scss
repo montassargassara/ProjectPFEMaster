@@ -1,4 +1,8 @@
-// admin/admin-component/admin-component.scss - COMPLETE CORRECT VERSION WITH FIXED BADGES
+// admin/admin-component/admin-component.scss
+// ============================================
+// IMPORTS & RESET
+// ============================================
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap');
 
 * {
@@ -7,8 +11,11 @@
   box-sizing: border-box;
 }
 
-// Light Mode Variables (Default)
-:root {
+// ============================================
+// LIGHT MODE VARIABLES (Default)
+// ============================================
+
+:host {
   --primary: #3b82f6;
   --primary-dark: #2563eb;
   --primary-light: #60a5fa;
@@ -36,16 +43,28 @@
   --text-muted: #64748b;
   --border-color: #e2e8f0;
   
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1);
-  --radius: 12px;
-  --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  
+  --radius-sm: 0.375rem;
+  --radius: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-// Dark Mode Variables - Appliqué via la classe .dark-mode
-.dark-mode,
-[data-theme="dark"] {
+// ============================================
+// DARK MODE VARIABLES
+// ============================================
+
+:host-context(.dark-mode),
+:host-context([data-theme="dark"]) {
   --primary: #3b82f6;
   --primary-dark: #2563eb;
   --primary-light: #60a5fa;
@@ -73,24 +92,30 @@
   --text-muted: #94a3b8;
   --border-color: #1e293b;
   
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
-  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.3);
-  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
 }
 
-// Appliquer les styles de transition
+// ============================================
+// GLOBAL TRANSITIONS
+// ============================================
+
 body, html, .admin-container, .admin-sidebar, .admin-content {
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  transition: background-color var(--transition), 
+              color var(--transition), 
+              border-color var(--transition), 
+              box-shadow var(--transition);
 }
 
-// Appliquer le thème au body ET au html
 body, html {
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition: background-color var(--transition), color var(--transition);
 }
 
-body.dark-mode, html.dark-mode {
-  background-color: #0f172a;
-}
+// ============================================
+// MAIN CONTAINER
+// ============================================
 
 .admin-container {
   display: flex;
@@ -100,6 +125,7 @@ body.dark-mode, html.dark-mode {
   position: relative;
   transition: background var(--transition);
 
+  // Sidebar Collapsed State
   &.sidebar-collapsed {
     .admin-sidebar {
       width: 80px;
@@ -155,7 +181,10 @@ body.dark-mode, html.dark-mode {
   }
 }
 
-// Sidebar
+// ============================================
+// SIDEBAR
+// ============================================
+
 .admin-sidebar {
   width: 280px;
   background: var(--sidebar-bg);
@@ -185,6 +214,7 @@ body.dark-mode, html.dark-mode {
     border-radius: 4px;
   }
 
+  // Sidebar Header
   .sidebar-header {
     padding: 24px 20px;
     border-bottom: 1px solid var(--sidebar-border);
@@ -241,6 +271,7 @@ body.dark-mode, html.dark-mode {
     }
   }
   
+  // Sidebar Menu
   .sidebar-menu {
     flex: 1;
     overflow-y: auto;
@@ -310,7 +341,6 @@ body.dark-mode, html.dark-mode {
             color: var(--sidebar-icon);
           }
           
-          // FIXED: Badge styles - RED background, WHITE text, modern design
           .badge {
             margin-left: auto;
             background: linear-gradient(135deg, #ef4444, #dc2626);
@@ -323,7 +353,7 @@ body.dark-mode, html.dark-mode {
             border-radius: 30px;
             letter-spacing: 0.3px;
             box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
-            transition: all 0.2s ease;
+            transition: all var(--transition-fast);
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -351,6 +381,7 @@ body.dark-mode, html.dark-mode {
     }
   }
   
+  // Sidebar Footer
   .sidebar-footer {
     border-top: 1px solid var(--sidebar-border);
     padding: 16px;
@@ -458,6 +489,7 @@ body.dark-mode, html.dark-mode {
     }
   }
   
+  // Sidebar Footer Collapsed
   .sidebar-footer-collapsed {
     display: none;
     border-top: 1px solid var(--sidebar-border);
@@ -515,7 +547,10 @@ body.dark-mode, html.dark-mode {
   }
 }
 
-// Main Content
+// ============================================
+// MAIN CONTENT
+// ============================================
+
 .admin-content {
   flex: 1;
   margin-left: 280px;
@@ -527,6 +562,7 @@ body.dark-mode, html.dark-mode {
   position: relative;
   background: var(--content-bg);
   
+  // Admin Header
   .admin-header {
     background: var(--header-bg);
     backdrop-filter: blur(10px);
@@ -581,12 +617,13 @@ body.dark-mode, html.dark-mode {
       align-items: center;
       gap: 16px;
       
+      // Theme Toggle
       .theme-toggle {
         background: var(--card-bg);
         border: 1px solid var(--border-color);
         width: 44px;
         height: 44px;
-        border-radius: 12px;
+        border-radius: var(--radius);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -610,13 +647,14 @@ body.dark-mode, html.dark-mode {
         }
       }
       
+      // User Info Header
       .user-info-header {
         display: flex;
         align-items: center;
         gap: 12px;
         padding: 8px 16px;
         background: var(--card-bg);
-        border-radius: 12px;
+        border-radius: var(--radius);
         transition: var(--transition);
         cursor: pointer;
         border: 1px solid var(--border-color);
@@ -677,6 +715,7 @@ body.dark-mode, html.dark-mode {
         }
       }
       
+      // Notification Dropdown
       .notification-dropdown {
         position: relative;
         
@@ -685,7 +724,7 @@ body.dark-mode, html.dark-mode {
           border: 1px solid var(--border-color);
           width: 44px;
           height: 44px;
-          border-radius: 12px;
+          border-radius: var(--radius);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -707,7 +746,6 @@ body.dark-mode, html.dark-mode {
             }
           }
           
-          // FIXED: Notification badge - RED background, WHITE text
           .notification-count {
             position: absolute;
             top: -6px;
@@ -724,7 +762,7 @@ body.dark-mode, html.dark-mode {
             justify-content: center;
             box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
             letter-spacing: 0.3px;
-            transition: transform 0.2s;
+            transition: transform var(--transition-fast);
           }
           
           &:hover .notification-count {
@@ -738,7 +776,7 @@ body.dark-mode, html.dark-mode {
           right: 0;
           width: 360px;
           background: var(--card-bg);
-          border-radius: 16px;
+          border-radius: var(--radius-lg);
           box-shadow: var(--shadow-lg);
           display: none;
           z-index: 1000;
@@ -854,6 +892,7 @@ body.dark-mode, html.dark-mode {
         }
       }
       
+      // Search Box
       .search-box {
         position: relative;
         width: 280px;
@@ -871,7 +910,7 @@ body.dark-mode, html.dark-mode {
           width: 100%;
           padding: 12px 16px 12px 44px;
           border: 1px solid var(--border-color);
-          border-radius: 12px;
+          border-radius: var(--radius);
           font-size: 14px;
           font-family: inherit;
           transition: var(--transition);
@@ -890,6 +929,7 @@ body.dark-mode, html.dark-mode {
         }
       }
       
+      // Back to Site Button
       .btn-back-site {
         display: flex;
         align-items: center;
@@ -920,6 +960,7 @@ body.dark-mode, html.dark-mode {
     }
   }
   
+  // Content Area
   .content-area {
     flex: 1;
     padding: 32px;
@@ -944,6 +985,7 @@ body.dark-mode, html.dark-mode {
     }
   }
   
+  // Admin Footer
   .admin-footer {
     background: var(--card-bg);
     padding: 16px 32px;
@@ -982,7 +1024,10 @@ body.dark-mode, html.dark-mode {
   }
 }
 
-// Animations
+// ============================================
+// ANIMATIONS
+// ============================================
+
 @keyframes slideDown {
   from {
     opacity: 0;
@@ -1006,7 +1051,11 @@ body.dark-mode, html.dark-mode {
   }
 }
 
-// Responsive Design
+// ============================================
+// RESPONSIVE DESIGN
+// ============================================
+
+// Tablet
 @media (max-width: 992px) {
   .admin-container {
     &.sidebar-collapsed .admin-sidebar {
@@ -1046,6 +1095,7 @@ body.dark-mode, html.dark-mode {
   }
 }
 
+// Mobile
 @media (max-width: 768px) {
   .admin-content {
     .admin-header {
@@ -1101,6 +1151,19 @@ body.dark-mode, html.dark-mode {
         flex-direction: column;
         gap: 8px;
       }
+    }
+  }
+}
+
+// Small Mobile
+@media (max-width: 480px) {
+  .admin-content {
+    .content-area {
+      padding: 16px;
+    }
+    
+    .admin-footer {
+      font-size: 11px;
     }
   }
 }

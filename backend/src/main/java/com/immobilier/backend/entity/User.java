@@ -1,11 +1,28 @@
 package com.immobilier.backend.entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
+
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+
 import com.immobilier.backend.enums.RoleType;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+    @Index(name = "idx_users_email", columnList = "email"),
+    @Index(name = "idx_users_role", columnList = "role"),
+    @Index(name = "idx_users_parent_id", columnList = "parent_id"),
+    @Index(name = "idx_users_is_active", columnList = "is_active")
+})
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class User {
     
     @Id
@@ -34,131 +51,23 @@ public class User {
     @Column(name = "is_active")
     private Boolean isActive = true;
     
-    @Column(name = "created_at")
+    // Hiérarchie - parent utilisateur
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_id")
+    private User parent;
+    
+    // Enfants créés par cet utilisateur
+    @OneToMany(mappedBy = "parent", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<User> children = new ArrayList<>();
+    
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
     
+    @UpdateTimestamp
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
     
-    // Constructeurs
-    public User() {
-    }
-    
-    public User(Long id, String email, String password, String nom, String prenom, 
-                String telephone, RoleType role, Boolean isActive, 
-                LocalDateTime createdAt, LocalDateTime updatedAt) {
-        this.id = id;
-        this.email = email;
-        this.password = password;
-        this.nom = nom;
-        this.prenom = prenom;
-        this.telephone = telephone;
-        this.role = role;
-        this.isActive = isActive;
-        this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
-    }
-    
-    // Getters
-    public Long getId() {
-        return id;
-    }
-    
-    public String getEmail() {
-        return email;
-    }
-    
-    public String getPassword() {
-        return password;
-    }
-    
-    public String getNom() {
-        return nom;
-    }
-    
-    public String getPrenom() {
-        return prenom;
-    }
-    
-    public String getTelephone() {
-        return telephone;
-    }
-    
-    public RoleType getRole() {
-        return role;
-    }
-    
-    public Boolean getIsActive() {
-        return isActive;
-    }
-    
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-    
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-    
-    // Setters
-    public void setId(Long id) {
-        this.id = id;
-    }
-    
-    public void setEmail(String email) {
-        this.email = email;
-    }
-    
-    public void setPassword(String password) {
-        this.password = password;
-    }
-    
-    public void setNom(String nom) {
-        this.nom = nom;
-    }
-    
-    public void setPrenom(String prenom) {
-        this.prenom = prenom;
-    }
-    
-    public void setTelephone(String telephone) {
-        this.telephone = telephone;
-    }
-    
-    public void setRole(RoleType role) {
-        this.role = role;
-    }
-    
-    public void setIsActive(Boolean isActive) {
-        this.isActive = isActive;
-    }
-    
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-    
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-    
-    // Méthodes utilitaires
-    public String getFullName() {
-        return prenom + " " + nom;
-    }
-    
-    public boolean isActive() {
-        return isActive != null && isActive;
-    }
-    
-    public boolean hasRole(RoleType roleType) {
-        return this.role != null && this.role.equals(roleType);
-    }
-    
-    public boolean isAdmin() {
-        return hasRole(RoleType.ADMIN) || hasRole(RoleType.SUPER_ADMIN);
-    }
-    
-    // Méthodes lifecycle JPA
     @PrePersist
     protected void onCreate() {
         if (createdAt == null) {
@@ -175,6 +84,22 @@ public class User {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+    
+    public String getFullName() {
+        return prenom + " " + nom;
+    }
+    
+    public boolean isActive() {
+        return isActive != null && isActive;
+    }
+    
+    public boolean hasRole(RoleType roleType) {
+        return this.role != null && this.role.equals(roleType);
+    }
+    
+    public boolean isAdmin() {
+        return hasRole(RoleType.ADMIN) || hasRole(RoleType.SUPER_ADMIN);
     }
     
     // Méthode toString
@@ -209,7 +134,24 @@ public class User {
         return result;
     }
     
-    // Builder pattern (optionnel)
+    // Constructeur pour le builder (package-private pour être utilisé par Builder)
+    User(Long id, String email, String password, String nom, String prenom, 
+         String telephone, RoleType role, Boolean isActive, 
+         LocalDateTime createdAt, LocalDateTime updatedAt) {
+        this.id = id;
+        this.email = email;
+        this.password = password;
+        this.nom = nom;
+        this.prenom = prenom;
+        this.telephone = telephone;
+        this.role = role;
+        this.isActive = isActive;
+        this.createdAt = createdAt;
+        this.updatedAt = updatedAt;
+        this.children = new ArrayList<>();
+    }
+    
+    // Builder pattern
     public static class Builder {
         private Long id;
         private String email;
@@ -221,6 +163,7 @@ public class User {
         private Boolean isActive = true;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
+        private User parent;
         
         public Builder id(Long id) {
             this.id = id;
@@ -272,9 +215,16 @@ public class User {
             return this;
         }
         
+        public Builder parent(User parent) {
+            this.parent = parent;
+            return this;
+        }
+        
         public User build() {
-            return new User(id, email, password, nom, prenom, telephone, 
-                           role, isActive, createdAt, updatedAt);
+            User user = new User(id, email, password, nom, prenom, telephone, 
+                                role, isActive, createdAt, updatedAt);
+            user.setParent(parent);
+            return user;
         }
     }
     
