@@ -204,5 +204,75 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
 
     @Query("SELECT DISTINCT p.region FROM Property p WHERE p.region IS NOT NULL AND p.isActive = true")
     List<String> findAllRegions();
-    
+
+    // ========== AFFILIATE VISIBILITY QUERIES ==========
+
+    /**
+     * Strict zone-key matching: each entry in :zoneKeys is "country|city" lowercase.
+     * Matches a property only when BOTH country AND city equal the affiliate's pair.
+     * Used by affiliates whose regions provide explicit country + city.
+     */
+    @Query("SELECT p FROM Property p WHERE p.isActive = true " +
+           "AND p.isAffiliateEligible = true " +
+           "AND p.statut = 'DISPONIBLE' " +
+           "AND (p.isReservedByAffiliate IS NULL OR p.isReservedByAffiliate = false) " +
+           "AND p.commissionPercentage IS NOT NULL AND p.commissionPercentage > 0 " +
+           "AND p.country IS NOT NULL AND p.city IS NOT NULL " +
+           "AND CONCAT(LOWER(TRIM(p.country)), '|', LOWER(TRIM(p.city))) IN :zoneKeys")
+    List<Property> findEligiblePropertiesForAffiliateZoneKeys(@Param("zoneKeys") List<String> zoneKeys);
+
+    /**
+     * Legacy fallback for affiliates whose regions only provide a single name (no country/city split).
+     * Matches by city or region name (case-insensitive). Kept to avoid breaking older registrations.
+     */
+    @Query("SELECT p FROM Property p WHERE p.isActive = true " +
+           "AND p.isAffiliateEligible = true " +
+           "AND p.statut = 'DISPONIBLE' " +
+           "AND (p.isReservedByAffiliate IS NULL OR p.isReservedByAffiliate = false) " +
+           "AND p.commissionPercentage IS NOT NULL AND p.commissionPercentage > 0 " +
+           "AND (LOWER(TRIM(p.region)) IN :regions OR LOWER(TRIM(p.city)) IN :regions)")
+    List<Property> findEligiblePropertiesForAffiliateRegions(@Param("regions") List<String> regions);
+
+    /**
+     * All affiliate-eligible properties across all zones — used for suggested-zone computation.
+     * Excludes reserved properties.
+     */
+    @Query("SELECT p FROM Property p WHERE p.isActive = true " +
+           "AND p.isAffiliateEligible = true " +
+           "AND p.statut = 'DISPONIBLE' " +
+           "AND (p.isReservedByAffiliate IS NULL OR p.isReservedByAffiliate = false) " +
+           "AND p.commissionPercentage IS NOT NULL AND p.commissionPercentage > 0")
+    List<Property> findAllAffiliateEligibleProperties();
+
+    // ========== MULTI-TENANT VISIBILITY QUERIES ==========
+
+    /**
+     * Properties visible to an agency admin:
+     *  - Properties directly owned by that agency (ownerType = 'AGENCY_OWNED')
+     *  - Super-admin properties that have been explicitly shared with this agency
+     *  - Legacy rows (ownerType IS NULL) treated as agency-owned for backward compat
+     */
+    @Query("SELECT p FROM Property p WHERE p.isActive = true AND (" +
+           "  p.ownerType IS NULL OR" +
+           "  (p.ownerType = 'AGENCY_OWNED' AND p.agencyAdmin.id = :agencyAdminId) OR" +
+           "  (p.ownerType = 'SUPER_ADMIN_OWNED' AND p.id IN (" +
+           "    SELECT psa.property.id FROM PropertySharedAgency psa WHERE psa.agencyAdmin.id = :agencyAdminId" +
+           "  ))" +
+           ")")
+    List<Property> findVisiblePropertiesForAgency(@Param("agencyAdminId") Long agencyAdminId);
+
+    /** Properties owned by a specific agency admin (for ownership checks). */
+    @Query("SELECT p FROM Property p WHERE p.isActive = true AND p.agencyAdmin.id = :agencyAdminId")
+    List<Property> findByAgencyAdminId(@Param("agencyAdminId") Long agencyAdminId);
+
+    /** Single property access check for an agency (visible = owns it OR it's shared with them). */
+    @Query("SELECT COUNT(p) > 0 FROM Property p WHERE p.id = :propertyId AND p.isActive = true AND (" +
+           "  p.ownerType IS NULL OR" +
+           "  (p.ownerType = 'AGENCY_OWNED' AND p.agencyAdmin.id = :agencyAdminId) OR" +
+           "  (p.ownerType = 'SUPER_ADMIN_OWNED' AND EXISTS (" +
+           "    SELECT psa FROM PropertySharedAgency psa WHERE psa.property.id = :propertyId AND psa.agencyAdmin.id = :agencyAdminId" +
+           "  ))" +
+           ")")
+    boolean isPropertyVisibleForAgency(@Param("propertyId") Long propertyId,
+                                       @Param("agencyAdminId") Long agencyAdminId);
 }

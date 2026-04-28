@@ -108,9 +108,9 @@ public class UserController {
     
     @PostMapping("/affiliate")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public ResponseEntity<UserDTO> createAffiliate(@Valid @RequestBody RegisterAffiliateRequest request) {
+    public ResponseEntity<AffiliateProfileDTO> createAffiliate(@Valid @RequestBody CreateAffiliateRequest request) {
         log.info("👑 Creating affiliate: {}", request.getEmail());
-        UserDTO createdAffiliate = affiliateService.registerAffiliate(request);
+        AffiliateProfileDTO createdAffiliate = affiliateService.registerAffiliate(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdAffiliate);
     }
     
@@ -206,7 +206,7 @@ public class UserController {
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<AffiliateStatsDTO> getAffiliateDetails(@PathVariable Long id) {
         log.info("👑 Getting affiliate details for ID: {}", id);
-        AffiliateStatsDTO stats = affiliateService.getAffiliateStats(id);
+        AffiliateStatsDTO stats = affiliateService.getStats(id);
         return ResponseEntity.ok(stats);
     }
     
@@ -214,7 +214,7 @@ public class UserController {
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<List<AffiliateTransactionDTO>> getAllAffiliateTransactions() {
         log.info("👑 Getting all affiliate transactions");
-        List<AffiliateTransactionDTO> transactions = affiliateService.getAllAffiliateTransactions();
+        List<AffiliateTransactionDTO> transactions = affiliateService.getAllTransactions();
         return ResponseEntity.ok(transactions);
     }
     
@@ -233,7 +233,7 @@ public class UserController {
             @PathVariable Long regionId,
             @Valid @RequestBody RegionSelection regionSelection) {
         log.info("👑 Updating region {} for affiliate {}", regionId, affiliateId);
-        AffiliateRegionDTO updatedRegion = affiliateService.updateAffiliateRegion(affiliateId, regionId, regionSelection);
+        AffiliateRegionDTO updatedRegion = affiliateService.updateRegion(affiliateId, regionId, regionSelection);
         return ResponseEntity.ok(updatedRegion);
     }
     

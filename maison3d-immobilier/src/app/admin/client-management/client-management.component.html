@@ -336,17 +336,37 @@
                      [class.is-invalid]="clientForm.hasError('passwordMismatch') && clientForm.get('confirmPassword')?.touched">
               <div class="invalid-feedback">Les mots de passe ne correspondent pas</div>
             </div>
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6 mb-3" *ngIf="!isAffiliateForm">
               <label class="form-label">Budget estimé (TND)</label>
               <input type="number" class="form-control" formControlName="budgetEstime" placeholder="Ex: 500000">
             </div>
-            <div class="col-md-6 mb-3">
+            <div class="col-md-6 mb-3" *ngIf="!isAffiliateForm">
               <label class="form-label">Zone recherchée</label>
               <input type="text" class="form-control" formControlName="zoneRecherchee" placeholder="Ex: Centre ville, Lac...">
             </div>
+            <ng-container *ngIf="isAffiliateForm">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Pays *</label>
+                <select class="form-select" formControlName="country" (change)="onCountryChange()"
+                        [class.is-invalid]="clientForm.get('country')?.invalid && clientForm.get('country')?.touched">
+                  <option value="">Sélectionner un pays</option>
+                  <option *ngFor="let c of availableCountries" [value]="c">{{ c }}</option>
+                </select>
+                <div class="invalid-feedback">Pays requis</div>
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Ville *</label>
+                <select class="form-select" formControlName="city"
+                        [class.is-invalid]="clientForm.get('city')?.invalid && clientForm.get('city')?.touched">
+                  <option value="">Sélectionner une ville</option>
+                  <option *ngFor="let v of availableCities" [value]="v">{{ v }}</option>
+                </select>
+                <div class="invalid-feedback">Ville requise</div>
+              </div>
+            </ng-container>
             
             <!-- ========== VISIBILITÉ ========== -->
-            <div class="col-12 mb-3">
+            <div class="col-12 mb-3" *ngIf="!isAffiliateForm">
               <label class="form-label">Type de visibilité *</label>
               <div class="visibility-options">
                 <div class="form-check form-check-inline">
@@ -367,7 +387,7 @@
             </div>
 
             <!-- Pour AGENCY_CLIENT - Sélection de l'agence cible (SUPER_ADMIN seulement) -->
-            <div class="col-12 mb-3" *ngIf="clientForm.get('visibilityType')?.value === 'AGENCY_CLIENT' && currentUser?.role === 'SUPER_ADMIN'">
+            <div class="col-12 mb-3" *ngIf="!isAffiliateForm && clientForm.get('visibilityType')?.value === 'AGENCY_CLIENT' && currentUser?.role === 'SUPER_ADMIN'">
               <label class="form-label">Agence cible *</label>
               <select class="form-select" formControlName="targetAgencyAdminId">
                 <option [value]="null">Sélectionner une agence</option>
@@ -376,7 +396,7 @@
             </div>
 
             <!-- Pour PRIVATE_CLIENT - Sélection des agences -->
-            <div class="col-12 mb-3" *ngIf="clientForm.get('visibilityType')?.value === 'PRIVATE_CLIENT' && currentUser?.role === 'SUPER_ADMIN'">
+            <div class="col-12 mb-3" *ngIf="!isAffiliateForm && clientForm.get('visibilityType')?.value === 'PRIVATE_CLIENT' && currentUser?.role === 'SUPER_ADMIN'">
               <label class="form-label">Partager avec les agences</label>
               <div class="agencies-checkbox-list border rounded p-3" style="max-height: 200px; overflow-y: auto;">
                 <div *ngFor="let agency of agencies" class="form-check mb-2">
@@ -399,10 +419,6 @@
                     <label class="form-label">Code d'affiliation</label>
                     <input type="text" class="form-control" formControlName="codeAffiliation" readonly>
                     <small class="text-muted">Code généré automatiquement</small>
-                  </div>
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label">Taux de commission (%)</label>
-                    <input type="number" class="form-control" formControlName="tauxCommission" step="0.5">
                   </div>
                   <div class="col-md-12 mb-3">
                     <label class="form-label">Source / Canal d'acquisition</label>
@@ -435,57 +451,76 @@
       <div class="modal-body">
         <form [formGroup]="editForm">
           <div class="row">
+            <!-- ─── Common fields (both normal client and affiliate) ─── -->
             <div class="col-md-6 mb-3">
               <label class="form-label">Nom *</label>
-              <input type="text" class="form-control" formControlName="nom" 
+              <input type="text" class="form-control" formControlName="nom"
                      [class.is-invalid]="editForm.get('nom')?.invalid && editForm.get('nom')?.touched">
               <div class="invalid-feedback">Nom requis</div>
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">Prénom *</label>
-              <input type="text" class="form-control" formControlName="prenom" 
+              <input type="text" class="form-control" formControlName="prenom"
                      [class.is-invalid]="editForm.get('prenom')?.invalid && editForm.get('prenom')?.touched">
               <div class="invalid-feedback">Prénom requis</div>
             </div>
             <div class="col-md-6 mb-3">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-control" [value]="selectedClient?.email" readonly>
+              <small class="text-muted">L'email ne peut pas être modifié.</small>
+            </div>
+            <div class="col-md-6 mb-3">
               <label class="form-label">Téléphone</label>
-              <input type="tel" class="form-control" formControlName="telephone" 
+              <input type="tel" class="form-control" formControlName="telephone"
                      [class.is-invalid]="editForm.get('telephone')?.invalid && editForm.get('telephone')?.touched">
               <div class="invalid-feedback">Format invalide (ex: 062547413)</div>
             </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Budget estimé (TND)</label>
-              <input type="number" class="form-control" formControlName="budgetEstime">
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Zone recherchée</label>
-              <input type="text" class="form-control" formControlName="zoneRecherchee">
-            </div>
+
+            <!-- ─── Normal-client legacy fields (hidden for affiliates) ─── -->
+            <ng-container *ngIf="selectedClient && selectedClient.role !== 'AFFILIATE'">
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Budget estimé (TND)</label>
+                <input type="number" class="form-control" formControlName="budgetEstime">
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Zone recherchée</label>
+                <input type="text" class="form-control" formControlName="zoneRecherchee">
+              </div>
+            </ng-container>
+
+            <!-- ─── Affiliate-specific zone selection (mirrors Ajouter Affilié) ─── -->
+            <ng-container *ngIf="selectedClient?.role === 'AFFILIATE'">
+              <div class="col-12 mb-2">
+                <div class="affiliate-fields border-top pt-3">
+                  <h6 class="mb-3"><i class="fas fa-handshake me-2"></i>Zone d'affiliation</h6>
+                </div>
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Pays *</label>
+                <select class="form-select" formControlName="country" (change)="onEditCountryChange()"
+                        [class.is-invalid]="editForm.get('country')?.invalid && editForm.get('country')?.touched">
+                  <option value="">-- Sélectionnez un pays --</option>
+                  <option *ngFor="let c of editCountries" [value]="c">{{ c }}</option>
+                </select>
+                <div class="invalid-feedback">Pays requis</div>
+              </div>
+              <div class="col-md-6 mb-3">
+                <label class="form-label">Ville *</label>
+                <select class="form-select" formControlName="city"
+                        [class.is-invalid]="editForm.get('city')?.invalid && editForm.get('city')?.touched"
+                        [disabled]="!editForm.get('country')?.value">
+                  <option value="">-- Sélectionnez une ville --</option>
+                  <option *ngFor="let v of editCities" [value]="v">{{ v }}</option>
+                </select>
+                <small class="text-muted" *ngIf="!editForm.get('country')?.value">Choisissez d'abord un pays.</small>
+                <div class="invalid-feedback">Ville requise</div>
+              </div>
+            </ng-container>
+
             <div class="col-md-6 mb-3">
               <div class="form-check form-switch mt-4">
                 <input class="form-check-input" type="checkbox" formControlName="isActive" id="isActiveSwitch">
                 <label class="form-check-label" for="isActiveSwitch">Compte actif</label>
-              </div>
-            </div>
-            
-            <!-- Affiliate fields -->
-            <div class="col-12" *ngIf="selectedClient?.role === 'AFFILIATE'">
-              <div class="affiliate-fields border-top pt-3">
-                <h6 class="mb-3"><i class="fas fa-handshake me-2"></i>Informations d'affiliation</h6>
-                <div class="row">
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label">Code d'affiliation</label>
-                    <input type="text" class="form-control" formControlName="codeAffiliation">
-                  </div>
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label">Taux de commission (%)</label>
-                    <input type="number" class="form-control" formControlName="tauxCommission" step="0.5">
-                  </div>
-                  <div class="col-md-12 mb-3">
-                    <label class="form-label">Source / Canal d'acquisition</label>
-                    <input type="text" class="form-control" formControlName="source">
-                  </div>
-                </div>
               </div>
             </div>
           </div>

@@ -1,11 +1,12 @@
 package com.immobilier.backend.dto;
 
+import com.immobilier.backend.validation.PropertyStatusValidatable;
 import com.immobilier.backend.validation.ValidPropertyStatus;
 import lombok.Data;
 
 @Data
 @ValidPropertyStatus
-public class UpdatePropertyRequest {
+public class UpdatePropertyRequest implements PropertyStatusValidatable {
     private String titre;
     private String description;
     private String type;
@@ -20,7 +21,8 @@ public class UpdatePropertyRequest {
     private Double latitude;
     private Double longitude;
     private Boolean isActive;
-    
+    private Boolean isAffiliateEligible;
+
     private MediaUpdateMode mediaUpdateMode = MediaUpdateMode.REPLACE;
     private java.util.List<PropertyMediaDTO> medias;
     private java.util.List<Long> mediaIdsToDelete;

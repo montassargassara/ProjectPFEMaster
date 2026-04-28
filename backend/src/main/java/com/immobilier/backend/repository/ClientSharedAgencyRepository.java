@@ -23,4 +23,13 @@ public interface ClientSharedAgencyRepository extends JpaRepository<ClientShared
     void deleteByClientIdAndAdminId(@Param("clientId") Long clientId, @Param("adminId") Long adminId);
     
     boolean existsByClientIdAndAdminId(Long clientId, Long adminId);
+
+    // Ajoutez ces méthodes dans ClientSharedAgencyRepository.java
+
+    @Query("SELECT COUNT(csa) FROM ClientSharedAgency csa WHERE csa.admin.id = :adminId")
+    long countByAdminId(@Param("adminId") Long adminId);
+
+    @Query("SELECT csa.client.id FROM ClientSharedAgency csa WHERE csa.admin.id = :adminId")
+    List<Long> findClientIdsByAdminId(@Param("adminId") Long adminId);
+
 }

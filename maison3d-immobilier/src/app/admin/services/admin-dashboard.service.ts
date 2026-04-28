@@ -87,6 +87,23 @@ export interface DashboardSnapshot {
   isSuperAdmin: boolean;
 }
 
+export interface ClientCountResponse {
+  count: number;
+  role: string;
+}
+
+export interface RecentClient {
+  id: number;
+  nom: string;
+  prenom: string;
+  email: string;
+  telephone?: string;
+  role: string;
+  createdAt: string;
+  visibilityType: string;
+  agencyAdminId: number;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -314,4 +331,25 @@ export class AdminDashboardService {
     const date = new Date(raw);
     return Number.isNaN(date.getTime()) ? null : date;
   }
+
+  // Dans admin-dashboard.service.ts, corrigez les URLs:
+
+  /**
+   * Récupère le nombre de clients visibles pour l'utilisateur connecté
+   */
+  getClientCount(): Observable<ClientCountResponse> {
+    // ✅ URL CORRECTE avec /api/dashboard/
+    return this.http.get<ClientCountResponse>(`${apiBaseUrl}/api/dashboard/client-count`);
+  }
+
+  /**
+   * Récupère les clients récents visibles
+   */
+  getRecentClients(limit: number = 6): Observable<RecentClient[]> {
+    // ✅ URL CORRECTE avec /api/dashboard/
+    return this.http.get<RecentClient[]>(`${apiBaseUrl}/api/dashboard/recent-clients`, {
+      params: { limit: limit.toString() }
+    });
+  }
+
 }

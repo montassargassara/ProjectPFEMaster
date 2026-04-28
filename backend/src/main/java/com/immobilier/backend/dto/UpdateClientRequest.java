@@ -19,7 +19,13 @@ public class UpdateClientRequest {
     private String zoneRecherchee;
     private Long commercialId;
     private Boolean isActive;
-    
+
+    // For affiliate only — explicit country/city take precedence over the legacy
+    // joined `zoneRecherchee` string. When both are provided, the service rebuilds
+    // zoneRecherchee = "country, city" and updates the affiliate's AffiliateRegion.
+    private String country;
+    private String city;
+
     // For affiliate only
     private String codeAffiliation;
     private Double tauxCommission;

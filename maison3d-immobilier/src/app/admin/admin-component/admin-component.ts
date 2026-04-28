@@ -6,6 +6,7 @@ import { AdminAuthService } from '../services/admin-auth';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { UserService } from '../../services/user.service';
 import { AdminDashboardService } from '../services/admin-dashboard.service';
+import { NotificationService, NotificationDTO } from '../services/notification.service';
 
 @Component({
   selector: 'app-admin-component',
@@ -21,10 +22,13 @@ export class AdminComponent implements OnInit, OnDestroy {
   isDarkTheme = false;
   currentRoute = '';
   currentUser: any = null;
-  customersCount = 0; // Renommé de usersCount
+  customersCount = 0;
   propertiesCount = 0;
   agentsCount = 0;
-  
+  unreadNotifications = 0;
+  notifPanelOpen = false;
+  recentNotifications: NotificationDTO[] = [];
+
   private subscriptions: Subscription[] = [];
   private readonly mobileBreakpoint = 992;
   private isBrowser: boolean;
@@ -34,8 +38,9 @@ export class AdminComponent implements OnInit, OnDestroy {
     private authService: AdminAuthService,
     private userService: UserService,
     private dashboardService: AdminDashboardService,
+    public notificationService: NotificationService,
     private renderer: Renderer2,
-    private cdr: ChangeDetectorRef,  // ✅ Ajoutez ceci
+    private cdr: ChangeDetectorRef,
     @Inject(PLATFORM_ID) private platformId: Object
   ) {
     this.isBrowser = isPlatformBrowser(this.platformId);
@@ -61,32 +66,50 @@ export class AdminComponent implements OnInit, OnDestroy {
         this.currentUser = user;
         if (user) {
           this.loadCounts();
+          this.notificationService.startPolling();
+          // redirect /admin root to the role-appropriate default page
+          if (this.router.url === '/admin' || this.router.url === '/admin/') {
+            this.router.navigate([this.authService.getDefaultRoute()], { replaceUrl: true });
+          }
         }
+      })
+    );
+
+    this.subscriptions.push(
+      this.notificationService.unreadCount$.subscribe(count => {
+        this.unreadNotifications = count;
+        this.cdr.detectChanges();
       })
     );
   }
 
+  /**
+   * ✅ NOUVELLE MÉTHODE - Chargement sécurisé des compteurs
+   * Utilise l'API backend filtrée au lieu de compter tous les clients
+   */
   loadCounts(): void {
-    // Charger le nombre de clients
-    if (this.currentUser?.role === 'SUPER_ADMIN' || this.currentUser?.role === 'ADMIN') {
-      const customersSub = this.userService.getUsersByRoles(['CLIENT', 'AFFILIATE']).subscribe({
-        next: (customers: any[]) => {
-          this.customersCount = customers.length;
-          this.cdr.detectChanges();  // ✅ Force la détection des changements
-        },
-        error: (error: any) => {
-          console.error('Erreur lors du chargement du nombre de clients:', error);
-          this.customersCount = 0;
-          this.cdr.detectChanges();
-        }
-      });
-      this.subscriptions.push(customersSub);
-    }
+    if (this.currentUser?.role === 'AFFILIATE') return;
 
+    // ✅ Utiliser l'API sécurisée pour le comptage des clients
+    const clientCountSub = this.dashboardService.getClientCount().subscribe({
+      next: (response) => {
+        this.customersCount = response.count;
+        console.log(`✅ Nombre de clients visibles chargé: ${this.customersCount} (rôle: ${response.role})`);
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('❌ Erreur lors du chargement du nombre de clients:', error);
+        this.customersCount = 0;
+        this.cdr.detectChanges();
+      }
+    });
+    this.subscriptions.push(clientCountSub);
+
+    // Charger les propriétés (à adapter si nécessaire)
     const propertiesSub = this.dashboardService.getDashboardSnapshot().subscribe({
       next: snapshot => {
         this.propertiesCount = snapshot.stats.totalProperties;
-        this.cdr.detectChanges();  // ✅ Force la détection des changements
+        this.cdr.detectChanges();
       },
       error: error => {
         console.error('Erreur lors du chargement du nombre de propriétés:', error);
@@ -96,11 +119,12 @@ export class AdminComponent implements OnInit, OnDestroy {
     });
     this.subscriptions.push(propertiesSub);
 
+    // Charger les agents (SUPER_ADMIN seulement)
     if (this.currentUser?.role === 'SUPER_ADMIN') {
       const agentsSub = this.userService.getUsersByRole('COMMERCIAL').subscribe({
         next: (agents: any[]) => {
           this.agentsCount = agents.length;
-          this.cdr.detectChanges();  // ✅ Force la détection des changements
+          this.cdr.detectChanges();
         },
         error: (error: any) => {
           console.error('Erreur lors du chargement du nombre d\'agents:', error);
@@ -150,10 +174,22 @@ export class AdminComponent implements OnInit, OnDestroy {
       { path: '/admin/properties/new', title: 'Nouveau bien' },
       { path: '/admin/properties/edit', title: 'Modifier un bien' },
       { path: '/admin/properties', title: 'Biens immobiliers' },
-      { path: '/admin/customers', title: 'Gestion des clients' }, // Changé
+      { path: '/admin/customers', title: 'Gestion des clients' },
       { path: '/admin/agents', title: 'Agents commerciaux' },
       { path: '/admin/statistics', title: 'Transactions & Ventes' },
-      { path: '/admin/settings', title: 'Paramètres' }
+      { path: '/admin/settings', title: 'Paramètres' },
+      { path: '/admin/share-requests', title: 'Demandes de partage' },
+      { path: '/admin/incoming-share-requests', title: 'Propositions reçues' },
+      // Affiliate routes
+      { path: '/admin/affiliate-applications', title: 'Candidatures Affiliés' },
+      { path: '/admin/affiliate-accounts', title: 'Comptes Affiliés' },
+      { path: '/admin/affiliate-ranking', title: 'Classement Mensuel' },
+      { path: '/admin/affiliate-commissions', title: 'Commissions & Paiements' },
+      { path: '/admin/affiliate-dashboard', title: 'Mon Tableau de Bord' },
+      { path: '/admin/affiliate-properties', title: 'Biens Disponibles' },
+      { path: '/admin/affiliate-offers', title: 'Mes Offres' },
+      { path: '/admin/affiliate-earnings', title: 'Mes Gains' },
+      { path: '/admin/affiliate-incoming-offers', title: 'Offres Affiliés Reçues' },
     ];
 
     const match = routes.find(route => {
@@ -252,6 +288,88 @@ export class AdminComponent implements OnInit, OnDestroy {
     }
     
     return 'badge-default';
+  }
+
+  toggleNotifPanel(): void {
+    this.notifPanelOpen = !this.notifPanelOpen;
+    if (this.notifPanelOpen) {
+      this.notificationService.getAll().subscribe({
+        next: notifs => {
+          this.recentNotifications = notifs.slice(0, 6);
+          this.cdr.detectChanges();
+        }
+      });
+    }
+  }
+
+  markAllNotificationsRead(): void {
+    this.notificationService.markAllRead().subscribe({
+      next: () => {
+        this.recentNotifications.forEach(n => n.read = true);
+        this.notificationService.refreshCount();
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  handleNotifClick(notif: NotificationDTO): void {
+    if (!notif.read) {
+      this.notificationService.markRead(notif.id).subscribe({
+        next: () => {
+          notif.read = true;
+          this.notificationService.refreshCount();
+          this.cdr.detectChanges();
+        }
+      });
+    }
+    this.notifPanelOpen = false;
+
+    const type = notif.type ?? '';
+    const role = this.currentUser?.role;
+
+    if (type.includes('SHARE_REQUEST')) {
+      this.router.navigate([role === 'ADMIN' ? '/admin/incoming-share-requests' : '/admin/share-requests']);
+    } else if (type === 'AFFILIATE_REGISTRATION' && role === 'SUPER_ADMIN') {
+      this.router.navigate(['/admin/affiliate-applications']);
+    } else if ((type === 'AFFILIATE_APPROVED' || type === 'AFFILIATE_REJECTED' || type === 'AFFILIATE_SUSPENDED') && role === 'AFFILIATE') {
+      this.router.navigate(['/admin/affiliate-dashboard']);
+    } else if (type === 'SALE_OFFER_RECEIVED' && (role === 'ADMIN' || role === 'SUPER_ADMIN')) {
+      this.router.navigate(['/admin/affiliate-incoming-offers']);
+    } else if ((type === 'SALE_OFFER_ACCEPTED' || type === 'SALE_OFFER_REJECTED' || type === 'SALE_OFFER_COMPLETED') && role === 'AFFILIATE') {
+      this.router.navigate(['/admin/affiliate-offers']);
+    } else if (type === 'MONTHLY_BONUS_AWARDED' && role === 'AFFILIATE') {
+      this.router.navigate(['/admin/affiliate-dashboard']);
+    }
+  }
+
+  getNotifIcon(type: string): string {
+    switch (type) {
+      case 'SHARE_REQUEST_RECEIVED':  return 'fa-share-nodes text-primary';
+      case 'SHARE_REQUEST_ACCEPTED':  return 'fa-check-circle text-success';
+      case 'SHARE_REQUEST_REJECTED':  return 'fa-times-circle text-danger';
+      case 'SHARE_REQUEST_CANCELLED': return 'fa-ban text-warning';
+      case 'AFFILIATE_REGISTRATION':  return 'fa-user-clock text-primary';
+      case 'AFFILIATE_APPROVED':      return 'fa-user-check text-success';
+      case 'AFFILIATE_REJECTED':      return 'fa-user-times text-danger';
+      case 'AFFILIATE_SUSPENDED':     return 'fa-user-slash text-warning';
+      case 'SALE_OFFER_RECEIVED':     return 'fa-file-contract text-primary';
+      case 'SALE_OFFER_ACCEPTED':     return 'fa-handshake text-success';
+      case 'SALE_OFFER_REJECTED':     return 'fa-times-circle text-danger';
+      case 'SALE_OFFER_COMPLETED':    return 'fa-flag-checkered text-success';
+      case 'MONTHLY_BONUS_AWARDED':   return 'fa-star text-warning';
+      default: return 'fa-bell text-secondary';
+    }
+  }
+
+  formatNotifDate(dateStr: string): string {
+    if (!dateStr) return '';
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'À l\'instant';
+    if (mins < 60) return `Il y a ${mins} min`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `Il y a ${hours} h`;
+    return `Il y a ${Math.floor(hours / 24)} j`;
   }
 
   ngOnDestroy(): void {

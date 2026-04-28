@@ -7,9 +7,17 @@ import {
   PropertiesAdminService,
   PropertyListItem,
 } from '../services/properties-admin.service';
+import { AdminAuthService } from '../services/admin-auth';
+import { ShareRequestService, AgencyAdminItem } from '../services/share-request.service';
 import { apiBaseUrl } from '../../services/api-config';
-import { getStatusesForCategory, isStatusAllowedForCategory, PropertyCategory, PropertyStatus, RENTAL_STATUSES, SALE_STATUSES } from '../../models/property.model';
-
+import {
+  getStatusesForCategory,
+  isStatusAllowedForCategory,
+  PropertyCategory,
+  PropertyStatus,
+  RENTAL_STATUSES,
+  SALE_STATUSES,
+} from '../../models/property.model';
 
 @Component({
   selector: 'app-properties-admin',
@@ -38,15 +46,29 @@ export class PropertiesAdmin implements OnInit {
   pageSize = 12;
   collectionSize = 0;
 
-  // Status options will be filtered based on category
   saleStatuses = SALE_STATUSES;
   rentalStatuses = RENTAL_STATUSES;
-  
-  // Cache for property categories - allow null values
+
   propertyCategories = new Map<number, PropertyCategory | null>();
+
+  // ─── Share modal ───────────────────────────────────────────────────────────
+  shareModalOpen = false;
+  shareTargetProperty: PropertyListItem | null = null;
+  availableAdmins: AgencyAdminItem[] = [];
+  selectedAdminIds = new Set<number>();
+  sharingLoading = false;
+  shareSuccessMessage = '';
+  // Commission fields for the new share-request workflow
+  commissionType: 'PERCENTAGE' | 'FIXED' = 'PERCENTAGE';
+  commissionValue: number = 0;
+  shareMessage: string = '';
+  shareError: string = '';
+  // ──────────────────────────────────────────────────────────────────────────
 
   constructor(
     private propertiesService: PropertiesAdminService,
+    private shareRequestService: ShareRequestService,
+    private authService: AdminAuthService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -54,14 +76,20 @@ export class PropertiesAdmin implements OnInit {
     this.loadProperties();
   }
 
+  get currentUserRole(): string {
+    return this.authService.getCurrentUser()?.role?.toUpperCase() ?? '';
+  }
+
+  get isSuperAdmin(): boolean {
+    return this.currentUserRole === 'SUPER_ADMIN';
+  }
+
   loadProperties(): void {
-    console.log('🟢 loadProperties - Début du chargement');
     this.loading = true;
     this.errorMessage = '';
 
     this.propertiesService.getAllProperties().subscribe({
       next: properties => {
-        console.log('✅ Propriétés reçues:', properties.length);
         this.properties = properties;
         this.loadCategoriesForProperties();
         this.applyFilters();
@@ -84,12 +112,9 @@ export class PropertiesAdmin implements OnInit {
   }
 
   getPropertyCategory(property: PropertyListItem): PropertyCategory | null {
-    // Use cached value if available
     if (this.propertyCategories.has(property.id)) {
       return this.propertyCategories.get(property.id) ?? null;
     }
-    
-    // Calculate category based on prices
     const category = this.calculateCategory(property);
     this.propertyCategories.set(property.id, category);
     return category;
@@ -98,12 +123,8 @@ export class PropertiesAdmin implements OnInit {
   calculateCategory(property: PropertyListItem): PropertyCategory | null {
     const hasSalePrice = property.prixVente && property.prixVente > 0;
     const hasRentalPrice = property.prixLocation && property.prixLocation > 0;
-    
-    if (hasSalePrice && !hasRentalPrice) {
-      return 'VENTE';
-    } else if (!hasSalePrice && hasRentalPrice) {
-      return 'LOCATION';
-    }
+    if (hasSalePrice && !hasRentalPrice) return 'VENTE';
+    if (!hasSalePrice && hasRentalPrice) return 'LOCATION';
     return null;
   }
 
@@ -121,6 +142,152 @@ export class PropertiesAdmin implements OnInit {
     const category = this.getPropertyCategory(property);
     return category === 'VENTE' ? 'Vente' : category === 'LOCATION' ? 'Location' : 'Inconnu';
   }
+
+  // ─── Ownership helpers ────────────────────────────────────────────────────
+
+  getOwnershipLabel(property: PropertyListItem): string {
+    if (property.ownerType === 'SUPER_ADMIN_OWNED') {
+      const sharedCount = property.sharedWithAgencyIds?.length ?? 0;
+      return sharedCount > 0 ? `Partagé (${sharedCount} agence${sharedCount > 1 ? 's' : ''})` : 'Super Admin';
+    }
+    if (property.ownerType === 'AGENCY_OWNED') {
+      return property.agencyAdminName ? `Agence: ${property.agencyAdminName}` : 'Agence';
+    }
+    return ''; // legacy
+  }
+
+  getOwnershipClass(property: PropertyListItem): string {
+    if (property.ownerType === 'SUPER_ADMIN_OWNED') {
+      return (property.sharedWithAgencyIds?.length ?? 0) > 0 ? 'badge-shared' : 'badge-super-admin';
+    }
+    if (property.ownerType === 'AGENCY_OWNED') return 'badge-agency';
+    return '';
+  }
+
+  canShare(property: PropertyListItem): boolean {
+    return this.isSuperAdmin && property.ownerType === 'SUPER_ADMIN_OWNED';
+  }
+
+  // ─── Share modal ──────────────────────────────────────────────────────────
+
+  openShareModal(property: PropertyListItem): void {
+    this.shareTargetProperty = property;
+    this.shareSuccessMessage = '';
+    this.shareError = '';
+    this.commissionType = 'PERCENTAGE';
+    this.commissionValue = 0;
+    this.shareMessage = '';
+    this.selectedAdminIds.clear();
+    this.sharingLoading = true;
+    this.shareModalOpen = true;
+    this.cdr.detectChanges();
+
+    this.shareRequestService.getAgenciesWithStatus(property.id).subscribe({
+      next: admins => {
+        this.availableAdmins = admins;
+        this.sharingLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.sharingLoading = false;
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  closeShareModal(): void {
+    this.shareModalOpen = false;
+    this.shareTargetProperty = null;
+    this.availableAdmins = [];
+    this.selectedAdminIds.clear();
+    this.shareSuccessMessage = '';
+    this.shareError = '';
+    this.cdr.detectChanges();
+  }
+
+  toggleAdmin(adminId: number): void {
+    // Cannot select agencies that already have a pending or accepted request
+    const admin = this.availableAdmins.find(a => a.id === adminId);
+    if (admin?.shareRequestStatus === 'PENDING' || admin?.alreadyShared) return;
+    if (this.selectedAdminIds.has(adminId)) {
+      this.selectedAdminIds.delete(adminId);
+    } else {
+      this.selectedAdminIds.add(adminId);
+    }
+  }
+
+  isAdminSelected(adminId: number): boolean {
+    return this.selectedAdminIds.has(adminId);
+  }
+
+  isAdminLocked(admin: AgencyAdminItem): boolean {
+    return admin.alreadyShared || admin.shareRequestStatus === 'PENDING';
+  }
+
+  getAdminStatusLabel(admin: AgencyAdminItem): string {
+    if (admin.alreadyShared) return 'Accepté';
+    switch (admin.shareRequestStatus) {
+      case 'PENDING':   return 'En attente';
+      case 'REJECTED':  return 'Refusé';
+      case 'CANCELLED': return 'Annulé';
+      default: return '';
+    }
+  }
+
+  getAdminStatusClass(admin: AgencyAdminItem): string {
+    if (admin.alreadyShared) return 'admin-status-accepted';
+    switch (admin.shareRequestStatus) {
+      case 'PENDING':   return 'admin-status-pending';
+      case 'REJECTED':  return 'admin-status-rejected';
+      case 'CANCELLED': return 'admin-status-cancelled';
+      default: return '';
+    }
+  }
+
+  get commissionPreview(): string {
+    if (!this.commissionValue) return 'Aucune commission';
+    if (this.commissionType === 'PERCENTAGE') return `${this.commissionValue}%`;
+    return `${this.commissionValue.toLocaleString('fr-FR')} TND`;
+  }
+
+  sendShareRequests(): void {
+    if (!this.shareTargetProperty) return;
+    if (this.selectedAdminIds.size === 0) {
+      this.shareError = 'Sélectionnez au moins une agence.';
+      this.cdr.detectChanges();
+      return;
+    }
+    if (this.commissionValue < 0) {
+      this.shareError = 'La commission ne peut pas être négative.';
+      this.cdr.detectChanges();
+      return;
+    }
+
+    this.sharingLoading = true;
+    this.shareError = '';
+
+    this.shareRequestService.createRequests(this.shareTargetProperty.id, {
+      agencyAdminIds: Array.from(this.selectedAdminIds),
+      commissionType: this.commissionType,
+      commissionPercentage: this.commissionValue,
+      message: this.shareMessage || undefined,
+    }).subscribe({
+      next: results => {
+        this.shareSuccessMessage = `${results.length} demande(s) envoyée(s). Les agences recevront une notification.`;
+        this.sharingLoading = false;
+        this.applyFilters();
+        this.cdr.detectChanges();
+        setTimeout(() => this.closeShareModal(), 2000);
+      },
+      error: err => {
+        this.shareError = err?.error?.message || 'Impossible d\'envoyer les demandes.';
+        this.sharingLoading = false;
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
+  // ─── Filters & pagination ─────────────────────────────────────────────────
 
   applyFilters(): void {
     const term = this.searchTerm.trim().toLowerCase();
@@ -144,23 +311,18 @@ export class PropertiesAdmin implements OnInit {
     if (this.typeFilter) {
       filtered = filtered.filter(item => item.type === this.typeFilter);
     }
-
     if (this.statusFilter) {
       filtered = filtered.filter(item => item.statut === this.statusFilter);
     }
-
     if (this.cityFilter) {
       filtered = filtered.filter(item => (item.city || '') === this.cityFilter);
     }
-
     if (this.categoryFilter) {
       filtered = filtered.filter(item => this.getCategory(item) === this.categoryFilter);
     }
-
     if (this.minPrice !== undefined && this.minPrice !== null) {
       filtered = filtered.filter(item => this.getPrice(item) >= this.minPrice!);
     }
-
     if (this.maxPrice !== undefined && this.maxPrice !== null) {
       filtered = filtered.filter(item => this.getPrice(item) <= this.maxPrice!);
     }
@@ -192,12 +354,8 @@ export class PropertiesAdmin implements OnInit {
   }
 
   getPrice(item: PropertyListItem): number {
-    if (item.prixVente && item.prixVente > 0) {
-      return item.prixVente;
-    }
-    if (item.prixLocation && item.prixLocation > 0) {
-      return item.prixLocation;
-    }
+    if (item.prixVente && item.prixVente > 0) return item.prixVente;
+    if (item.prixLocation && item.prixLocation > 0) return item.prixLocation;
     return 0;
   }
 
@@ -249,67 +407,46 @@ export class PropertiesAdmin implements OnInit {
 
   getStatusLabel(status: string): string {
     switch (status) {
-      case 'DISPONIBLE':
-        return 'Disponible';
-      case 'VENDU':
-        return 'Vendu';
-      case 'RESERVE':
-        return 'Réservé';
-      case 'LOUE':
-        return 'Loué';
-      case 'EN_ATTENTE':
-        return 'En attente';
-      default:
-        return status || 'Inconnu';
+      case 'DISPONIBLE': return 'Disponible';
+      case 'VENDU': return 'Vendu';
+      case 'RESERVE': return 'Réservé';
+      case 'LOUE': return 'Loué';
+      case 'EN_ATTENTE': return 'En attente';
+      default: return status || 'Inconnu';
     }
   }
 
   updateStatus(item: PropertyListItem, status: string): void {
     if (status === item.statut) return;
-    
-    // Validate status is allowed for this property's category
+
     const category = this.getPropertyCategory(item);
     if (!isStatusAllowedForCategory(status, category)) {
-      const errorMsg = category === 'VENTE' 
+      this.errorMessage = category === 'VENTE'
         ? 'Une propriété en vente ne peut pas avoir le statut "Loué"'
         : 'Une propriété en location ne peut pas avoir le statut "Vendu"';
-      this.errorMessage = errorMsg;
-      setTimeout(() => this.errorMessage = '', 3000);
+      setTimeout(() => (this.errorMessage = ''), 3000);
       this.cdr.detectChanges();
       return;
     }
-    
-    // Optimistic update
+
     const oldStatus = item.statut;
     item.statut = status;
     this.cdr.detectChanges();
-    
+
     this.propertiesService.updatePropertyStatus(item.id, status).subscribe({
-      next: (updatedProperty) => {
-        console.log('✅ Statut mis à jour avec succès');
-        // Update with the response from server
-        item.statut = updatedProperty.statut;
+      next: updated => {
+        item.statut = updated.statut;
         this.applyFilters();
         this.cdr.detectChanges();
       },
-      error: (error) => {
-        console.error('Failed to update status', error);
-        // Revert optimistic update
+      error: error => {
         item.statut = oldStatus;
-        
-        // Show appropriate error message
-        if (error.error?.error) {
-          this.errorMessage = error.error.error;
-        } else if (error.error?.message) {
-          this.errorMessage = error.error.message;
-        } else {
-          this.errorMessage = 'Impossible de modifier le statut. Vérifiez que le statut est compatible avec la catégorie.';
-        }
-        
+        this.errorMessage =
+          error.error?.error ||
+          error.error?.message ||
+          'Impossible de modifier le statut. Vérifiez que le statut est compatible avec la catégorie.';
         this.applyFilters();
         this.cdr.detectChanges();
-        
-        // Auto-clear error after 4 seconds
         setTimeout(() => {
           if (this.errorMessage) {
             this.errorMessage = '';
@@ -321,9 +458,7 @@ export class PropertiesAdmin implements OnInit {
   }
 
   deleteProperty(item: PropertyListItem): void {
-    if (!confirm(`Supprimer le bien ${item.titre} ?`)) {
-      return;
-    }
+    if (!confirm(`Supprimer le bien ${item.titre} ?`)) return;
 
     this.propertiesService.deleteProperty(item.id).subscribe({
       next: () => {
@@ -333,10 +468,8 @@ export class PropertiesAdmin implements OnInit {
         this.cdr.detectChanges();
       },
       error: error => {
-        console.error('Failed to delete property', error);
         this.errorMessage = error.error?.error || 'Impossible de supprimer le bien.';
         this.cdr.detectChanges();
-        
         setTimeout(() => {
           if (this.errorMessage) {
             this.errorMessage = '';
@@ -357,7 +490,9 @@ export class PropertiesAdmin implements OnInit {
 
   get availableCities(): string[] {
     return Array.from(
-      new Set(this.properties.map(item => item.city).filter(city => city && city.trim() !== '') as string[])
+      new Set(
+        this.properties.map(item => item.city).filter((city): city is string => !!city && city.trim() !== '')
+      )
     ).sort();
   }
 }

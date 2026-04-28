@@ -112,6 +112,10 @@
 								<i class="fas" [class.fa-tag]="getPropertyCategory(property) === 'VENTE'" [class.fa-key]="getPropertyCategory(property) === 'LOCATION'"></i>
 								{{ getCategoryLabel(property) }}
 							</span>
+							<span *ngIf="getOwnershipLabel(property)" class="tag-ownership" [ngClass]="getOwnershipClass(property)">
+								<i class="fas" [class.fa-shield-halved]="property.ownerType === 'SUPER_ADMIN_OWNED'" [class.fa-building]="property.ownerType === 'AGENCY_OWNED'"></i>
+								{{ getOwnershipLabel(property) }}
+							</span>
 						</div>
 					</div>
 					<p class="meta">{{ getLocation(property) }} · {{ property.surface || '—' }} m²</p>
@@ -142,6 +146,10 @@
 							<i class="fas fa-photo-film"></i>
 							Medias
 						</a>
+						<button *ngIf="canShare(property)" class="btn-outline btn-share" type="button" (click)="openShareModal(property)">
+							<i class="fas fa-share-nodes"></i>
+							Partager
+						</button>
 						<button class="btn-danger" type="button" (click)="deleteProperty(property)">
 							<i class="fas fa-trash"></i>
 							Supprimer
@@ -182,3 +190,144 @@
 		</div>
 	</section>
 </section>
+
+<!-- ── Share modal (Super Admin only) ── -->
+<div class="modal-backdrop" *ngIf="shareModalOpen" (click)="closeShareModal()"></div>
+<div class="share-modal" *ngIf="shareModalOpen">
+
+	<div class="share-modal-header">
+		<div>
+			<h3><i class="fas fa-share-nodes"></i> Envoyer une demande de partage</h3>
+			<p class="share-modal-sub">{{ shareTargetProperty?.titre }}</p>
+		</div>
+		<button class="share-close" type="button" (click)="closeShareModal()">
+			<i class="fas fa-times"></i>
+		</button>
+	</div>
+
+	<div class="share-modal-body">
+
+		<!-- Workflow hint -->
+		<p class="share-hint">
+			<i class="fas fa-info-circle"></i>
+			La demande sera envoyée à l'agence. Elle doit accepter avant que le bien apparaisse dans son tableau de bord.
+		</p>
+
+		<!-- Commission section -->
+		<div class="share-commission-block" *ngIf="!sharingLoading">
+			<p class="share-section-title"><i class="fas fa-hand-holding-dollar"></i> Commission pour ce partage</p>
+
+			<div class="share-commission-row">
+				<!-- Type toggle -->
+				<div class="commission-type-toggle">
+					<button type="button"
+						class="comm-type-btn"
+						[class.active]="commissionType === 'PERCENTAGE'"
+						(click)="commissionType = 'PERCENTAGE'">
+						<i class="fas fa-percent"></i> Pourcentage
+					</button>
+					<button type="button"
+						class="comm-type-btn"
+						[class.active]="commissionType === 'FIXED'"
+						(click)="commissionType = 'FIXED'">
+						<i class="fas fa-money-bill-wave"></i> Fixe (TND)
+					</button>
+				</div>
+
+				<!-- Value input -->
+				<div class="commission-input-wrap">
+					<input
+						type="number"
+						class="commission-input"
+						[placeholder]="commissionType === 'PERCENTAGE' ? 'Ex: 2.5' : 'Ex: 3000'"
+						[(ngModel)]="commissionValue"
+						min="0"
+						step="0.1" />
+					<span class="commission-unit">{{ commissionType === 'PERCENTAGE' ? '%' : 'TND' }}</span>
+				</div>
+			</div>
+
+			<!-- Preview -->
+			<p class="commission-preview-line">
+				<i class="fas fa-eye"></i>
+				Commission proposée : <strong>{{ commissionPreview }}</strong>
+			</p>
+
+			<!-- Optional message -->
+			<div class="share-message-block">
+				<label class="share-msg-label">Message à l'agence <span class="optional-tag">(optionnel)</span></label>
+				<textarea
+					class="share-msg-textarea"
+					rows="2"
+					placeholder="Ex: Ce bien est idéal pour votre zone. Commission négociable."
+					[(ngModel)]="shareMessage">
+				</textarea>
+			</div>
+		</div>
+
+		<!-- Loading agencies -->
+		<div *ngIf="sharingLoading" class="share-loading">
+			<div class="spinner"></div>
+			<span>Chargement des agences…</span>
+		</div>
+
+		<!-- No agencies -->
+		<div *ngIf="!sharingLoading && availableAdmins.length === 0" class="share-empty">
+			<i class="fas fa-building-circle-xmark"></i>
+			<span>Aucune agence disponible.</span>
+		</div>
+
+		<!-- Agency list -->
+		<div class="share-section-title" *ngIf="!sharingLoading && availableAdmins.length > 0">
+			<i class="fas fa-building"></i> Sélectionner les agences
+		</div>
+		<ul class="admin-list" *ngIf="!sharingLoading && availableAdmins.length > 0">
+			<li *ngFor="let admin of availableAdmins"
+				class="admin-item"
+				[class.selected]="isAdminSelected(admin.id)"
+				[class.locked]="isAdminLocked(admin)"
+				(click)="toggleAdmin(admin.id)">
+				<span class="admin-check">
+					<i class="fas"
+						[class.fa-square-check]="isAdminSelected(admin.id)"
+						[class.fa-lock]="isAdminLocked(admin) && !isAdminSelected(admin.id)"
+						[class.fa-square]="!isAdminSelected(admin.id) && !isAdminLocked(admin)">
+					</i>
+				</span>
+				<span class="admin-info">
+					<strong>{{ admin.fullName }}</strong>
+					<small>{{ admin.email }}</small>
+				</span>
+				<span *ngIf="getAdminStatusLabel(admin)"
+					class="admin-status-tag"
+					[ngClass]="getAdminStatusClass(admin)">
+					{{ getAdminStatusLabel(admin) }}
+				</span>
+			</li>
+		</ul>
+
+		<!-- Error -->
+		<div *ngIf="shareError" class="share-error">
+			<i class="fas fa-exclamation-circle"></i> {{ shareError }}
+		</div>
+
+		<!-- Success -->
+		<div *ngIf="shareSuccessMessage" class="share-success">
+			<i class="fas fa-check-circle"></i> {{ shareSuccessMessage }}
+		</div>
+	</div>
+
+	<div class="share-modal-footer">
+		<button class="ghost-btn" type="button" (click)="closeShareModal()">Annuler</button>
+		<button class="primary-btn" type="button"
+			[disabled]="sharingLoading || selectedAdminIds.size === 0"
+			(click)="sendShareRequests()">
+			<i class="fas"
+				[class.fa-paper-plane]="!sharingLoading"
+				[class.fa-spinner]="sharingLoading"
+				[class.fa-spin]="sharingLoading">
+			</i>
+			{{ sharingLoading ? 'Envoi…' : 'Envoyer la demande (' + selectedAdminIds.size + ')' }}
+		</button>
+	</div>
+</div>

@@ -2,11 +2,16 @@
 package com.immobilier.backend.service;
 
 import com.immobilier.backend.dto.*;
+import com.immobilier.backend.entity.AffiliateProfile;
+import com.immobilier.backend.entity.AffiliateRegion;
 import com.immobilier.backend.entity.ClientInfo;
 import com.immobilier.backend.entity.ClientNote;
 import com.immobilier.backend.entity.ClientSharedAgency;
 import com.immobilier.backend.entity.User;
+import com.immobilier.backend.enums.AffiliateStatus;
 import com.immobilier.backend.enums.RoleType;
+import com.immobilier.backend.repository.AffiliateProfileRepository;
+import com.immobilier.backend.repository.AffiliateRegionRepository;
 import com.immobilier.backend.repository.ClientInfoRepository;
 import com.immobilier.backend.repository.ClientNoteRepository;
 import com.immobilier.backend.repository.ClientSharedAgencyRepository;
@@ -39,6 +44,8 @@ public class ClientManagementService {
     private final ClientSharedAgencyRepository sharedAgencyRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserService userService;
+    private final AffiliateProfileRepository affiliateProfileRepository;
+    private final AffiliateRegionRepository affiliateRegionRepository;
 
     private static final List<RoleType> CLIENT_ROLES = Arrays.asList(RoleType.CLIENT, RoleType.AFFILIATE);
     // ========== CREATE ==========
@@ -90,8 +97,8 @@ public class ClientManagementService {
         Long agencyAdminId = null;
         
         if ("AGENCY_CLIENT".equals(visibilityType)) {
-            // Pour AGENCY_CLIENT
-            if (currentUser.getRole() == RoleType.SUPER_ADMIN && request.getTargetAgencyAdminId() != null) {
+            if (currentUser.getRole() == RoleType.SUPER_ADMIN) {
+                // SUPER_ADMIN: use explicitly chosen target, or null (visible to SUPER_ADMIN only)
                 agencyAdminId = request.getTargetAgencyAdminId();
             } else {
                 agencyAdminId = getAgencyAdminId(currentUser);
@@ -124,12 +131,38 @@ public class ClientManagementService {
         }
         
         ClientInfo savedInfo = clientInfoRepository.save(clientInfo);
-        
+
+        // Pour les affiliés créés par l'admin, créer AffiliateProfile (ACTIVE) + AffiliateRegion
+        if (role == RoleType.AFFILIATE) {
+            AffiliateProfile profile = new AffiliateProfile();
+            profile.setUser(savedUser);
+            profile.setStatus(AffiliateStatus.ACTIVE);
+            affiliateProfileRepository.save(profile);
+
+            String zone = request.getZoneRecherchee();
+            if (zone != null && !zone.isBlank()) {
+                String[] parts = zone.split(",", 2);
+                String country = parts[0].trim();
+                String city = parts.length > 1 ? parts[1].trim() : parts[0].trim();
+
+                AffiliateRegion region = new AffiliateRegion();
+                region.setAffiliate(savedUser);
+                region.setRegionName(city.toLowerCase());
+                region.setCountry(country);
+                region.setCity(city);
+                region.setRegionDescription(country);
+                region.setCommissionPercentage(request.getTauxCommission() != null ? request.getTauxCommission() : 5.0);
+                region.setIsActive(true);
+                affiliateRegionRepository.save(region);
+                log.info("AffiliateRegion créée: {} / {} pour l'affilié ID {}", country, city, savedUser.getId());
+            }
+        }
+
         // Pour PRIVATE_CLIENT, partager avec les agences sélectionnées
         if ("PRIVATE_CLIENT".equals(visibilityType) && request.getSharedAgencyIds() != null && !request.getSharedAgencyIds().isEmpty()) {
             sharePrivateClientWithAgencies(savedInfo, currentUser, request.getSharedAgencyIds());
         }
-        
+
         return convertToDTO(savedUser, savedInfo);
     }
 
@@ -157,6 +190,7 @@ public class ClientManagementService {
 
     // ========== READ ==========
     
+    @Transactional(readOnly = true)
     public Page<ClientDTO> getAllClients(Pageable pageable) {
         User currentUser = securityUtils.getCurrentUser();
         log.info("Récupération des clients pour: {} (rôle: {})", currentUser.getEmail(), currentUser.getRole());
@@ -265,6 +299,7 @@ public class ClientManagementService {
         return dto;
     }
 
+    @Transactional(readOnly = true)
     public Page<ClientDTO> searchClients(String keyword, Pageable pageable) {
         User currentUser = securityUtils.getCurrentUser();
         log.info("Recherche de clients avec mot-clé: {} par: {}", keyword, currentUser.getEmail());
@@ -287,16 +322,12 @@ public class ClientManagementService {
         
         User commercial = userRepository.findById(commercialId)
             .orElseThrow(() -> new IllegalArgumentException("Commercial non trouvé"));
-        
-        Long agencyAdminId = getAgencyAdminId(currentUser);
-        
-        // Adapter la requête en fonction du rôle
+
         Page<ClientInfo> clientInfos;
         if (currentUser.getRole() == RoleType.SUPER_ADMIN) {
-            // SUPER_ADMIN peut voir tous les clients de ce commercial
             clientInfos = clientInfoRepository.findByCommercial(CLIENT_ROLES, commercialId, pageable);
         } else {
-            // Sinon, seulement si le commercial est dans la même agence
+            Long agencyAdminId = getAgencyAdminId(currentUser);
             Long commercialAgencyId = getAgencyAdminId(commercial);
             if (!commercialAgencyId.equals(agencyAdminId)) {
                 return Page.empty();
@@ -433,10 +464,39 @@ private ClientInfo createEmptyClientInfo(User user) {
             if (request.getCodeAffiliation() != null) clientInfo.setCodeAffiliation(request.getCodeAffiliation());
             if (request.getTauxCommission() != null) clientInfo.setTauxCommission(request.getTauxCommission());
             if (request.getSource() != null) clientInfo.setSource(request.getSource());
+
+            // Country + city are the new affiliate-zone fields. When provided, they
+            // (a) rebuild the legacy zoneRecherchee string and
+            // (b) update (or create) the AffiliateRegion row that drives zone-based
+            // property visibility in AffiliateService.
+            String newCountry = request.getCountry();
+            String newCity = request.getCity();
+            boolean hasZoneUpdate = newCountry != null && !newCountry.isBlank()
+                                 && newCity    != null && !newCity.isBlank();
+            if (hasZoneUpdate) {
+                String trimmedCountry = newCountry.trim();
+                String trimmedCity = newCity.trim();
+                clientInfo.setZoneRecherchee(trimmedCountry + ", " + trimmedCity);
+
+                List<AffiliateRegion> existing = affiliateRegionRepository.findByAffiliateIdAndIsActiveTrue(user.getId());
+                AffiliateRegion region = existing.isEmpty() ? new AffiliateRegion() : existing.get(0);
+                if (region.getAffiliate() == null) region.setAffiliate(user);
+                region.setCountry(trimmedCountry);
+                region.setCity(trimmedCity);
+                region.setRegionName(trimmedCity.toLowerCase());
+                region.setRegionDescription(trimmedCountry);
+                if (region.getCommissionPercentage() == null) {
+                    region.setCommissionPercentage(
+                        clientInfo.getTauxCommission() != null ? clientInfo.getTauxCommission() : 5.0);
+                }
+                region.setIsActive(true);
+                affiliateRegionRepository.save(region);
+                log.info("AffiliateRegion mise à jour: {} / {} pour l'affilié ID {}", trimmedCountry, trimmedCity, user.getId());
+            }
         }
-        
+
         ClientInfo updatedInfo = clientInfoRepository.save(clientInfo);
-        
+
         return convertToDTO(updatedUser, updatedInfo);
     }
     

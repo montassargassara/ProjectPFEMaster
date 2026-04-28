@@ -37,6 +37,13 @@ public class PropertyListDTO {
     private String model3dUrl;
     private boolean hasModel3d;
     
+    // Ownership / multi-tenant fields
+    private String ownerType;
+    private Long agencyAdminId;
+    private String agencyAdminName;
+
+    private Boolean isAffiliateEligible;
+
     // ✅ Pour les listes, pas de médias (trop lourd)
     // private List<PropertyMediaDTO> medias;
 }

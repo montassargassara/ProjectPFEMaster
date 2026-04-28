@@ -1,0 +1,169 @@
+<div class="page-wrapper">
+  <!-- Welcome header -->
+  <div class="welcome-banner" *ngIf="profile">
+    <div class="welcome-left">
+      <div class="welcome-avatar">{{ profile.prenom.charAt(0).toUpperCase() }}</div>
+      <div>
+        <h2>Bonjour, {{ profile.prenom }} {{ profile.nom }}</h2>
+        <p>Bienvenue dans votre espace affilié</p>
+      </div>
+    </div>
+    <div class="welcome-right">
+      <span class="status-badge" [ngClass]="getStatusClass(profile.status)">
+        {{ formatStatus(profile.status) }}
+      </span>
+      <span class="bonus-badge" *ngIf="profile.hasBonusActive">
+        <i class="fas fa-star"></i> Bonus +{{ profile.bonusPercentage }}% actif
+      </span>
+    </div>
+  </div>
+
+  <div class="alert alert-danger" *ngIf="errorMessage">
+    <i class="fas fa-exclamation-circle"></i> {{ errorMessage }}
+  </div>
+
+  <div class="loading-state" *ngIf="loading">
+    <i class="fas fa-spinner fa-spin"></i><span>Chargement…</span>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid" *ngIf="!loading && stats">
+    <div class="kpi-card">
+      <div class="kpi-icon kpi-blue"><i class="fas fa-coins"></i></div>
+      <div class="kpi-value">{{ fmt(stats.totalRevenue) }}</div>
+      <p class="kpi-label">Revenus totaux</p>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon kpi-green"><i class="fas fa-handshake"></i></div>
+      <div class="kpi-value">{{ stats.totalOffersAccepted }}</div>
+      <p class="kpi-label">Offres acceptées</p>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon kpi-orange"><i class="fas fa-clock"></i></div>
+      <div class="kpi-value">{{ stats.totalOffersPending }}</div>
+      <p class="kpi-label">En attente</p>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon kpi-red"><i class="fas fa-times-circle"></i></div>
+      <div class="kpi-value">{{ stats.totalOffersRejected }}</div>
+      <p class="kpi-label">Offres rejetées</p>
+    </div>
+    <div class="kpi-card" *ngIf="stats.currentBonusPercentage">
+      <div class="kpi-icon kpi-purple"><i class="fas fa-star"></i></div>
+      <div class="kpi-value">+{{ stats.currentBonusPercentage }}%</div>
+      <p class="kpi-label">Bonus actif</p>
+    </div>
+    <div class="kpi-card" *ngIf="stats.rank">
+      <div class="kpi-icon kpi-orange"><i class="fas fa-trophy"></i></div>
+      <div class="kpi-value rank-medal" [ngClass]="'rank-' + stats.rank">{{ stats.rank }}</div>
+      <p class="kpi-label">Classement ce mois</p>
+    </div>
+  </div>
+
+  <div class="dashboard-grid" *ngIf="!loading">
+    <!-- Zones -->
+    <div class="table-card" *ngIf="profile?.regions?.length">
+      <div class="table-header">
+        <h3><i class="fas fa-map-marker-alt"></i> Mes zones & commissions</h3>
+      </div>
+      <div style="padding:1rem;">
+        <div class="regions-tags">
+          <span class="region-tag" *ngFor="let r of profile!.regions" style="font-size:0.875rem;padding:0.375rem 0.75rem;">
+            <i class="fas fa-map-pin"></i> {{ r.regionName }}
+            <span class="commission-tag">{{ r.commissionPercentage }}%</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent offers -->
+    <div class="table-card" *ngIf="recentOffers.length > 0">
+      <div class="table-header">
+        <h3><i class="fas fa-file-contract"></i> Dernières offres</h3>
+        <a routerLink="/admin/affiliate-offers" class="btn btn-ghost btn-sm">Voir tout</a>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Bien</th>
+            <th>Prix proposé</th>
+            <th>Statut</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let o of recentOffers">
+            <td style="font-size:0.8125rem;font-weight:500;">{{ o.propertyTitle }}</td>
+            <td style="font-size:0.8125rem;color:var(--primary);font-weight:600;">{{ fmt(o.offeredPrice) }}</td>
+            <td><span class="status-badge" [ngClass]="getStatusClass(o.status)">{{ formatStatus(o.status) }}</span></td>
+            <td style="font-size:0.775rem;color:var(--text-muted);">{{ formatDate(o.createdAt) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Suggested expansion zones -->
+  <div class="suggested-zones-section" *ngIf="!loading && suggestedZones.length > 0">
+    <h3 class="section-title"><i class="fas fa-compass"></i> Zones d'expansion suggérées</h3>
+    <p class="section-subtitle">Zones avec des opportunités basées sur l'inventaire disponible et la demande du marché</p>
+    <div class="suggested-zones-grid">
+      <div class="zone-card" *ngFor="let z of suggestedZones">
+        <div class="zone-card-header">
+          <div class="zone-name">
+            <i class="fas fa-map-marker-alt"></i>
+            <strong>{{ z.zoneName }}</strong>
+            <span class="zone-country" *ngIf="z.country">{{ z.country }}</span>
+          </div>
+          <span class="demand-badge" [ngClass]="demandClass(z.demandScore)">
+            {{ demandLabel(z.demandScore) }}
+          </span>
+        </div>
+        <div class="zone-stats">
+          <div class="zone-stat">
+            <span class="zone-stat-value">{{ z.propertyCount }}</span>
+            <span class="zone-stat-label">Biens dispo.</span>
+          </div>
+          <div class="zone-stat">
+            <span class="zone-stat-value">{{ z.averageCommission }}%</span>
+            <span class="zone-stat-label">Commission moy.</span>
+          </div>
+          <div class="zone-stat">
+            <span class="zone-stat-value">{{ z.demandScore }}</span>
+            <span class="zone-stat-label">Ventes actives</span>
+          </div>
+        </div>
+        <div class="zone-avg-price" *ngIf="z.averagePrice > 0">
+          Prix moyen : <strong>{{ z.averagePrice.toLocaleString('fr-FR') }} TND</strong>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="quick-actions" *ngIf="!loading">
+    <h3 class="section-title"><i class="fas fa-bolt"></i> Actions rapides</h3>
+    <div class="actions-grid">
+      <a routerLink="/admin/affiliate-properties" class="action-card">
+        <div class="action-icon kpi-blue"><i class="fas fa-home"></i></div>
+        <div class="action-label">Biens disponibles</div>
+        <div class="action-sub">Explorer les biens éligibles</div>
+      </a>
+      <a routerLink="/admin/affiliate-offers" class="action-card">
+        <div class="action-icon kpi-green"><i class="fas fa-file-signature"></i></div>
+        <div class="action-label">Soumettre une offre</div>
+        <div class="action-sub">Proposer un acheteur</div>
+      </a>
+      <a routerLink="/admin/affiliate-earnings" class="action-card">
+        <div class="action-icon kpi-purple"><i class="fas fa-coins"></i></div>
+        <div class="action-label">Mes gains</div>
+        <div class="action-sub">Historique des commissions</div>
+      </a>
+      <a routerLink="/admin/affiliate-ranking" class="action-card">
+        <div class="action-icon kpi-orange"><i class="fas fa-trophy"></i></div>
+        <div class="action-label">Classement</div>
+        <div class="action-sub">Voir le leaderboard mensuel</div>
+      </a>
+    </div>
+  </div>
+</div>

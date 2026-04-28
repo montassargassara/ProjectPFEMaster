@@ -20,6 +20,7 @@ import {
   AdminDashboardService,
   DashboardSnapshot,
   PropertyListItem,
+  RecentClient,
 } from '../services/admin-dashboard.service';
 
 @Component({
@@ -41,6 +42,9 @@ export class DashboardComponent implements OnInit {
   typesChartOptions: ChartOptions | null = null;
   statusChartOptions: ChartOptions | null = null;
 
+  recentClients: RecentClient[] = [];
+  recentAffiliates: RecentClient[] = [];
+
   constructor(private dashboardService: AdminDashboardService,
     private cdr: ChangeDetectorRef 
   ) {}
@@ -51,7 +55,6 @@ export class DashboardComponent implements OnInit {
   }
 
   ngAfterViewInit(): void {
-    // Force la détection de changement après l'affichage
     setTimeout(() => {
       if (!this.snapshot && !this.loading) {
         console.log('🔄 Rechargement forcé après view init');
@@ -66,13 +69,18 @@ export class DashboardComponent implements OnInit {
     this.loading = true;
     this.errorMessage = '';
 
+    // ✅ CHARGEMENT PARALLÈLE DES DONNÉES
+    // 1. Snapshot du dashboard (stats, propriétés)
+    // 2. Clients récents filtrés
+    
     this.dashboardService.getDashboardSnapshot().subscribe({
       next: snapshot => {
-        console.log('✅ Données reçues:', snapshot);
+        console.log('✅ Données snapshot reçues:', snapshot);
         this.snapshot = snapshot;
         this.buildCharts(snapshot);
-        this.loading = false;
-        this.cdr.detectChanges(); // ← Force l'update de l'UI
+        
+        // ✅ CHARGER LES CLIENTS RÉCENTS FILTRÉS
+        this.loadRecentClients();
       },
       error: error => {
         console.error('Dashboard error:', error);
@@ -83,6 +91,31 @@ export class DashboardComponent implements OnInit {
     });
   }
 
+    /**
+   * ✅ NOUVELLE MÉTHODE - Chargement des clients récents filtrés
+   * Utilise l'API backend filtrée au lieu de tous les clients
+   */
+  loadRecentClients(): void {
+    this.dashboardService.getRecentClients(6).subscribe({
+      next: (clients) => {
+        console.log(`✅ ${clients.length} clients récents chargés (filtrés)`);
+        
+        // Séparer les clients normaux des affiliés si nécessaire
+        this.recentClients = clients.filter(c => c.role !== 'AFFILIATE');
+        this.recentAffiliates = clients.filter(c => c.role === 'AFFILIATE');
+        
+        this.loading = false;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('❌ Erreur lors du chargement des clients récents:', error);
+        this.recentClients = [];
+        this.recentAffiliates = [];
+        this.loading = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
 
   toggleTheme(): void {
     this.isDarkTheme = !this.isDarkTheme;
@@ -148,19 +181,19 @@ export class DashboardComponent implements OnInit {
     return property.titre || 'Bien sans titre';
   }
 
-  formatDate(value?: string): string {
-    if (!value) {
+  formatDate(dateString?: string): string {
+    if (!dateString) return '—';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '—';
+      return new Intl.DateTimeFormat('fr-FR', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      }).format(date);
+    } catch {
       return '—';
     }
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return '—';
-    }
-    return new Intl.DateTimeFormat('fr-FR', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    }).format(date);
   }
 
   trackById(_: number, item: PropertyListItem): number {
@@ -284,6 +317,31 @@ export class DashboardComponent implements OnInit {
         return type || 'Autres';
     }
   }
+
+  // Ajoutez ces méthodes dans DashboardComponent
+
+getVisibilityLabel(visibilityType: string): string {
+  switch (visibilityType) {
+    case 'PRIVATE_CLIENT':
+      return 'Privé';
+    case 'AGENCY_CLIENT':
+      return 'Agence';
+    default:
+      return 'Client';
+  }
+}
+
+getVisibilityBadgeClass(visibilityType: string): string {
+  switch (visibilityType) {
+    case 'PRIVATE_CLIENT':
+      return 'badge-private';
+    case 'AGENCY_CLIENT':
+      return 'badge-agency';
+    default:
+      return 'pill-available';
+  }
+}
+
 }
 
 // Remplacez la définition de ChartOptions par celle-ci :

@@ -11,6 +11,9 @@ import { UserTreeNodeComponent } from './user-tree-node/user-tree-node';
 
 declare var bootstrap: any;
 
+// ✅ Rôles INTERNES uniquement (pas de CLIENTS)
+const INTERNAL_ROLES = ['SUPER_ADMIN', 'ADMIN', 'RESPONSABLE_COMMERCIAL', 'COMMERCIAL'];
+
 @Component({
   selector: 'app-agents-admin',
   standalone: true,
@@ -22,7 +25,7 @@ export class AgentsAdmin implements OnInit, OnDestroy, AfterViewInit {
   
   public Math = Math;
   
-  // Data - UNIQUEMENT LES AGENTS (utilisateurs)
+  // Data - UNIQUEMENT LES AGENTS (pas de clients)
   hierarchyTree: UserTree | null = null;
   users: User[] = [];
   filteredUsers: User[] = [];
@@ -62,7 +65,7 @@ export class AgentsAdmin implements OnInit, OnDestroy, AfterViewInit {
   userForm: FormGroup;
   editForm: FormGroup;
   
-  // Options
+  // Options - UNIQUEMENT LES RÔLES INTERNES
   creatableRoles: string[] = [];
   
   // Password visibility
@@ -77,25 +80,24 @@ export class AgentsAdmin implements OnInit, OnDestroy, AfterViewInit {
     private fb: FormBuilder,
     private cdr: ChangeDetectorRef
   ) {
-    // Create user form - UNIQUEMENT POUR LES AGENTS
-  this.userForm = this.fb.group({
-    email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required, Validators.minLength(6)]],
-    confirmPassword: ['', [Validators.required]],
-    nom: ['', [Validators.required]],
-    prenom: ['', [Validators.required]],
-    telephone: ['', [Validators.pattern(/^(?:(?:\+|00)216|0)?[2-9][0-9]{7}$/)]],  // ✅ Tunisien
-    role: ['', [Validators.required]]
-  }, { validators: this.passwordMatchValidator.bind(this) });
+    // Formulaire de création - UNIQUEMENT POUR LES AGENTS
+    this.userForm = this.fb.group({
+      email: ['', [Validators.required, Validators.email]],
+      password: ['', [Validators.required, Validators.minLength(6)]],
+      confirmPassword: ['', [Validators.required]],
+      nom: ['', [Validators.required]],
+      prenom: ['', [Validators.required]],
+      telephone: ['', [Validators.pattern(/^(?:(?:\+|00)216|0)?[2-9][0-9]{7}$/)]],
+      role: ['', [Validators.required]]
+    }, { validators: this.passwordMatchValidator.bind(this) });
     
-    // Edit form
-  // Pareil pour editForm
-  this.editForm = this.fb.group({
-    nom: ['', [Validators.required]],
-    prenom: ['', [Validators.required]],
-    telephone: ['', [Validators.pattern(/^(?:(?:\+|00)216|0)?[2-9][0-9]{7}$/)]],  // ✅ Tunisien
-    isActive: [true]
-  });
+    // Formulaire d'édition
+    this.editForm = this.fb.group({
+      nom: ['', [Validators.required]],
+      prenom: ['', [Validators.required]],
+      telephone: ['', [Validators.pattern(/^(?:(?:\+|00)216|0)?[2-9][0-9]{7}$/)]],
+      isActive: [true]
+    });
   }
   
   ngOnInit(): void {
@@ -124,15 +126,19 @@ export class AgentsAdmin implements OnInit, OnDestroy, AfterViewInit {
     }
   }
   
+  /**
+   * Charge la hiérarchie et FILTRE LES CLIENTS
+   */
   loadHierarchy(): void {
     this.loading = true;
     this.cdr.detectChanges();
     
     const sub = this.userService.getMyHierarchy().subscribe({
       next: (tree) => {
-        console.log('✅ Hiérarchie des agents chargée avec succès');
-        this.hierarchyTree = tree;
-        this.loadUsersFromTree(tree);
+        console.log('✅ Hiérarchie brute reçue');
+        // ✅ FILTRER L'ARBRE POUR EXCLURE LES CLIENTS
+        this.hierarchyTree = this.filterTreeInternalOnly(tree);
+        this.loadUsersFromTree(this.hierarchyTree);
         this.loading = false;
         this.cdr.detectChanges();
       },
@@ -148,32 +154,85 @@ export class AgentsAdmin implements OnInit, OnDestroy, AfterViewInit {
     this.subscriptions.push(sub);
   }
   
-  loadUsersFromTree(tree: UserTree): void {
-    this.users = [];
-    this.flattenTree(tree, this.users);
-    // Filtrer pour n'afficher que les agents (pas les clients)
-    this.users = this.users.filter(user => 
-      user.role !== 'CLIENT' && user.role !== 'AFFILIATE'
-    );
-    this.applyFilters();
-    this.cdr.detectChanges();
+  /**
+   * ✅ FILTRE RÉCURSIF - Supprime tous les nœuds ayant le rôle CLIENT ou AFFILIATE
+   */
+  private filterTreeInternalOnly(tree: UserTree): UserTree | null {
+    // Si le nœud courant est un client, on le supprime complètement
+    if (this.isClientRole(tree.user.role)) {
+      return null;
+    }
+    
+    // Créer un nouvel arbre avec l'utilisateur courant
+    const filteredTree: UserTree = {
+      ...tree,
+      children: []
+    };
+    
+    // Filtrer récursivement les enfants
+    if (tree.children && tree.children.length > 0) {
+      for (const child of tree.children) {
+        const filteredChild = this.filterTreeInternalOnly(child);
+        if (filteredChild !== null) {
+          filteredTree.children.push(filteredChild);
+        }
+      }
+    }
+    
+    return filteredTree;
   }
   
-  flattenTree(tree: UserTree, result: User[]): void {
-    result.push(tree.user);
+  /**
+   * ✅ Vérifie si un rôle est un rôle client (à exclure)
+   */
+  private isClientRole(role: string): boolean {
+    const upperRole = role?.toUpperCase() || '';
+    return upperRole === 'CLIENT' || upperRole === 'AFFILIATE';
+  }
+  
+  /**
+   * Charge les utilisateurs depuis l'arbre filtré
+   */
+  loadUsersFromTree(tree: UserTree | null): void {
+    this.users = [];
+    if (tree) {
+      this.flattenTreeFiltered(tree, this.users);
+    }
+    this.applyFilters();
+    this.cdr.detectChanges();
+    console.log(`✅ ${this.users.length} agents internes chargés (clients exclus)`);
+  }
+  
+  /**
+   * ✅ Aplatit l'arbre en excluant les clients
+   */
+  flattenTreeFiltered(tree: UserTree, result: User[]): void {
+    // Ajouter l'utilisateur seulement si ce n'est pas un client
+    if (!this.isClientRole(tree.user.role)) {
+      result.push(tree.user);
+    }
+    
     if (tree.children && tree.children.length > 0) {
-      tree.children.forEach(child => this.flattenTree(child, result));
+      tree.children.forEach(child => this.flattenTreeFiltered(child, result));
     }
   }
   
+  /**
+   * ✅ Charge les rôles créables - EXCLUT LES CLIENTS
+   */
   loadCreatableRoles(): void {
     const sub = this.userService.getCreatableRoles().subscribe({
       next: (roles) => {
-        // Filtrer pour ne garder que les rôles agents (pas CLIENT ou AFFILIATE)
+        // ✅ Filtrer pour ne garder que les rôles internes (pas CLIENT ou AFFILIATE)
         this.creatableRoles = roles.filter(role => 
           role !== 'CLIENT' && role !== 'AFFILIATE'
         );
         console.log('✅ Rôles agents créables:', this.creatableRoles);
+        
+        // Si le formulaire a un rôle par défaut, le définir
+        if (this.creatableRoles.length > 0 && !this.userForm.get('role')?.value) {
+          this.userForm.patchValue({ role: this.creatableRoles[0] });
+        }
         this.cdr.detectChanges();
       },
       error: (error) => {
@@ -352,63 +411,6 @@ export class AgentsAdmin implements OnInit, OnDestroy, AfterViewInit {
     this.subscriptions.push(sub);
   }
   
-  deactivateUser(user: User): void {
-    if (!confirm(`Voulez-vous vraiment ${user.isActive ? 'désactiver' : 'activer'} l'agent ${user.prenom} ${user.nom} ?`)) {
-      return;
-    }
-    
-    this.loading = true;
-    this.cdr.detectChanges();
-    
-    const sub = (user.isActive ? this.userService.deactivateUser(user.id) : this.userService.activateUser(user.id))
-      .subscribe({
-        next: (updatedUser) => {
-          this.successMessage = `Agent ${updatedUser.prenom} ${updatedUser.nom} ${updatedUser.isActive ? 'activé' : 'désactivé'} avec succès`;
-          this.loadHierarchy();
-          this.loading = false;
-          this.cdr.detectChanges();
-          this.hideMessageAfterDelay('success');
-        },
-        error: (error) => {
-          console.error('Erreur changement statut:', error);
-          this.errorMessage = error.error?.message || 'Erreur lors du changement de statut';
-          this.loading = false;
-          this.cdr.detectChanges();
-          this.hideMessageAfterDelay('error');
-        }
-      });
-    
-    this.subscriptions.push(sub);
-  }
-  
-  deleteUser(user: User): void {
-    if (!confirm(`Voulez-vous vraiment supprimer l'agent ${user.email} ? Cette action est irréversible.`)) {
-      return;
-    }
-    
-    this.loading = true;
-    this.cdr.detectChanges();
-    
-    const sub = this.userService.deleteUser(user.id).subscribe({
-      next: () => {
-        this.successMessage = `Agent ${user.email} supprimé avec succès`;
-        this.loadHierarchy();
-        this.loading = false;
-        this.cdr.detectChanges();
-        this.hideMessageAfterDelay('success');
-      },
-      error: (error) => {
-        console.error('Erreur suppression agent:', error);
-        this.errorMessage = error.error?.message || 'Erreur lors de la suppression';
-        this.loading = false;
-        this.cdr.detectChanges();
-        this.hideMessageAfterDelay('error');
-      }
-    });
-    
-    this.subscriptions.push(sub);
-  }
-  
   // Utility methods
   generatePassword(): void {
     this.generatedPassword = this.userService.generateRandomPassword();
@@ -481,17 +483,26 @@ export class AgentsAdmin implements OnInit, OnDestroy, AfterViewInit {
     return this.userService.getInitials(prenom, nom);
   }
   
+  /**
+   * ✅ STATISTIQUES - Uniquement sur les agents internes (pas de clients)
+   */
   getStats(): any {
-    if (!this.hierarchyTree) return {};
-    
     const stats: any = {
       totalUsers: 0,
       byRole: {}
     };
     
+    // Initialiser les compteurs pour chaque rôle interne
+    INTERNAL_ROLES.forEach(role => {
+      stats.byRole[role] = 0;
+    });
+    
     this.users.forEach(user => {
-      stats.totalUsers++;
-      stats.byRole[user.role] = (stats.byRole[user.role] || 0) + 1;
+      // Ne compter que les rôles internes
+      if (INTERNAL_ROLES.includes(user.role)) {
+        stats.totalUsers++;
+        stats.byRole[user.role] = (stats.byRole[user.role] || 0) + 1;
+      }
     });
     
     return stats;

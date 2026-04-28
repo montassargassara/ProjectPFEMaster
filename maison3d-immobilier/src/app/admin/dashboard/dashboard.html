@@ -196,39 +196,42 @@
 				</div>
 			</div>
 		</article>
-		<article class="panel" *ngIf="snapshot.isSuperAdmin">
-			<div class="panel-header">
-				<div>
-					<h4>Nouveaux clients</h4>
-					<p>Derniers comptes client</p>
-				</div>
+		<article class="panel">
+		<div class="panel-header">
+			<div>
+			<h4>Nouveaux clients</h4>
+			<p>Derniers clients visibles</p>
 			</div>
-			<div class="list" *ngIf="snapshot.recentClients.length; else emptyClients">
-				<div class="list-row" *ngFor="let client of snapshot.recentClients">
-					<div class="list-main">
-						<p class="title">{{ client.prenom }} {{ client.nom }}</p>
-						<p class="meta">{{ client.email }} · {{ formatDate(client.createdAt) }}</p>
-					</div>
-					<span class="pill pill-available">Client</span>
-				</div>
+		</div>
+		<div class="list" *ngIf="recentClients.length; else emptyClients">
+			<div class="list-row" *ngFor="let client of recentClients">
+			<div class="list-main">
+				<p class="title">{{ client.prenom }} {{ client.nom }}</p>
+				<p class="meta">{{ client.email }} · {{ formatDate(client.createdAt) }}</p>
 			</div>
+			<span class="pill" [ngClass]="getVisibilityBadgeClass(client.visibilityType)">
+				{{ getVisibilityLabel(client.visibilityType) }}
+			</span>
+			</div>
+		</div>
 		</article>
-		<article class="panel" *ngIf="snapshot.isSuperAdmin">
-			<div class="panel-header">
-				<div>
-					<h4>Demandes affilies</h4>
-					<p>Inscriptions recentes d'affilies</p>
-				</div>
+
+		<article class="panel" *ngIf="recentAffiliates.length">
+		<div class="panel-header">
+			<div>
+			<h4>Nouveaux affiliés</h4>
+			<p>Derniers affiliés visibles</p>
 			</div>
-			<div class="list" *ngIf="snapshot.recentAffiliates.length; else emptyAffiliates">
-				<div class="list-row" *ngFor="let affiliate of snapshot.recentAffiliates">
-					<div class="list-main">
-						<p class="title">{{ affiliate.prenom }} {{ affiliate.nom }}</p>
-						<p class="meta">{{ affiliate.email }} · {{ formatDate(affiliate.createdAt) }}</p>
-					</div>
-					<span class="pill pill-highlight">Affilie</span>
-				</div>
+		</div>
+		<div class="list">
+			<div class="list-row" *ngFor="let affiliate of recentAffiliates">
+			<div class="list-main">
+				<p class="title">{{ affiliate.prenom }} {{ affiliate.nom }}</p>
+				<p class="meta">{{ affiliate.email }} · {{ formatDate(affiliate.createdAt) }}</p>
 			</div>
+			<span class="pill pill-highlight">Affilié</span>
+			</div>
+		</div>
 		</article>
 		<article class="panel">
 			<div class="panel-header">
@@ -294,7 +297,7 @@
 		<div class="empty">Aucune vente recente.</div>
 	</ng-template>
 	<ng-template #emptyClients>
-		<div class="empty">Aucun client recent.</div>
+	<div class="empty">Aucun client récent visible.</div>
 	</ng-template>
 	<ng-template #emptyAffiliates>
 		<div class="empty">Aucun affilie recent.</div>

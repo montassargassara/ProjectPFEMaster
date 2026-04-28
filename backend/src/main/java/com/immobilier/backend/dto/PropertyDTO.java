@@ -27,6 +27,14 @@ public class PropertyDTO {
     // Commission fields
     private Double commissionPercentage;
     private String commissionType;
+
+    // Ownership / multi-tenant fields
+    private String ownerType;         // SUPER_ADMIN_OWNED | AGENCY_OWNED | null (legacy)
+    private Long agencyAdminId;
+    private String agencyAdminName;
+    private java.util.List<Long> sharedWithAgencyIds;
+
+    private Boolean isAffiliateEligible;
     
     // Image fields
     private String mainImageName;

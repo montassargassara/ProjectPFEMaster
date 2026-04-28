@@ -1,5 +1,6 @@
 package com.immobilier.backend.dto;
 
+import com.immobilier.backend.validation.PropertyStatusValidatable;
 import com.immobilier.backend.validation.ValidPropertyStatus;
 import jakarta.validation.constraints.*;
 import lombok.Data;
@@ -8,7 +9,7 @@ import java.util.List;
 
 @Data
 @ValidPropertyStatus
-public class CreatePropertyRequest {
+public class CreatePropertyRequest implements PropertyStatusValidatable {
     @NotBlank(message = "Le titre est obligatoire")
     private String titre;
     
@@ -17,9 +18,11 @@ public class CreatePropertyRequest {
     @NotBlank(message = "Le type est obligatoire")
     private String type;
     
-    @NotNull(message = "Le prix de vente ou le prix de location doit être spécifié")
+    // Either prixVente OR prixLocation must be set — enforced cross-field by
+    // PropertyService.validateCategoryAndPrices() and Property.@PrePersist.
+    // Do NOT add @NotNull here: LOCATION properties legitimately leave prixVente null.
     private Double prixVente;
-    
+
     private Double prixLocation;
     
     private String statut = "DISPONIBLE";
@@ -35,10 +38,17 @@ public class CreatePropertyRequest {
     private Double latitude;
     private Double longitude;
 
+    // Commission is optional — null/0 means no commission
     private Double commissionPercentage;
     private String commissionType = "PERCENTAGE";
     private Double basePriceForCommission;
-    
+
+    // SUPER_ADMIN only: directly assign a new property to a specific agency admin
+    private Long agencyAdminId;
+
+    // Whether active affiliates in matching zones can see and submit offers on this property
+    private Boolean isAffiliateEligible = false;
+
     private List<PropertyMediaDTO> medias;
     
     /**

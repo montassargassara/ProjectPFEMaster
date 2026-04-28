@@ -41,26 +41,39 @@ public class SecurityConfig {
                 // ✅ OPTIONS toujours permis
                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                 
-                // ✅ ROUTES PUBLIQUES
+                // ── Public routes ────────────────────────────────────────────────────
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/super-admin/init").permitAll()
                 .requestMatchers("/api/properties/public/**").permitAll()
                 .requestMatchers("/api/images/public/**").permitAll()
                 .requestMatchers("/api/videos/public/**").permitAll()
                 .requestMatchers("/api/models/public/**").permitAll()
-                .requestMatchers("/api/affiliate/register").permitAll()
+                // Affiliate public registration (creates PENDING account; login blocked until approved)
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/affiliate/register").permitAll()
 
-                // ✅ ROUTES PROTÉGÉES - CORRIGÉES
-                .requestMatchers("/api/properties/**").authenticated()
-                .requestMatchers("/api/properties/*/upload-image").authenticated()  // CHANGÉ: * au lieu de **
-                .requestMatchers("/api/properties/*/upload-model").authenticated()  // CHANGÉ: * au lieu de **
-                .requestMatchers("/api/properties/*/media").authenticated()         // CHANGÉ: * au lieu de **
-                .requestMatchers("/api/properties/media/**").authenticated()
-                
-                // ✅ SUPER ADMIN
+                // ── Super Admin only ─────────────────────────────────────────────────
                 .requestMatchers("/api/super-admin/**").hasRole("SUPER_ADMIN")
-                
-                // ✅ TOUT LE RESTE
+                .requestMatchers("/api/admin/affiliates/**").hasRole("SUPER_ADMIN")
+
+                // ── Affiliate routes ─────────────────────────────────────────────────
+                // Ranking is shared across all roles — must be listed BEFORE the wildcard AFFILIATE rule
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/api/affiliate/ranking").authenticated()
+                .requestMatchers("/api/affiliate/**").hasRole("AFFILIATE")
+
+                // ── Notifications (any authenticated user accesses their own notifications) ──
+                .requestMatchers("/api/notifications/**").authenticated()
+
+                // ── Sale offers (mixed roles — method-level @PreAuthorize handles per endpoint) ──
+                .requestMatchers("/api/sale-offers/**").authenticated()
+
+                // ── Property management ──────────────────────────────────────────────
+                .requestMatchers("/api/properties/**").authenticated()
+                .requestMatchers("/api/properties/*/upload-image").authenticated()
+                .requestMatchers("/api/properties/*/upload-model").authenticated()
+                .requestMatchers("/api/properties/*/media").authenticated()
+                .requestMatchers("/api/properties/media/**").authenticated()
+
+                // ── Everything else ──────────────────────────────────────────────────
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider())

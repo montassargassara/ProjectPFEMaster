@@ -18,20 +18,19 @@ export class AdminLoginComponent {
   isLoading = false;
   errorMessage = '';
   
-  private returnUrl = '/admin/dashboard';
+  private returnUrl = '';
 
   constructor(
     private authService: AdminAuthService,
     private router: Router,
     private route: ActivatedRoute
   ) {
-    // Vérifier si l'utilisateur est déjà connecté
     if (this.authService.isLoggedIn()) {
-      this.router.navigate(['/admin/dashboard']);
+      this.router.navigate([this.authService.getDefaultRoute()]);
     }
-    
+
     this.route.queryParams.subscribe(params => {
-      this.returnUrl = params['returnUrl'] || '/admin/dashboard';
+      this.returnUrl = params['returnUrl'] || '';
     });
     
     // Charger l'email sauvegardé
@@ -63,13 +62,14 @@ export class AdminLoginComponent {
     
     if (loginObservable && typeof loginObservable.subscribe === 'function') {
       loginObservable.subscribe({
-        next: (response: any) => { // Typage explicite
+        next: (response: any) => {
           if (this.rememberMe) {
             localStorage.setItem('adminRemember', JSON.stringify({ email: this.email }));
           } else {
             localStorage.removeItem('adminRemember');
           }
-          this.router.navigate([this.returnUrl]);
+          const destination = this.returnUrl || this.authService.getDefaultRoute();
+          this.router.navigate([destination]);
         },
         error: (error: any) => { // Typage explicite
           console.error('Login error:', error);

@@ -365,6 +365,11 @@ body, html {
             }
           }
           
+          .badge-pending {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
+          }
+
           .text-success {
             color: var(--success) !important;
           }
@@ -778,15 +783,11 @@ body, html {
           background: var(--card-bg);
           border-radius: var(--radius-lg);
           box-shadow: var(--shadow-lg);
-          display: none;
+          display: block;
+          animation: slideDown 0.3s ease;
           z-index: 1000;
           overflow: hidden;
           border: 1px solid var(--border-color);
-          
-          &.show {
-            display: block;
-            animation: slideDown 0.3s ease;
-          }
           
           .notification-header {
             padding: 16px 20px;
@@ -869,27 +870,47 @@ body, html {
             }
           }
           
+          .notification-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            padding: 28px 20px;
+            color: var(--text-muted);
+            font-size: 13px;
+            i { font-size: 22px; color: var(--success); }
+          }
+
+          .notification-header .mark-all-read {
+            background: none;
+            border: none;
+            font-size: 12px;
+            color: var(--primary);
+            font-weight: 600;
+            cursor: pointer;
+            padding: 0;
+            &:hover { text-decoration: underline; }
+          }
+
           .notification-footer {
             padding: 14px 20px;
             text-align: center;
             border-top: 1px solid var(--border-color);
-            
+
             a {
               color: var(--primary);
               text-decoration: none;
               font-size: 13px;
               font-weight: 600;
-              
+
               &:hover {
                 text-decoration: underline;
               }
             }
           }
         }
-        
-        &:hover .notification-menu {
-          display: block;
-        }
+
+        // panel visibility controlled by *ngIf in the template
       }
       
       // Search Box

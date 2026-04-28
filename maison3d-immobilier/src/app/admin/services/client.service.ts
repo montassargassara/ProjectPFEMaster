@@ -63,6 +63,9 @@ export interface UpdateClientRequest {
   zoneRecherchee?: string;
   commercialId?: number;
   isActive?: boolean;
+  // Affiliate-only — explicit country/city take precedence over zoneRecherchee
+  country?: string;
+  city?: string;
   codeAffiliation?: string;
   tauxCommission?: number;
   source?: string;
@@ -230,6 +233,15 @@ export class ClientService {
 
   generateAffiliateCode(): string {
     return 'AFF-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+  }
+
+  getPropertyCountries(): Observable<string[]> {
+    return this.http.get<string[]>(`${apiBaseUrl}/api/properties/public/countries`);
+  }
+
+  getPropertyCitiesByCountry(country: string): Observable<string[]> {
+    const params = new HttpParams().set('country', country);
+    return this.http.get<string[]>(`${apiBaseUrl}/api/properties/public/cities`, { params });
   }
 
   generateRandomPassword(length: number = 12): string {

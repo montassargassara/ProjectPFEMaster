@@ -20,7 +20,9 @@ import java.time.LocalDateTime;
     @Index(name = "idx_properties_price_location", columnList = "prix_location"),
     @Index(name = "idx_properties_commission", columnList = "commission_percentage"),
     @Index(name = "idx_properties_country", columnList = "country"),
-    @Index(name = "idx_properties_city", columnList = "city")
+    @Index(name = "idx_properties_city", columnList = "city"),
+    @Index(name = "idx_properties_owner_type", columnList = "owner_type"),
+    @Index(name = "idx_properties_agency_admin", columnList = "agency_admin_id")
 })
 @Data
 @NoArgsConstructor
@@ -87,6 +89,27 @@ public class Property {
     @Column(name = "base_price_for_commission")
     private Double basePriceForCommission;
 
+    // ─── Multi-tenant ownership ───────────────────────────────────────────────
+    // SUPER_ADMIN_OWNED: created by super admin, private until shared
+    // AGENCY_OWNED: created by an agency (admin/staff)
+    // NULL: legacy row, treated as visible to all authenticated users
+    @Column(name = "owner_type", length = 30)
+    private String ownerType;
+
+    // The ADMIN user who owns this property (null for SUPER_ADMIN_OWNED)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agency_admin_id")
+    private User agencyAdmin;
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // When true, active affiliates in the matching zone can see and submit offers on this property
+    @Column(name = "is_affiliate_eligible")
+    private Boolean isAffiliateEligible = false;
+
+    // Set to true when an affiliate sale offer is accepted — hides property from other affiliates
+    @Column(name = "is_reserved_by_affiliate")
+    private Boolean isReservedByAffiliate = false;
+
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
@@ -107,9 +130,11 @@ public class Property {
         if (category == null) {
             if (statut == null) statut = "DISPONIBLE";
             if (isActive == null) isActive = true;
+            if (isAffiliateEligible == null) isAffiliateEligible = false;
+            if (isReservedByAffiliate == null) isReservedByAffiliate = false;
             if (commissionType == null) commissionType = "PERCENTAGE";
             if (commissionPercentage == null) {
-                commissionPercentage = getDefaultCommissionByType(type);
+                commissionPercentage = 0.0;
             }
             return;
         }
@@ -150,6 +175,14 @@ public class Property {
             if (prixVente != null && prixVente > 0) {
                 prixVente = null;
             }
+            // Rental properties NEVER use the commission + affiliate workflow.
+            // Force-reset these fields so a leaked or stale value cannot expose
+            // the property to affiliates or imply a sale commission.
+            commissionPercentage = 0.0;
+            commissionType = "PERCENTAGE";
+            basePriceForCommission = null;
+            isAffiliateEligible = false;
+            isReservedByAffiliate = false;
         }
         
         // Set default status if null
@@ -158,6 +191,7 @@ public class Property {
         }
         
         if (isActive == null) isActive = true;
+        if (isAffiliateEligible == null) isAffiliateEligible = false;
         if (commissionType == null) commissionType = "PERCENTAGE";
         if (commissionPercentage == null) {
             commissionPercentage = getDefaultCommissionByType(type);

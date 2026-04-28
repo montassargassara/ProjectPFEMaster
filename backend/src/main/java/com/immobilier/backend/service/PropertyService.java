@@ -2,6 +2,7 @@ package com.immobilier.backend.service;
 
 import com.immobilier.backend.dto.*;
 import com.immobilier.backend.entity.*;
+import com.immobilier.backend.enums.RoleType;
 import com.immobilier.backend.repository.*;
 
 import jakarta.validation.Valid;
@@ -29,6 +30,9 @@ public class PropertyService {
     private final ImageService imageService;
     private final Model3DService model3DService;
     private final VideoService videoService;
+    private final UserRepository userRepository;
+    private final PropertySharedAgencyRepository sharedAgencyRepository;
+    private final PropertyVisibilityService visibilityService;
 
     // ========== CREATE ==========
     
@@ -85,12 +89,206 @@ public class PropertyService {
         }
         
         property.setIsActive(true);
-        
+        property.setIsAffiliateEligible(
+            request.getIsAffiliateEligible() != null && request.getIsAffiliateEligible());
+
         Property savedProperty = propertyRepository.save(property);
-        log.info("Propriété sauvegardée avec ID: {}, Catégorie: {}, Statut: {}", 
+        log.info("Propriété sauvegardée avec ID: {}, Catégorie: {}, Statut: {}",
                  savedProperty.getId(), category, savedProperty.getStatut());
-        
+
         return convertToFullDTO(savedProperty);
+    }
+
+    /**
+     * Create a property and assign ownership based on the calling user's role.
+     */
+    @Transactional
+    public PropertyDTO createPropertyForUser(@Valid CreatePropertyRequest request, User currentUser) {
+        log.info("Création propriété par {} (role={})", currentUser.getEmail(), currentUser.getRole());
+
+        validateCategoryAndPrices(request);
+
+        Property property = new Property();
+        mapRequestToProperty(request, property);
+
+        // Ownership assignment
+        property.setOwnerType(visibilityService.resolveOwnerType(currentUser));
+        User propertyOwner = visibilityService.resolvePropertyOwner(currentUser);
+
+        // SUPER_ADMIN may explicitly assign to an agency via agencyAdminId in request
+        if (currentUser.getRole() == RoleType.SUPER_ADMIN && request.getAgencyAdminId() != null) {
+            User assignedAdmin = userRepository.findById(request.getAgencyAdminId())
+                    .orElseThrow(() -> new RuntimeException("Agence introuvable: " + request.getAgencyAdminId()));
+            if (assignedAdmin.getRole() != RoleType.ADMIN) {
+                throw new IllegalArgumentException("L'ID spécifié ne correspond pas à un admin d'agence");
+            }
+            property.setOwnerType("AGENCY_OWNED");
+            property.setAgencyAdmin(assignedAdmin);
+        } else {
+            property.setAgencyAdmin(propertyOwner);
+        }
+
+        property.setIsActive(true);
+        property.setIsAffiliateEligible(
+            request.getIsAffiliateEligible() != null && request.getIsAffiliateEligible());
+        Property saved = propertyRepository.save(property);
+        log.info("Propriété {} créée avec ownerType={}", saved.getId(), saved.getOwnerType());
+        return convertToFullDTO(saved);
+    }
+
+    // ========== VISIBILITY-AWARE READ METHODS ==========
+
+    /**
+     * Returns the property list filtered by what the current user is allowed to see.
+     */
+    public List<PropertyListDTO> getAllPropertiesListForUser(User currentUser) {
+        List<Property> properties = visibilityService.getVisibleProperties(currentUser);
+        return properties.stream().map(this::convertToListDTO).collect(Collectors.toList());
+    }
+
+    /**
+     * Returns a single property after verifying the current user has access.
+     */
+    public PropertyDTO getPropertyByIdForUser(Long id, User currentUser) {
+        Property property = propertyRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Propriété non trouvée: " + id));
+
+        if (!visibilityService.canAccess(currentUser, property)) {
+            throw new RuntimeException("Accès refusé à la propriété " + id);
+        }
+        return convertToFullDTO(property);
+    }
+
+    /**
+     * Update a property after verifying the current user has access.
+     */
+    @Transactional
+    @CacheEvict(value = {"properties", "property"}, key = "#id")
+    public PropertyDTO updatePropertyForUser(Long id, @Valid UpdatePropertyRequest request, User currentUser) {
+        Property property = propertyRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Propriété non trouvée: " + id));
+
+        if (!visibilityService.canAccess(currentUser, property)) {
+            throw new RuntimeException("Accès refusé à la propriété " + id);
+        }
+        return updateProperty(id, request);
+    }
+
+    /**
+     * Soft-delete a property after verifying the current user has access.
+     */
+    @Transactional
+    @CacheEvict(value = {"properties", "property"}, key = "#id")
+    public void deletePropertyForUser(Long id, User currentUser) {
+        Property property = propertyRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Propriété non trouvée: " + id));
+
+        if (!visibilityService.canAccess(currentUser, property)) {
+            throw new RuntimeException("Accès refusé à la propriété " + id);
+        }
+        deleteProperty(id);
+    }
+
+    // ========== SHARING (SUPER_ADMIN ONLY) ==========
+
+    /**
+     * Replaces the shared-agency list for a SUPER_ADMIN_OWNED property.
+     * Passing an empty list removes all shares.
+     */
+    @Transactional
+    public PropertyDTO sharePropertyWithAgencies(Long propertyId, List<Long> agencyAdminIds, User currentUser) {
+        if (currentUser.getRole() != RoleType.SUPER_ADMIN) {
+            throw new RuntimeException("Seul le Super Admin peut partager une propriété");
+        }
+
+        Property property = propertyRepository.findById(propertyId)
+                .orElseThrow(() -> new RuntimeException("Propriété non trouvée: " + propertyId));
+
+        if (!"SUPER_ADMIN_OWNED".equals(property.getOwnerType())) {
+            throw new IllegalArgumentException(
+                    "Seules les propriétés Super Admin peuvent être partagées avec des agences");
+        }
+
+        // Remove all existing shares first, then add the new set
+        sharedAgencyRepository.deleteAllByPropertyId(propertyId);
+
+        if (agencyAdminIds != null) {
+            for (Long adminId : agencyAdminIds) {
+                User admin = userRepository.findById(adminId)
+                        .orElseThrow(() -> new RuntimeException("Admin introuvable: " + adminId));
+                if (admin.getRole() != RoleType.ADMIN) {
+                    throw new IllegalArgumentException("L'utilisateur " + adminId + " n'est pas un admin d'agence");
+                }
+                PropertySharedAgency share = new PropertySharedAgency();
+                share.setProperty(property);
+                share.setAgencyAdmin(admin);
+                share.setSharedBy(currentUser);
+                sharedAgencyRepository.save(share);
+            }
+        }
+
+        log.info("Propriété {} partagée avec {} agences", propertyId,
+                agencyAdminIds != null ? agencyAdminIds.size() : 0);
+        return convertToFullDTO(property);
+    }
+
+    /**
+     * Revokes sharing for a single agency admin on a property.
+     */
+    @Transactional
+    public void revokePropertySharing(Long propertyId, Long agencyAdminId, User currentUser) {
+        if (currentUser.getRole() != RoleType.SUPER_ADMIN) {
+            throw new RuntimeException("Seul le Super Admin peut retirer un partage");
+        }
+        sharedAgencyRepository.deleteByPropertyIdAndAgencyAdminId(propertyId, agencyAdminId);
+        log.info("Partage propriété {} / agence {} révoqué", propertyId, agencyAdminId);
+    }
+
+    /**
+     * Returns the list of agency admins this property is currently shared with,
+     * and all available admins with their sharing status — for the share UI.
+     */
+    public List<AgencyAdminDTO> getAgenciesForPropertySharing(Long propertyId) {
+        List<Long> sharedIds = sharedAgencyRepository.findAgencyAdminIdsByPropertyId(propertyId);
+        return userRepository.findByRoleAndIsActiveTrue(RoleType.ADMIN).stream()
+                .map(admin -> new AgencyAdminDTO(
+                        admin.getId(),
+                        admin.getFullName(),
+                        admin.getEmail(),
+                        sharedIds.contains(admin.getId())))
+                .collect(Collectors.toList());
+    }
+
+    // ========== HELPER: map request fields to entity ==========
+
+    private void mapRequestToProperty(CreatePropertyRequest request, Property property) {
+        String category = request.getCategory();
+        String initialStatus = request.getStatut() != null ? request.getStatut() : "DISPONIBLE";
+
+        if (!Property.isStatusAllowedForCategory(category, initialStatus)) {
+            throw new IllegalArgumentException(String.format(
+                    "Le statut '%s' n'est pas autorisé pour une propriété en %s. Statuts autorisés: %s",
+                    initialStatus, category.toLowerCase(), Property.getAllowedStatusesForCategory(category)));
+        }
+
+        property.setTitre(request.getTitre());
+        property.setDescription(request.getDescription());
+        property.setType(request.getType());
+        property.setPrixVente(request.getPrixVente());
+        property.setPrixLocation(request.getPrixLocation());
+        property.setStatut(initialStatus);
+        property.setSurface(request.getSurface());
+        property.setNbChambres(request.getNbChambres());
+        property.setAdresse(request.getAdresse());
+        property.setCountry(request.getCountry());
+        property.setCity(request.getCity());
+        property.setRegion(extractRegionFromAddress(request.getAdresse()));
+        property.setLatitude(request.getLatitude());
+        property.setLongitude(request.getLongitude());
+
+        if (request.getCommissionPercentage() != null) property.setCommissionPercentage(request.getCommissionPercentage());
+        if (request.getCommissionType() != null) property.setCommissionType(request.getCommissionType());
+        if (request.getBasePriceForCommission() != null) property.setBasePriceForCommission(request.getBasePriceForCommission());
     }
 
        private void validateCategoryAndPrices(CreatePropertyRequest request) {
@@ -497,6 +695,7 @@ public class PropertyService {
         if (request.getLatitude() != null) property.setLatitude(request.getLatitude());
         if (request.getLongitude() != null) property.setLongitude(request.getLongitude());
         if (request.getIsActive() != null) property.setIsActive(request.getIsActive());
+        if (request.getIsAffiliateEligible() != null) property.setIsAffiliateEligible(request.getIsAffiliateEligible());
 
         Property updatedProperty = propertyRepository.save(property);
         log.info("Propriété ID {} mise à jour - Catégorie: {}, Statut: {}", 
@@ -724,11 +923,19 @@ public class PropertyService {
         dto.setIsActive(property.getIsActive());
         dto.setCreatedAt(property.getCreatedAt());
         dto.setUpdatedAt(property.getUpdatedAt());
-        
+
+        // Ownership
+        dto.setOwnerType(property.getOwnerType());
+        dto.setIsAffiliateEligible(property.getIsAffiliateEligible());
+        if (property.getAgencyAdmin() != null) {
+            dto.setAgencyAdminId(property.getAgencyAdmin().getId());
+            dto.setAgencyAdminName(property.getAgencyAdmin().getFullName());
+        }
+
         if (property.getMainImageId() != null) {
             dto.setHasMainImage(true);
             dto.setMainImageUrl("/api/public/images/" + property.getMainImageId());
-            
+
             try {
                 ImageDTO imageInfo = imageService.getImageInfoById(property.getMainImageId());
                 dto.setMainImageName(imageInfo.getFileName());
@@ -740,11 +947,11 @@ public class PropertyService {
         } else {
             dto.setHasMainImage(false);
         }
-        
+
         if (property.getMainModel3dId() != null) {
             dto.setHasModel3d(true);
             dto.setModel3dUrl("/api/public/models/" + property.getMainModel3dId());
-            
+
             try {
                 Model3DDTO modelInfo = model3DService.getModel3DInfoById(property.getMainModel3dId());
                 dto.setModel3dName(modelInfo.getFileName());
@@ -756,7 +963,7 @@ public class PropertyService {
         } else {
             dto.setHasModel3d(false);
         }
-        
+
         return dto;
     }
 
@@ -785,11 +992,20 @@ public class PropertyService {
         dto.setUpdatedAt(property.getUpdatedAt());
         dto.setCommissionPercentage(property.getCommissionPercentage());
         dto.setCommissionType(property.getCommissionType());
-        
+
+        // Ownership
+        dto.setOwnerType(property.getOwnerType());
+        dto.setIsAffiliateEligible(property.getIsAffiliateEligible());
+        if (property.getAgencyAdmin() != null) {
+            dto.setAgencyAdminId(property.getAgencyAdmin().getId());
+            dto.setAgencyAdminName(property.getAgencyAdmin().getFullName());
+        }
+        dto.setSharedWithAgencyIds(sharedAgencyRepository.findAgencyAdminIdsByPropertyId(property.getId()));
+
         if (property.getMainImageId() != null) {
             dto.setHasMainImage(true);
             dto.setMainImageUrl("/api/public/images/" + property.getMainImageId());
-            
+
             try {
                 ImageDTO imageInfo = imageService.getImageInfoById(property.getMainImageId());
                 dto.setMainImageName(imageInfo.getFileName());
@@ -801,11 +1017,11 @@ public class PropertyService {
         } else {
             dto.setHasMainImage(false);
         }
-        
+
         if (property.getMainModel3dId() != null) {
             dto.setHasModel3d(true);
             dto.setModel3dUrl("/api/public/models/" + property.getMainModel3dId());
-            
+
             try {
                 Model3DDTO modelInfo = model3DService.getModel3DInfoById(property.getMainModel3dId());
                 dto.setModel3dName(modelInfo.getFileName());
@@ -817,7 +1033,7 @@ public class PropertyService {
         } else {
             dto.setHasModel3d(false);
         }
-        
+
         List<PropertyMediaDTO> allMedia = new ArrayList<>();
         
         List<ImageDTO> images = imageService.getImagesInfoByPropertyId(property.getId());

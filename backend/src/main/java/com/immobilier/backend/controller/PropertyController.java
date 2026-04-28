@@ -1,15 +1,17 @@
 package com.immobilier.backend.controller;
 
+import com.immobilier.backend.dto.*;
+import com.immobilier.backend.entity.User;
+import com.immobilier.backend.security.SecurityUtils;
+import com.immobilier.backend.service.PropertyService;
+import com.immobilier.backend.service.PropertyShareRequestService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import com.immobilier.backend.dto.*;
-import com.immobilier.backend.service.PropertyService;
-
-import jakarta.validation.Valid;
 
 import java.util.List;
 import java.util.Map;
@@ -22,69 +24,50 @@ import java.util.Map;
 public class PropertyController {
 
     private final PropertyService propertyService;
+    private final PropertyShareRequestService shareRequestService;
+    private final SecurityUtils securityUtils;
 
-    // ==================== LOCATION ENDPOINTS ====================
-    
+    // ==================== LOCATION / PUBLIC ENDPOINTS ====================
+
     @GetMapping("/public/countries")
     public ResponseEntity<List<String>> getAllCountries() {
-        log.info("📋 Récupération de tous les pays");
-        List<String> countries = propertyService.getAllCountries();
-        return ResponseEntity.ok(countries);
+        return ResponseEntity.ok(propertyService.getAllCountries());
     }
-    
+
     @GetMapping("/public/cities")
     public ResponseEntity<List<String>> getCitiesByCountry(@RequestParam String country) {
-        log.info("📋 Récupération des villes pour le pays: {}", country);
-        List<String> cities = propertyService.getCitiesByCountry(country);
-        return ResponseEntity.ok(cities);
+        return ResponseEntity.ok(propertyService.getCitiesByCountry(country));
     }
-    
+
     @GetMapping("/public/regions")
     public ResponseEntity<List<String>> getAllRegions() {
-        log.info("📋 Récupération de toutes les régions");
-        List<String> regions = propertyService.getAllRegions();
-        return ResponseEntity.ok(regions);
+        return ResponseEntity.ok(propertyService.getAllRegions());
     }
-    
+
     @GetMapping("/public/by-country")
-    public ResponseEntity<List<PropertyWithCommissionDTO>> getPropertiesByCountry(
-            @RequestParam String country) {
-        log.info("📋 Récupération des propriétés dans le pays: {}", country);
-        List<PropertyWithCommissionDTO> properties = propertyService.getPropertiesByCountry(country);
-        return ResponseEntity.ok(properties);
+    public ResponseEntity<List<PropertyWithCommissionDTO>> getPropertiesByCountry(@RequestParam String country) {
+        return ResponseEntity.ok(propertyService.getPropertiesByCountry(country));
     }
-    
+
     @GetMapping("/public/by-country-city")
     public ResponseEntity<List<PropertyWithCommissionDTO>> getPropertiesByCountryAndCity(
-            @RequestParam String country,
-            @RequestParam String city) {
-        log.info("📋 Récupération des propriétés dans {}/{}", country, city);
-        List<PropertyWithCommissionDTO> properties = propertyService.getPropertiesByCountryAndCity(country, city);
-        return ResponseEntity.ok(properties);
+            @RequestParam String country, @RequestParam String city) {
+        return ResponseEntity.ok(propertyService.getPropertiesByCountryAndCity(country, city));
     }
-    
+
     @GetMapping("/public/by-city")
-    public ResponseEntity<List<PropertyWithCommissionDTO>> getPropertiesByCity(
-            @RequestParam String city) {
-        log.info("📋 Récupération des propriétés dans la ville: {}", city);
-        List<PropertyWithCommissionDTO> properties = propertyService.getPropertiesByCity(city);
-        return ResponseEntity.ok(properties);
+    public ResponseEntity<List<PropertyWithCommissionDTO>> getPropertiesByCity(@RequestParam String city) {
+        return ResponseEntity.ok(propertyService.getPropertiesByCity(city));
     }
-    
+
     @GetMapping("/public/by-area")
-    public ResponseEntity<List<PropertyWithCommissionDTO>> getPropertiesByArea(
-            @RequestParam String area) {
-        log.info("📋 Récupération des propriétés dans la zone: {}", area);
-        List<PropertyWithCommissionDTO> properties = propertyService.getPropertiesByArea(area);
-        return ResponseEntity.ok(properties);
+    public ResponseEntity<List<PropertyWithCommissionDTO>> getPropertiesByArea(@RequestParam String area) {
+        return ResponseEntity.ok(propertyService.getPropertiesByArea(area));
     }
 
     @GetMapping("/public/by-regions")
-    public ResponseEntity<List<PropertyWithCommissionDTO>> getPropertiesByRegions(
-            @RequestParam List<String> regions) {
-        log.info("📋 Récupération des propriétés dans les régions: {}", regions);
-        List<PropertyWithCommissionDTO> properties = propertyService.getPropertiesByRegions(regions);
-        return ResponseEntity.ok(properties);
+    public ResponseEntity<List<PropertyWithCommissionDTO>> getPropertiesByRegions(@RequestParam List<String> regions) {
+        return ResponseEntity.ok(propertyService.getPropertiesByRegions(regions));
     }
 
     @GetMapping("/public/near-location")
@@ -92,21 +75,14 @@ public class PropertyController {
             @RequestParam Double lat,
             @RequestParam Double lng,
             @RequestParam(defaultValue = "10") Double radiusKm) {
-        log.info("📋 Récupération des propriétés près de ({}, {}) rayon {} km", lat, lng, radiusKm);
-        List<PropertyWithCommissionDTO> properties = 
-            propertyService.getPropertiesNearLocation(lat, lng, radiusKm);
-        return ResponseEntity.ok(properties);
+        return ResponseEntity.ok(propertyService.getPropertiesNearLocation(lat, lng, radiusKm));
     }
 
     @GetMapping("/public/by-commission")
     public ResponseEntity<List<PropertyWithCommissionDTO>> getPropertiesByCommission(
             @RequestParam(required = false) Double minCommission,
             @RequestParam(required = false) Double maxCommission) {
-        log.info("📋 Récupération des propriétés avec commission entre {}% et {}%", 
-                 minCommission, maxCommission);
-        List<PropertyWithCommissionDTO> properties = 
-            propertyService.getPropertiesByCommissionRange(minCommission, maxCommission);
-        return ResponseEntity.ok(properties);
+        return ResponseEntity.ok(propertyService.getPropertiesByCommissionRange(minCommission, maxCommission));
     }
 
     @GetMapping("/public/filter")
@@ -118,87 +94,249 @@ public class PropertyController {
             @RequestParam(required = false) Double maxPrice,
             @RequestParam(required = false) Double minCommission,
             @RequestParam(required = false) String propertyType) {
-        log.info("📋 Filtrage propriétés - Pays: {}, Ville: {}, Région: {}, Prix: {}-{}, Commission min: {}%, Type: {}", 
-                 country, city, region, minPrice, maxPrice, minCommission, propertyType);
-        
-        List<PropertyWithCommissionDTO> properties = propertyService.filterProperties(
-            country, city, region, minPrice, maxPrice, minCommission, propertyType);
-        return ResponseEntity.ok(properties);
+        return ResponseEntity.ok(propertyService.filterProperties(
+                country, city, region, minPrice, maxPrice, minCommission, propertyType));
     }
 
-    // ==================== PUBLIC ENDPOINTS ====================
-    
+    // Public listing (buyer-facing site – no visibility filter needed)
     @GetMapping("/public")
     public ResponseEntity<?> getAllPropertiesPublic() {
-        log.info("📋 Requête publique - Récupération de toutes les propriétés");
         try {
-            List<PropertyListDTO> properties = propertyService.getAllPropertiesList();
-            return ResponseEntity.ok(properties);
+            return ResponseEntity.ok(propertyService.getAllPropertiesList());
         } catch (Exception e) {
-            log.error("❌ Erreur: {}", e.getMessage());
+            log.error("Error: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "Erreur serveur: " + e.getMessage()));
+                    .body(Map.of("error", e.getMessage()));
         }
     }
 
     @GetMapping("/public/full")
     public ResponseEntity<List<PropertyDTO>> getAllPropertiesFullPublic() {
-        log.info("📋 Requête publique - Récupération de toutes les propriétés (version complète)");
         return ResponseEntity.ok(propertyService.getAllProperties());
     }
 
     @GetMapping("/public/active")
     public ResponseEntity<List<PropertyDTO>> getActivePropertiesPublic() {
-        log.info("📋 Requête publique - Récupération des propriétés actives");
         return ResponseEntity.ok(propertyService.getActiveProperties());
     }
 
     @GetMapping("/public/{id}")
     public ResponseEntity<?> getPropertyByIdPublic(@PathVariable Long id) {
-        log.info("📋 Requête publique - Récupération de la propriété ID: {}", id);
         try {
-            PropertyDTO property = propertyService.getPropertyById(id);
-            return ResponseEntity.ok(property);
+            return ResponseEntity.ok(propertyService.getPropertyById(id));
         } catch (Exception e) {
-            log.error("❌ Erreur: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "Erreur serveur: " + e.getMessage()));
-        }
-    }
-
-    @GetMapping("/public/{id}/light")
-    public ResponseEntity<?> getPropertyByIdLightPublic(@PathVariable Long id) {
-        log.info("📋 Requête publique - Récupération LIGHT de la propriété ID: {}", id);
-        try {
-            PropertyListDTO property = propertyService.getPropertyByIdLight(id);
-            return ResponseEntity.ok(property);
-        } catch (Exception e) {
-            log.error("❌ Erreur: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("error", "Propriété non trouvée"));
         }
     }
 
-    // ==================== PROTECTED ENDPOINTS ====================
-    
+    @GetMapping("/public/{id}/light")
+    public ResponseEntity<?> getPropertyByIdLightPublic(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(propertyService.getPropertyByIdLight(id));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "Propriété non trouvée"));
+        }
+    }
+
+    @GetMapping("/categories/{category}/allowed-statuses")
+    public ResponseEntity<List<String>> getAllowedStatusesForCategory(@PathVariable String category) {
+        return ResponseEntity.ok(propertyService.getAllowedStatusesForCategory(category));
+    }
+
+    @GetMapping("/{id}/category")
+    public ResponseEntity<Map<String, String>> getPropertyCategory(@PathVariable Long id) {
+        String category = propertyService.getPropertyCategory(id);
+        return ResponseEntity.ok(Map.of("category", category != null ? category : "INCONNU"));
+    }
+
+    // ==================== AFFILIATE ====================
+
     @GetMapping("/affiliate/{affiliateId}")
     @PreAuthorize("hasRole('AFFILIATE')")
     public ResponseEntity<List<PropertyWithCommissionDTO>> getPropertiesForAffiliate(
             @PathVariable Long affiliateId) {
-        log.info("🔒 Récupération des propriétés pour l'affilié ID: {}", affiliateId);
-        List<PropertyWithCommissionDTO> properties = 
-            propertyService.getPropertiesForAffiliate(affiliateId);
-        return ResponseEntity.ok(properties);
+        return ResponseEntity.ok(propertyService.getPropertiesForAffiliate(affiliateId));
+    }
+
+    // ==================== PROTECTED – ADMIN PANEL ====================
+    // All list endpoints now filter by what the current user is allowed to see.
+
+    @GetMapping
+    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<List<PropertyDTO>> getAllProperties() {
+        User currentUser = securityUtils.getCurrentUser();
+        return ResponseEntity.ok(propertyService.getAllPropertiesListForUser(currentUser)
+                .stream()
+                .map(dto -> {
+                    // lightweight: reuse the list DTO cast-equivalent — return full DTOs
+                    PropertyDTO full = new PropertyDTO();
+                    full.setId(dto.getId());
+                    full.setTitre(dto.getTitre());
+                    full.setDescription(dto.getDescription());
+                    full.setType(dto.getType());
+                    full.setPrixVente(dto.getPrixVente());
+                    full.setPrixLocation(dto.getPrixLocation());
+                    full.setStatut(dto.getStatut());
+                    full.setSurface(dto.getSurface());
+                    full.setNbChambres(dto.getNbChambres());
+                    full.setAdresse(dto.getAdresse());
+                    full.setCountry(dto.getCountry());
+                    full.setCity(dto.getCity());
+                    full.setLatitude(dto.getLatitude());
+                    full.setLongitude(dto.getLongitude());
+                    full.setIsActive(dto.getIsActive());
+                    full.setCreatedAt(dto.getCreatedAt());
+                    full.setUpdatedAt(dto.getUpdatedAt());
+                    full.setOwnerType(dto.getOwnerType());
+                    full.setAgencyAdminId(dto.getAgencyAdminId());
+                    full.setAgencyAdminName(dto.getAgencyAdminName());
+                    full.setHasMainImage(dto.isHasMainImage());
+                    full.setMainImageUrl(dto.getMainImageUrl());
+                    full.setHasModel3d(dto.isHasModel3d());
+                    full.setModel3dUrl(dto.getModel3dUrl());
+                    return full;
+                })
+                .collect(java.util.stream.Collectors.toList()));
+    }
+
+    @GetMapping("/list")
+    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<List<PropertyListDTO>> getAllPropertiesList() {
+        User currentUser = securityUtils.getCurrentUser();
+        return ResponseEntity.ok(propertyService.getAllPropertiesListForUser(currentUser));
+    }
+
+    @GetMapping("/active")
+    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<List<PropertyListDTO>> getActiveProperties() {
+        User currentUser = securityUtils.getCurrentUser();
+        return ResponseEntity.ok(propertyService.getAllPropertiesListForUser(currentUser));
+    }
+
+    @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('CLIENT', 'COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<?> getPropertyById(@PathVariable Long id) {
+        try {
+            User currentUser = securityUtils.getCurrentUser();
+            return ResponseEntity.ok(propertyService.getPropertyByIdForUser(id, currentUser));
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("Accès refusé")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", msg));
+        }
+    }
+
+    @GetMapping("/recent-light")
+    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<List<PropertyListDTO>> getRecentPropertiesLight(
+            @RequestParam(defaultValue = "5") int limit) {
+        User currentUser = securityUtils.getCurrentUser();
+        // Filter recent from the visible set
+        List<PropertyListDTO> all = propertyService.getAllPropertiesListForUser(currentUser);
+        List<PropertyListDTO> recent = all.stream()
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
+                .limit(limit)
+                .collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(recent);
+    }
+
+    @PostMapping
+    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<?> createProperty(@RequestBody @Valid CreatePropertyRequest request) {
+        try {
+            User currentUser = securityUtils.getCurrentUser();
+            PropertyDTO created = propertyService.createPropertyForUser(request, currentUser);
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<?> updateProperty(@PathVariable Long id,
+                                            @RequestBody UpdatePropertyRequest request) {
+        try {
+            User currentUser = securityUtils.getCurrentUser();
+            return ResponseEntity.ok(propertyService.updatePropertyForUser(id, request, currentUser));
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("Accès refusé")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
+    @PutMapping("/{id}/validate")
+    @PreAuthorize("hasAnyRole('RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<?> validateProperty(@PathVariable Long id) {
+        try {
+            User currentUser = securityUtils.getCurrentUser();
+            propertyService.getPropertyByIdForUser(id, currentUser); // access check
+            return ResponseEntity.ok(propertyService.validateProperty(id));
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("Accès refusé")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<?> deleteProperty(@PathVariable Long id) {
+        try {
+            User currentUser = securityUtils.getCurrentUser();
+            propertyService.deletePropertyForUser(id, currentUser);
+            return ResponseEntity.ok("Propriété désactivée avec succès");
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("Accès refusé")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<?> updatePropertyStatus(@PathVariable Long id,
+                                                  @Valid @RequestBody UpdateStatusRequest request) {
+        try {
+            User currentUser = securityUtils.getCurrentUser();
+            propertyService.getPropertyByIdForUser(id, currentUser); // access check
+            PropertyDTO updated = propertyService.updatePropertyStatus(id, request.getStatut());
+            return ResponseEntity.ok(updated);
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("Accès refusé")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
     }
 
     @PutMapping("/{id}/commission")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN', 'RESPONSABLE_COMMERCIAL')")
-    public ResponseEntity<PropertyDTO> updatePropertyCommission(
-            @PathVariable Long id,
-            @RequestBody UpdateCommissionRequest request) {
-        log.info("🔒 Mise à jour de la commission pour la propriété ID: {}", id);
-        PropertyDTO updatedProperty = propertyService.updatePropertyCommission(id, request);
-        return ResponseEntity.ok(updatedProperty);
+    public ResponseEntity<?> updatePropertyCommission(@PathVariable Long id,
+                                                      @RequestBody UpdateCommissionRequest request) {
+        try {
+            User currentUser = securityUtils.getCurrentUser();
+            propertyService.getPropertyByIdForUser(id, currentUser); // access check
+            return ResponseEntity.ok(propertyService.updatePropertyCommission(id, request));
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("Accès refusé")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
     }
 
     @PutMapping("/region/{region}/commission")
@@ -206,113 +344,40 @@ public class PropertyController {
     public ResponseEntity<Map<String, Object>> updateCommissionByRegion(
             @PathVariable String region,
             @RequestParam Double commissionPercentage) {
-        log.info("🔒 Mise à jour de la commission pour la région {} à {}%", region, commissionPercentage);
         int updatedCount = propertyService.updateCommissionByRegion(region, commissionPercentage);
         return ResponseEntity.ok(Map.of(
-            "message", updatedCount + " propriétés mises à jour",
-            "updatedCount", updatedCount,
-            "region", region,
-            "newCommission", commissionPercentage
-        ));
+                "message", updatedCount + " propriétés mises à jour",
+                "updatedCount", updatedCount,
+                "region", region,
+                "newCommission", commissionPercentage));
     }
 
-    @GetMapping
-    @PreAuthorize("hasAnyRole('CLIENT', 'COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<List<PropertyDTO>> getAllProperties() {
-        log.info("🔒 Requête protégée - Récupération de toutes les propriétés");
-        return ResponseEntity.ok(propertyService.getAllProperties());
+    // ==================== SHARING (SUPER_ADMIN ONLY) ====================
+
+    /**
+     * GET /api/properties/{id}/sharing
+     * Returns all agency admins with their share-request status for this property.
+     * Uses the new workflow — shows PENDING/ACCEPTED/REJECTED instead of a boolean.
+     */
+    @GetMapping("/{id}/sharing")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<List<AgencyAdminDTO>> getSharingInfo(@PathVariable Long id) {
+        return ResponseEntity.ok(shareRequestService.getAgenciesWithShareStatus(id));
     }
 
-    @GetMapping("/list")
-    @PreAuthorize("hasAnyRole('CLIENT', 'COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<List<PropertyListDTO>> getAllPropertiesList() {
-        log.info("🔒 Requête protégée - Récupération de toutes les propriétés (liste)");
-        return ResponseEntity.ok(propertyService.getAllPropertiesList());
-    }
-
-    @GetMapping("/active")
-    @PreAuthorize("hasAnyRole('CLIENT', 'COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<List<PropertyDTO>> getActiveProperties() {
-        log.info("🔒 Requête protégée - Récupération des propriétés actives");
-        return ResponseEntity.ok(propertyService.getActiveProperties());
-    }
-
-    @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('CLIENT', 'COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<PropertyDTO> getPropertyById(@PathVariable Long id) {
-        log.info("🔒 Requête protégée - Récupération de la propriété ID: {}", id);
-        return ResponseEntity.ok(propertyService.getPropertyById(id));
-    }
-
-    @GetMapping("/recent-light")
-    @PreAuthorize("hasAnyRole('CLIENT', 'COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<List<PropertyListDTO>> getRecentPropertiesLight(
-            @RequestParam(defaultValue = "5") int limit) {
-        log.info("🔒 Récupération LIGHT des {} propriétés les plus récentes", limit);
-        long start = System.currentTimeMillis();
-        List<PropertyListDTO> properties = propertyService.getRecentPropertiesLight(limit);
-        long duration = System.currentTimeMillis() - start;
-        log.info("✅ {} propriétés récentes LIGHT récupérées en {} ms", properties.size(), duration);
-        return ResponseEntity.ok(properties);
-    }
-
-    @PostMapping
-    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<PropertyDTO> createProperty(@RequestBody CreatePropertyRequest request) {
-        log.info("➕ Création de propriété par utilisateur authentifié");
-        PropertyDTO createdProperty = propertyService.createProperty(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(createdProperty);
-    }
-
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<PropertyDTO> updateProperty(
-            @PathVariable Long id,
-            @RequestBody UpdatePropertyRequest request) {
-        log.info("✏️ Mise à jour de propriété ID: {} par utilisateur authentifié", id);
-        return ResponseEntity.ok(propertyService.updateProperty(id, request));
-    }
-
-    @PutMapping("/{id}/validate")
-    @PreAuthorize("hasAnyRole('RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<PropertyDTO> validateProperty(@PathVariable Long id) {
-        log.info("✅ Validation de propriété ID: {} par utilisateur authentifié", id);
-        return ResponseEntity.ok(propertyService.validateProperty(id));
-    }
-
-    @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<String> deleteProperty(@PathVariable Long id) {
-        log.info("🗑️ Suppression de propriété ID: {} par utilisateur authentifié", id);
-        propertyService.deleteProperty(id);
-        return ResponseEntity.ok("Propriété désactivée avec succès");
-    }
-
-        @GetMapping("/categories/{category}/allowed-statuses")
-    public ResponseEntity<List<String>> getAllowedStatusesForCategory(
-            @PathVariable String category) {
-        log.info("📋 Récupération des statuts autorisés pour la catégorie: {}", category);
-        List<String> statuses = propertyService.getAllowedStatusesForCategory(category);
-        return ResponseEntity.ok(statuses);
-    }
-
-        @GetMapping("/{id}/category")
-    public ResponseEntity<Map<String, String>> getPropertyCategory(@PathVariable Long id) {
-        log.info("📋 Récupération de la catégorie de la propriété ID: {}", id);
-        String category = propertyService.getPropertyCategory(id);
-        return ResponseEntity.ok(Map.of("category", category != null ? category : "INCONNU"));
-    }
-    
-    @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
-    public ResponseEntity<?> updatePropertyStatus(
-            @PathVariable Long id,
-            @Valid @RequestBody UpdateStatusRequest request) {
-        log.info("🔒 Mise à jour du statut de la propriété ID: {} vers {}", id, request.getStatut());
+    /**
+     * DELETE /api/properties/{id}/sharing/{adminId}
+     * Revokes an accepted share (removes PropertySharedAgency) and cancels any pending request.
+     */
+    @DeleteMapping("/{id}/sharing/{adminId}")
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    public ResponseEntity<?> revokeSharing(@PathVariable Long id,
+                                           @PathVariable Long adminId) {
         try {
-            PropertyDTO updatedProperty = propertyService.updatePropertyStatus(id, request.getStatut());
-            return ResponseEntity.ok(updatedProperty);
-        } catch (IllegalArgumentException e) {
+            User currentUser = securityUtils.getCurrentUser();
+            propertyService.revokePropertySharing(id, adminId, currentUser);
+            return ResponseEntity.ok(Map.of("message", "Partage révoqué"));
+        } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }

@@ -8,83 +8,176 @@
         <span *ngIf="!isSidebarCollapsed">Admin Immobilier</span>
       </div>
       <button class="sidebar-toggle" (click)="toggleSidebar()">
-        <i class="fas" [class.fa-chevron-left]="!isSidebarCollapsed" 
+        <i class="fas" [class.fa-chevron-left]="!isSidebarCollapsed"
                       [class.fa-chevron-right]="isSidebarCollapsed"></i>
       </button>
     </div>
 
     <nav class="sidebar-menu">
       <ul>
-        <li routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
-          <a routerLink="/admin/dashboard">
-            <i class="fas fa-tachometer-alt"></i>
-            <span *ngIf="!isSidebarCollapsed">Tableau de bord</span>
-          </a>
-        </li>
-        
-        <li routerLinkActive="active">
-          <a routerLink="/admin/properties">
-            <i class="fas fa-home"></i>
-            <span *ngIf="!isSidebarCollapsed">Biens immobiliers</span>
-            <span class="badge" *ngIf="!isSidebarCollapsed">{{ propertiesCount }}</span>
-          </a>
-        </li>
-        
-        <!-- Changé de "Utilisateurs" à "Clients" -->
-        <li routerLinkActive="active">
-          <a routerLink="/admin/customers">
-            <i class="fas fa-users"></i>
-            <span *ngIf="!isSidebarCollapsed">Clients</span>
-            <span class="badge" *ngIf="!isSidebarCollapsed">{{ customersCount }}</span>
-          </a>
-        </li>
-        
-        <li routerLinkActive="active">
-          <a routerLink="/admin/agents">
-            <i class="fas fa-user-tie"></i>
-            <span *ngIf="!isSidebarCollapsed">Agents commerciaux</span>
-            <span class="badge" *ngIf="!isSidebarCollapsed">{{ agentsCount }}</span>
-          </a>
-        </li>
-        
-        <li routerLinkActive="active">
-          <a routerLink="/admin/statistics">
-            <i class="fas fa-chart-bar"></i>
-            <span *ngIf="!isSidebarCollapsed">Transactions & Ventes</span>
-          </a>
-        </li>
-        
-        <li routerLinkActive="active">
-          <a routerLink="/admin/settings">
-            <i class="fas fa-cog"></i>
-            <span *ngIf="!isSidebarCollapsed">Paramètres</span>
-          </a>
-        </li>
-        
-        <li class="menu-divider" *ngIf="!isSidebarCollapsed">
-          <small>Actions rapides</small>
-        </li>
-        
-        <li>
-          <a routerLink="/admin/properties/new">
-            <i class="fas fa-plus-circle text-success"></i>
-            <span *ngIf="!isSidebarCollapsed">Ajouter un bien</span>
-          </a>
-        </li>
-        
-        <li *ngIf="currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN'">
-          <a routerLink="/admin/customers">
-            <i class="fas fa-user-plus text-info"></i>
-            <span *ngIf="!isSidebarCollapsed">Ajouter un client</span>
-          </a>
-        </li>
-        
-        <li>
-          <a routerLink="/admin/agents/new">
-            <i class="fas fa-user-tie text-warning"></i>
-            <span *ngIf="!isSidebarCollapsed">Ajouter un agent</span>
-          </a>
-        </li>
+        <!-- ── Standard Admin/Super Admin/Commercial menu ── -->
+        <ng-container *ngIf="currentUser?.role !== 'AFFILIATE'">
+          <li routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+            <a routerLink="/admin/dashboard">
+              <i class="fas fa-tachometer-alt"></i>
+              <span *ngIf="!isSidebarCollapsed">Tableau de bord</span>
+            </a>
+          </li>
+
+          <li routerLinkActive="active">
+            <a routerLink="/admin/properties">
+              <i class="fas fa-home"></i>
+              <span *ngIf="!isSidebarCollapsed">Biens immobiliers</span>
+              <span class="badge" *ngIf="!isSidebarCollapsed">{{ propertiesCount }}</span>
+            </a>
+          </li>
+
+          <li routerLinkActive="active">
+            <a routerLink="/admin/customers">
+              <i class="fas fa-users"></i>
+              <span *ngIf="!isSidebarCollapsed">Clients</span>
+              <span class="badge" *ngIf="!isSidebarCollapsed">{{ customersCount }}</span>
+            </a>
+          </li>
+
+          <li routerLinkActive="active" *ngIf="currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN'">
+            <a routerLink="/admin/agents">
+              <i class="fas fa-user-tie"></i>
+              <span *ngIf="!isSidebarCollapsed">Agents commerciaux</span>
+              <span class="badge" *ngIf="!isSidebarCollapsed">{{ agentsCount }}</span>
+            </a>
+          </li>
+
+          <li routerLinkActive="active">
+            <a routerLink="/admin/statistics">
+              <i class="fas fa-chart-bar"></i>
+              <span *ngIf="!isSidebarCollapsed">Transactions & Ventes</span>
+            </a>
+          </li>
+
+          <!-- Super Admin: demandes de partage envoyées -->
+          <li routerLinkActive="active" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
+            <a routerLink="/admin/share-requests">
+              <i class="fas fa-share-nodes"></i>
+              <span *ngIf="!isSidebarCollapsed">Demandes envoyées</span>
+            </a>
+          </li>
+
+          <!-- Agency Admin: propositions reçues -->
+          <li routerLinkActive="active" *ngIf="currentUser?.role === 'ADMIN'">
+            <a routerLink="/admin/incoming-share-requests">
+              <i class="fas fa-inbox"></i>
+              <span *ngIf="!isSidebarCollapsed">Propositions reçues</span>
+              <span class="badge badge-pending" *ngIf="!isSidebarCollapsed && unreadNotifications > 0">{{ unreadNotifications }}</span>
+            </a>
+          </li>
+
+          <!-- ── Affiliate Section (Super Admin only) ── -->
+          <li class="menu-divider" *ngIf="currentUser?.role === 'SUPER_ADMIN' && !isSidebarCollapsed">
+            <small>Gestion Affiliés</small>
+          </li>
+          <li routerLinkActive="active" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
+            <a routerLink="/admin/affiliate-applications">
+              <i class="fas fa-user-clock"></i>
+              <span *ngIf="!isSidebarCollapsed">Candidatures</span>
+            </a>
+          </li>
+          <li routerLinkActive="active" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
+            <a routerLink="/admin/affiliate-accounts">
+              <i class="fas fa-users-cog"></i>
+              <span *ngIf="!isSidebarCollapsed">Comptes affiliés</span>
+            </a>
+          </li>
+          <li routerLinkActive="active" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
+            <a routerLink="/admin/affiliate-ranking">
+              <i class="fas fa-trophy"></i>
+              <span *ngIf="!isSidebarCollapsed">Classement mensuel</span>
+            </a>
+          </li>
+          <li routerLinkActive="active" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
+            <a routerLink="/admin/affiliate-commissions">
+              <i class="fas fa-coins"></i>
+              <span *ngIf="!isSidebarCollapsed">Commissions</span>
+            </a>
+          </li>
+
+          <!-- Agency Admin: incoming affiliate offers -->
+          <li routerLinkActive="active" *ngIf="currentUser?.role === 'ADMIN'">
+            <a routerLink="/admin/affiliate-incoming-offers">
+              <i class="fas fa-handshake"></i>
+              <span *ngIf="!isSidebarCollapsed">Offres affiliés</span>
+            </a>
+          </li>
+
+          <li routerLinkActive="active">
+            <a routerLink="/admin/settings">
+              <i class="fas fa-cog"></i>
+              <span *ngIf="!isSidebarCollapsed">Paramètres</span>
+            </a>
+          </li>
+
+          <li class="menu-divider" *ngIf="!isSidebarCollapsed">
+            <small>Actions rapides</small>
+          </li>
+
+          <li>
+            <a routerLink="/admin/properties/new">
+              <i class="fas fa-plus-circle text-success"></i>
+              <span *ngIf="!isSidebarCollapsed">Ajouter un bien</span>
+            </a>
+          </li>
+
+          <li *ngIf="currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN'">
+            <a routerLink="/admin/customers">
+              <i class="fas fa-user-plus text-info"></i>
+              <span *ngIf="!isSidebarCollapsed">Ajouter un client</span>
+            </a>
+          </li>
+
+          <li>
+            <a routerLink="/admin/agents/new">
+              <i class="fas fa-user-tie text-warning"></i>
+              <span *ngIf="!isSidebarCollapsed">Ajouter un agent</span>
+            </a>
+          </li>
+        </ng-container>
+
+        <!-- ── Affiliate User Section (AFFILIATE role only) ── -->
+        <ng-container *ngIf="currentUser?.role === 'AFFILIATE'">
+          <li class="menu-divider" *ngIf="!isSidebarCollapsed">
+            <small>Espace Affilié</small>
+          </li>
+          <li routerLinkActive="active">
+            <a routerLink="/admin/affiliate-dashboard">
+              <i class="fas fa-tachometer-alt"></i>
+              <span *ngIf="!isSidebarCollapsed">Mon tableau de bord</span>
+            </a>
+          </li>
+          <li routerLinkActive="active">
+            <a routerLink="/admin/affiliate-properties">
+              <i class="fas fa-home"></i>
+              <span *ngIf="!isSidebarCollapsed">Biens disponibles</span>
+            </a>
+          </li>
+          <li routerLinkActive="active">
+            <a routerLink="/admin/affiliate-offers">
+              <i class="fas fa-file-contract"></i>
+              <span *ngIf="!isSidebarCollapsed">Mes offres</span>
+            </a>
+          </li>
+          <li routerLinkActive="active">
+            <a routerLink="/admin/affiliate-earnings">
+              <i class="fas fa-coins"></i>
+              <span *ngIf="!isSidebarCollapsed">Mes gains</span>
+            </a>
+          </li>
+          <li routerLinkActive="active">
+            <a routerLink="/admin/affiliate-ranking">
+              <i class="fas fa-trophy"></i>
+              <span *ngIf="!isSidebarCollapsed">Classement</span>
+            </a>
+          </li>
+        </ng-container>
       </ul>
     </nav>
 
@@ -126,17 +219,17 @@
       <div class="header-left">
         <h1>{{ getPageTitle() }}</h1>
         <nav class="breadcrumb">
-          <a routerLink="/admin/dashboard">Admin</a>
+          <a [routerLink]="currentUser?.role === 'AFFILIATE' ? '/admin/affiliate-dashboard' : '/admin/dashboard'">Admin</a>
           <span class="separator">/</span>
           <span class="current">{{ getPageTitle() }}</span>
         </nav>
       </div>
-      
+
       <div class="header-right">
         <button class="theme-toggle" (click)="toggleTheme()" [attr.title]="isDarkTheme ? 'Mode clair' : 'Mode sombre'">
           <i class="fas" [class.fa-sun]="isDarkTheme" [class.fa-moon]="!isDarkTheme"></i>
         </button>
-        
+
         <div class="user-info-header" *ngIf="currentUser">
           <div class="header-avatar" [style.background-color]="getAvatarColor()">
             {{ getUserInitials() }}
@@ -150,51 +243,56 @@
             </div>
           </div>
         </div>
-        
-        <div class="notification-dropdown">
-          <button class="notification-btn">
+
+        <div class="notification-dropdown" [class.open]="notifPanelOpen">
+          <button class="notification-btn" (click)="toggleNotifPanel()">
             <i class="fas fa-bell"></i>
-            <span class="notification-count">3</span>
+            <span class="notification-count" *ngIf="unreadNotifications > 0">{{ unreadNotifications }}</span>
           </button>
-          <div class="notification-menu">
+          <div class="notification-menu" *ngIf="notifPanelOpen">
             <div class="notification-header">
-              <h6>Notifications (3)</h6>
-              <a href="#" class="mark-all-read">Tout marquer comme lu</a>
+              <h6>Notifications <span *ngIf="unreadNotifications > 0">({{ unreadNotifications }})</span></h6>
+              <button class="mark-all-read" (click)="markAllNotificationsRead()" *ngIf="unreadNotifications > 0">Tout marquer comme lu</button>
             </div>
             <div class="notification-list">
-              <div class="notification-item unread">
-                <i class="fas fa-home text-primary"></i>
-                <div class="notification-content">
-                  <p>Nouveau bien ajouté: Villa à Tunis</p>
-                  <small>Il y a 5 minutes</small>
-                </div>
+              <div *ngIf="recentNotifications.length === 0" class="notification-empty">
+                <i class="fas fa-check-circle"></i>
+                <span>Aucune notification</span>
               </div>
-              <div class="notification-item">
-                <i class="fas fa-user text-success"></i>
+              <div *ngFor="let notif of recentNotifications"
+                   class="notification-item"
+                   [class.unread]="!notif.read"
+                   (click)="handleNotifClick(notif)">
+                <i class="fas" [ngClass]="getNotifIcon(notif.type)"></i>
                 <div class="notification-content">
-                  <p>Nouveau client inscrit</p>
-                  <small>Il y a 1 heure</small>
-                </div>
-              </div>
-              <div class="notification-item">
-                <i class="fas fa-handshake text-warning"></i>
-                <div class="notification-content">
-                  <p>Vente effectuée: 450 000 TND</p>
-                  <small>Il y a 2 heures</small>
+                  <p>{{ notif.title }}</p>
+                  <small>{{ formatNotifDate(notif.createdAt) }}</small>
                 </div>
               </div>
             </div>
-            <div class="notification-footer">
-              <a routerLink="/admin/notifications">Voir toutes les notifications</a>
+            <div class="notification-footer" *ngIf="currentUser?.role === 'ADMIN'">
+              <a routerLink="/admin/incoming-share-requests" (click)="notifPanelOpen = false">Voir les propositions reçues</a>
+            </div>
+            <div class="notification-footer" *ngIf="currentUser?.role === 'ADMIN'">
+              <a routerLink="/admin/affiliate-incoming-offers" (click)="notifPanelOpen = false">Voir les offres affiliés</a>
+            </div>
+            <div class="notification-footer" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
+              <a routerLink="/admin/share-requests" (click)="notifPanelOpen = false">Voir les demandes envoyées</a>
+            </div>
+            <div class="notification-footer" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
+              <a routerLink="/admin/affiliate-applications" (click)="notifPanelOpen = false">Voir les candidatures affiliés</a>
+            </div>
+            <div class="notification-footer" *ngIf="currentUser?.role === 'AFFILIATE'">
+              <a routerLink="/admin/affiliate-offers" (click)="notifPanelOpen = false">Voir mes offres</a>
             </div>
           </div>
         </div>
-        
-        <div class="search-box">
+
+        <div class="search-box" *ngIf="currentUser?.role !== 'AFFILIATE'">
           <i class="fas fa-search"></i>
           <input type="text" placeholder="Rechercher...">
         </div>
-        
+
         <a routerLink="/" class="btn-back-site" title="Retour au site">
           <i class="fas fa-external-link-alt"></i>
           <span>Site public</span>

@@ -10,6 +10,8 @@ public class AffiliateRegionDTO {
     private Long affiliateId;
     private String affiliateName;
     private String regionName;
+    private String country;
+    private String city;
     private String regionDescription;
     private Double commissionPercentage;
     private Boolean isActive;

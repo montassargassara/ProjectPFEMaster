@@ -139,9 +139,9 @@ export class AdminAuthService {
   isAdmin(): boolean {
     const user = this.currentUserSubject.value;
     if (!user) return false;
-    
+
     const userRole = user.role?.toUpperCase();
-    const adminRoles = ['SUPER_ADMIN', 'SUPERADMIN', 'ADMIN', 'RESPONSABLE_COMMERCIAL', 'COMMERCIAL'];
+    const adminRoles = ['SUPER_ADMIN', 'SUPERADMIN', 'ADMIN', 'RESPONSABLE_COMMERCIAL', 'COMMERCIAL', 'AFFILIATE'];
     return adminRoles.includes(userRole);
   }
 
@@ -173,10 +173,16 @@ export class AdminAuthService {
   canAccessDashboard(): boolean {
     const user = this.currentUserSubject.value;
     if (!user) return false;
-    
+
     const userRole = user.role?.toUpperCase();
-    const dashboardRoles = ['SUPER_ADMIN', 'SUPERADMIN', 'ADMIN', 'COMMERCIAL', 'RESPONSABLE_COMMERCIAL'];
+    const dashboardRoles = ['SUPER_ADMIN', 'SUPERADMIN', 'ADMIN', 'COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'AFFILIATE'];
     return dashboardRoles.includes(userRole);
+  }
+
+  getDefaultRoute(): string {
+    const role = this.currentUserSubject.value?.role?.toUpperCase();
+    if (role === 'AFFILIATE') return '/admin/affiliate-dashboard';
+    return '/admin/dashboard';
   }
 
   // Méthode pour rafraîchir le token

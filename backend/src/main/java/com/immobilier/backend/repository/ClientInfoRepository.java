@@ -4,6 +4,7 @@ import com.immobilier.backend.entity.ClientInfo;
 import com.immobilier.backend.entity.User;
 import com.immobilier.backend.enums.RoleType;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -186,4 +187,37 @@ List<Long> findSharedAgencyIdsByClientId(@Param("clientId") Long clientId);
 @Query("SELECT CASE WHEN COUNT(csa) > 0 THEN true ELSE false END FROM ClientSharedAgency csa " +
        "WHERE csa.client.id = :clientId AND csa.admin.id = :adminId")
 boolean isSharedWithAgency(@Param("clientId") Long clientId, @Param("adminId") Long adminId);
+
+// Ajoutez ces méthodes dans ClientInfoRepository.java
+
+// Pour les clients récents (SUPER_ADMIN)
+@Query("SELECT c FROM ClientInfo c ORDER BY c.createdAt DESC")
+List<ClientInfo> findTop6ByOrderByCreatedAtDesc(Pageable pageable);
+
+default List<ClientInfo> findTop6ByOrderByCreatedAtDesc() {
+    return findTop6ByOrderByCreatedAtDesc(PageRequest.of(0, 6));
+}
+
+// Pour les clients d'une agence (enfants)
+@Query("SELECT c FROM ClientInfo c WHERE c.agencyAdminId = :agencyAdminId ORDER BY c.createdAt DESC")
+List<ClientInfo> findTop6ByAgencyAdminIdOrderByCreatedAtDesc(@Param("agencyAdminId") Long agencyAdminId, Pageable pageable);
+
+default List<ClientInfo> findTop6ByAgencyAdminIdOrderByCreatedAtDesc(Long agencyAdminId) {
+    return findTop6ByAgencyAdminIdOrderByCreatedAtDesc(agencyAdminId, PageRequest.of(0, 6));
+}
+
+// Pour ADMIN - clients agence + partagés
+@Query("SELECT c FROM ClientInfo c WHERE c.agencyAdminId = :adminId OR c.id IN :clientIds ORDER BY c.createdAt DESC")
+List<ClientInfo> findTop6ByAgencyAdminIdOrIdInOrderByCreatedAtDesc(
+    @Param("adminId") Long adminId, 
+    @Param("clientIds") List<Long> clientIds,
+    Pageable pageable);
+
+default List<ClientInfo> findTop6ByAgencyAdminIdOrIdInOrderByCreatedAtDesc(Long adminId, List<Long> clientIds) {
+    if (clientIds == null || clientIds.isEmpty()) {
+        return findTop6ByAgencyAdminIdOrderByCreatedAtDesc(adminId);
+    }
+    return findTop6ByAgencyAdminIdOrIdInOrderByCreatedAtDesc(adminId, clientIds, PageRequest.of(0, 6));
+}
+
 }

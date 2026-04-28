@@ -1,6 +1,6 @@
 // services/properties-admin.service.ts
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { apiBaseUrl } from '../../services/api-config';
 
@@ -32,11 +32,27 @@ export interface PropertyListItem {
   model3dSize?: number;
   model3dUrl?: string;
   hasModel3d: boolean;
+  // Ownership / multi-tenant fields
+  ownerType?: string;          // 'SUPER_ADMIN_OWNED' | 'AGENCY_OWNED' | null (legacy)
+  agencyAdminId?: number;
+  agencyAdminName?: string;
+  sharedWithAgencyIds?: number[];
+}
+
+export interface AgencyAdminItem {
+  id: number;
+  fullName: string;
+  email: string;
+  alreadyShared: boolean;
 }
 
 export interface UpdateStatusRequest {
   statut: string;
   propertyId?: number;
+}
+
+export interface SharePropertyRequest {
+  agencyAdminIds: number[];
 }
 
 @Injectable({
@@ -45,6 +61,7 @@ export interface UpdateStatusRequest {
 export class PropertiesAdminService {
   constructor(private http: HttpClient) {}
 
+  /** Returns only the properties the current user is allowed to see (filtered server-side). */
   getAllProperties(): Observable<PropertyListItem[]> {
     return this.http.get<PropertyListItem[]>(`${apiBaseUrl}/api/properties/list`);
   }
@@ -64,5 +81,23 @@ export class PropertiesAdminService {
 
   getAllowedStatusesForCategory(category: string): Observable<string[]> {
     return this.http.get<string[]>(`${apiBaseUrl}/api/properties/categories/${category}/allowed-statuses`);
+  }
+
+  // ─── Sharing (Super Admin only) ───────────────────────────────────────────
+
+  /** Returns all agency admins with their sharing status for a property. */
+  getSharingInfo(propertyId: number): Observable<AgencyAdminItem[]> {
+    return this.http.get<AgencyAdminItem[]>(`${apiBaseUrl}/api/properties/${propertyId}/sharing`);
+  }
+
+  /** Replaces the full shared-agency set for a property. */
+  updateSharing(propertyId: number, agencyAdminIds: number[]): Observable<PropertyListItem> {
+    const body: SharePropertyRequest = { agencyAdminIds };
+    return this.http.put<PropertyListItem>(`${apiBaseUrl}/api/properties/${propertyId}/sharing`, body);
+  }
+
+  /** Revokes sharing for a single agency admin. */
+  revokeSharing(propertyId: number, adminId: number): Observable<void> {
+    return this.http.delete<void>(`${apiBaseUrl}/api/properties/${propertyId}/sharing/${adminId}`);
   }
 }

@@ -25,26 +25,27 @@
   </div>
   
   <!-- Statistics Cards -->
-    <div class="stats-grid">
+  <div class="stats-grid">
     <div class="stat-card">
-        <div class="stat-icon bg-primary">
+      <div class="stat-icon bg-primary">
         <i class="fas fa-users"></i>
-        </div>
-        <div class="stat-info">
+      </div>
+      <div class="stat-info">
         <h3>{{ getStats().totalUsers || 0 }}</h3>
         <p>Total agents</p>
-        </div>
+      </div>
     </div>
+    <!-- ✅ Uniquement les rôles INTERNES -->
     <div class="stat-card" *ngFor="let role of ['SUPER_ADMIN', 'ADMIN', 'RESPONSABLE_COMMERCIAL', 'COMMERCIAL']">
-        <div class="stat-icon" [ngStyle]="{'background-color': getRoleColor(role)}">
+      <div class="stat-icon" [ngStyle]="{'background-color': getRoleColor(role)}">
         <i [class]="'fas ' + getRoleIcon(role)"></i>
-        </div>
-        <div class="stat-info">
+      </div>
+      <div class="stat-info">
         <h3>{{ getStats().byRole?.[role] || 0 }}</h3>
         <p>{{ getRoleLabel(role) }}</p>
-        </div>
+      </div>
     </div>
-    </div>
+  </div>
   
   <!-- Messages -->
   <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show">
@@ -74,10 +75,14 @@
                    placeholder="Rechercher par nom, email ou téléphone...">
           </div>
         </div>
+        <!-- Dans la section filters, mettre à jour le select des rôles -->
         <div class="col-md-3">
           <select class="form-select" [(ngModel)]="roleFilter" (ngModelChange)="applyFilters()">
             <option value="">Tous les rôles</option>
-            <option *ngFor="let role of creatableRoles" [value]="role">{{ getRoleLabel(role) }}</option>
+            <!-- ✅ Uniquement les rôles INTERNES -->
+            <option *ngFor="let role of ['SUPER_ADMIN', 'ADMIN', 'RESPONSABLE_COMMERCIAL', 'COMMERCIAL']" [value]="role">
+              {{ getRoleLabel(role) }}
+            </option>
           </select>
         </div>
         <div class="col-md-3">

@@ -1,13 +1,15 @@
-import { Component, OnInit, ChangeDetectorRef, AfterViewInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, AfterViewInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { RouterModule, ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import * as L from 'leaflet';
-import { firstValueFrom, of, combineLatest } from 'rxjs';
+import { firstValueFrom, of, combineLatest, Subscription } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, filter, finalize, map, switchMap, tap } from 'rxjs/operators';
 import { apiBaseUrl } from '../../services/api-config';
 import { GeocodingService } from '../../services/geocoding-service';
+import { AdminAuthService } from '../services/admin-auth';
+import { AgencyAdminItem, PropertiesAdminService } from '../services/properties-admin.service';
 
 interface PropertyPayload {
   titre: string;
@@ -25,6 +27,7 @@ interface PropertyPayload {
   longitude: number | null;
   commissionPercentage: number | null;
   commissionType: string;
+  isAffiliateEligible: boolean;
 }
 
 @Component({
@@ -67,6 +70,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
   private map: L.Map | null = null;
   private marker: L.Marker | null = null;
   private formSyncLock = false;
+  private subscriptions: Subscription[] = [];
 
   @ViewChild('mapContainer', { static: false }) mapContainer?: ElementRef<HTMLDivElement>;
 
@@ -99,13 +103,27 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     { value: 'FIXED', label: 'Montant fixe (TND)' },
   ];
  
-  readonly sections = [
-    { id: 'general', label: 'Informations', icon: 'fa-file-alt' },
-    { id: 'location', label: 'Localisation', icon: 'fa-map-marker-alt' },
-    { id: 'pricing', label: 'Tarification', icon: 'fa-tag' },
-    { id: 'media', label: 'Médias', icon: 'fa-images' },
-    { id: 'advanced-media', label: 'Médias 3D/Video', icon: 'fa-cube' },
-  ];
+  get sections() {
+    const base = [
+      { id: 'general', label: 'Informations', icon: 'fa-file-alt' },
+      { id: 'location', label: 'Localisation', icon: 'fa-map-marker-alt' },
+      { id: 'pricing', label: 'Tarification', icon: 'fa-tag' },
+      { id: 'media', label: 'Médias', icon: 'fa-images' },
+      { id: 'advanced-media', label: 'Médias 3D/Video', icon: 'fa-cube' },
+    ];
+    if (this.isSuperAdmin && this.isEditMode && this.isSuperAdminOwned) {
+      base.push({ id: 'sharing', label: 'Partage', icon: 'fa-share-nodes' });
+    }
+    return base;
+  }
+
+  // ─── Ownership / share state ───────────────────────────────────────────────
+  currentOwnerType: string | null = null;
+  availableAdmins: AgencyAdminItem[] = [];
+  selectedAdminIds = new Set<number>();
+  sharingLoading = false;
+  shareSaved = false;
+  // ──────────────────────────────────────────────────────────────────────────
  
   constructor(
     private fb: FormBuilder,
@@ -113,59 +131,66 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     private router: Router,
     private http: HttpClient,
     private cdr: ChangeDetectorRef,
-    private geocodingService: GeocodingService
+    private ngZone: NgZone,
+    private geocodingService: GeocodingService,
+    private authService: AdminAuthService,
+    private propertiesService: PropertiesAdminService
   ) {}
+
+  get isSuperAdmin(): boolean {
+    return this.authService.getCurrentUser()?.role?.toUpperCase() === 'SUPER_ADMIN';
+  }
+
+  get isSuperAdminOwned(): boolean {
+    return this.currentOwnerType === 'SUPER_ADMIN_OWNED';
+  }
  
   ngOnInit(): void {
     console.log('🟢 PropertyEdit - Initialisation');
     this.buildForm();
-    this.route.paramMap
-      .pipe(
-        map(params => params.get('id')),
-        tap(id => {
-          this.errorMessage = '';
-          if (!id) {
-            this.isEditMode = false;
-            this.propertyId = null;
-            this.loading = false;
-            this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE EN MODE CRÉATION
-            return;
-          }
-          this.isEditMode = true;
-          this.propertyId = Number(id);
-          this.loading = true;
-          this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE PENDANT LE CHARGEMENT
-        }),
-        switchMap(id => {
-          if (!id) return of(null);
-          const numericId = Number(id);
-          if (Number.isNaN(numericId)) {
-            this.errorMessage = 'Identifiant invalide.';
-            return of(null);
-          }
-          return this.http.get<any>(`${this.apiUrl}/${numericId}`).pipe(
-            tap(property => {
-              console.log('✅ Propriété chargée:', property?.titre);
-            }),
-            catchError(error => {
-              console.error('🔴 Erreur chargement:', error);
-              this.errorMessage = 'Impossible de charger le bien.';
-              this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE EN ERREUR
-              return of(null);
-            }),
-            finalize(() => {
+    
+    // ✅ Utiliser setTimeout pour éviter ExpressionChangedAfterItHasBeenCheckedError
+    setTimeout(() => {
+      this.route.paramMap
+        .pipe(
+          map(params => params.get('id')),
+          tap(id => {
+            this.errorMessage = '';
+            if (!id) {
+              this.isEditMode = false;
+              this.propertyId = null;
               this.loading = false;
-              this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS CHARGEMENT
-            })
-          );
-        })
-      )
-      .subscribe(property => {
-        if (!property) return;
-        this.applyProperty(property);
-        this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS APPLICATION DES DONNÉES
-        console.log('✅ Formulaire rempli et affiché');
-      });
+              return;
+            }
+            this.isEditMode = true;
+            this.propertyId = Number(id);
+            this.loading = true;
+          }),
+          switchMap(id => {
+            if (!id) return of(null);
+            const numericId = Number(id);
+            if (Number.isNaN(numericId)) {
+              this.errorMessage = 'Identifiant invalide.';
+              return of(null);
+            }
+            return this.http.get<any>(`${this.apiUrl}/${numericId}`).pipe(
+              catchError(error => {
+                console.error('🔴 Erreur chargement:', error);
+                this.errorMessage = 'Impossible de charger le bien.';
+                return of(null);
+              }),
+              finalize(() => {
+                this.loading = false;
+              })
+            );
+          })
+        )
+        .subscribe(property => {
+          if (property) {
+            this.applyProperty(property);
+          }
+        });
+    }, 0);
   }
  
   private buildForm(): void {
@@ -186,9 +211,10 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       longitude: [null],
       commissionPercentage: [null],
       commissionType: ['PERCENTAGE'],
+      isAffiliateEligible: [false],
     });
  
-    // Sync price validators based on category
+    // ✅ Utiliser markForCheck() au lieu de detectChanges()
     this.form.get('categorie')?.valueChanges.subscribe(cat => {
       const prixVente = this.form.get('prixVente');
       const prixLocation = this.form.get('prixLocation');
@@ -198,15 +224,24 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       } else {
         prixLocation?.setValidators([Validators.required, Validators.min(0)]);
         prixVente?.clearValidators();
+        // Rentals never use the commission/affiliate workflow — wipe those fields
+        // so stale values cannot leak into the payload.
+        this.form.patchValue(
+          {
+            commissionPercentage: null,
+            commissionType: 'PERCENTAGE',
+            isAffiliateEligible: false,
+          },
+          { emitEvent: false }
+        );
       }
       prixVente?.updateValueAndValidity();
       prixLocation?.updateValueAndValidity();
       this.ensureStatusMatchesCategory();
-      this.cdr.detectChanges();  // ← FORCE L'UPDATE APRÈS CHANGEMENT DE CATÉGORIE
+      this.cdr.markForCheck();  // ✅ markForCheck au lieu de detectChanges
     });
  
     this.form.get('categorie')?.setValue('VENTE');
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS CRÉATION DU FORMULAIRE
 
     this.setupLocationSync();
   }
@@ -218,6 +253,13 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     const videoMedias = medias.filter((media: any) => media?.type === 'VIDEO');
     const modelMedias = medias.filter((media: any) => media?.type === 'MODEL_3D');
     const categorie = property.prixVente ? 'VENTE' : 'LOCATION';
+
+    // Capture ownership so the Partage section can be conditionally shown
+    this.currentOwnerType = property.ownerType ?? null;
+    if (this.isSuperAdmin && property.ownerType === 'SUPER_ADMIN_OWNED' && this.propertyId) {
+      this.loadSharingInfo(this.propertyId);
+    }
+    
     this.form.patchValue({
       titre: property.titre,
       description: property.description,
@@ -235,6 +277,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       longitude: property.longitude,
       commissionPercentage: property.commissionPercentage,
       commissionType: property.commissionType || 'PERCENTAGE',
+      isAffiliateEligible: property.isAffiliateEligible ?? false,
     });
 
     if (property.mainImageUrl) {
@@ -288,7 +331,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       }
     }
     
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS PATCH
+    this.cdr.markForCheck();  // ✅ markForCheck au lieu de detectChanges
 
     this.syncMapWithForm();
     this.ensureStatusMatchesCategory();
@@ -296,11 +339,12 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     if (this.activeSection === 'location') {
-      this.initializeMap();
+      setTimeout(() => this.initializeMap(), 100);
     }
   }
 
   ngOnDestroy(): void {
+    this.subscriptions.forEach(sub => sub.unsubscribe());
     if (this.map) {
       this.map.remove();
       this.map = null;
@@ -311,12 +355,12 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     this.activeSection = id;
     if (id === 'location') {
       if (!this.map) {
-        this.initializeMap();
+        setTimeout(() => this.initializeMap(), 100);
       } else {
         setTimeout(() => this.map?.invalidateSize(true), 150);
       }
     }
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS CHANGEMENT DE SECTION
+    this.cdr.markForCheck();  // ✅ markForCheck au lieu de detectChanges
   }
  
   get isVente(): boolean {
@@ -342,7 +386,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       const reader = new FileReader();
       reader.onload = () => { 
         this.mainImagePreview = reader.result as string;
-        this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS CHARGEMENT IMAGE
+        this.cdr.markForCheck();  // ✅ markForCheck au lieu de detectChanges
       };
       reader.readAsDataURL(this.mainImageFile);
     }
@@ -351,7 +395,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
   clearMainImage(): void {
     this.mainImagePreview = null;
     this.mainImageFile = null;
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS SUPPRESSION IMAGE
+    this.cdr.markForCheck();  // ✅ markForCheck au lieu de detectChanges
   }
 
   onGallerySelect(event: Event): void {
@@ -360,14 +404,14 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     const files = Array.from(input.files);
     files.forEach(file => this.addGalleryFile(file));
     input.value = '';
-    this.cdr.detectChanges();
+    this.cdr.markForCheck();
   }
 
   onGalleryDrop(event: DragEvent): void {
     event.preventDefault();
     const files = Array.from(event.dataTransfer?.files || []);
     files.forEach(file => this.addGalleryFile(file));
-    this.cdr.detectChanges();
+    this.cdr.markForCheck();
   }
 
   removeGalleryItem(index: number): void {
@@ -377,7 +421,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       this.imagesToDelete.push(item.id);
     }
     this.galleryItems.splice(index, 1);
-    this.cdr.detectChanges();
+    this.cdr.markForCheck();
   }
 
   moveGalleryItem(fromIndex: number, toIndex: number): void {
@@ -385,7 +429,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     if (fromIndex >= this.galleryItems.length || toIndex >= this.galleryItems.length) return;
     const [moved] = this.galleryItems.splice(fromIndex, 1);
     this.galleryItems.splice(toIndex, 0, moved);
-    this.cdr.detectChanges();
+    this.cdr.markForCheck();
   }
 
   setGalleryPrimary(index: number): void {
@@ -407,7 +451,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     }));
     this.mainImagePreview = item.url;
     this.galleryItems.splice(index + (primaryImage ? 1 : 0), 1);
-    this.cdr.detectChanges();
+    this.cdr.markForCheck();
   }
 
   onModelSelect(event: Event): void {
@@ -416,12 +460,11 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     const file = input.files[0];
     if (!this.isValidModelFile(file)) {
       this.errorMessage = 'Format 3D non supporte (GLB, GLTF, OBJ, FBX).';
-      this.cdr.detectChanges();
       return;
     }
     this.selectedModelFile = file;
     this.modelPreviewName = file.name;
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS SÉLECTION MODÈLE
+    this.cdr.markForCheck();
   }
 
   onModelDrop(event: DragEvent): void {
@@ -430,18 +473,17 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     if (!file) return;
     if (!this.isValidModelFile(file)) {
       this.errorMessage = 'Format 3D non supporte (GLB, GLTF, OBJ, FBX).';
-      this.cdr.detectChanges();
       return;
     }
     this.selectedModelFile = file;
     this.modelPreviewName = file.name;
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS DROP MODÈLE
+    this.cdr.markForCheck();
   }
 
   clearModel(): void {
     this.selectedModelFile = null;
     this.modelPreviewName = '';
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS SUPPRESSION MODÈLE
+    this.cdr.markForCheck();
   }
 
   onVideoSelect(event: Event): void {
@@ -450,12 +492,11 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     const file = input.files[0];
     if (!this.isValidVideoFile(file)) {
       this.errorMessage = 'Format video non supporte (MP4).';
-      this.cdr.detectChanges();
       return;
     }
     this.selectedVideoFile = file;
     this.videoPreviewName = file.name;
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS SÉLECTION VIDÉO
+    this.cdr.markForCheck();
   }
 
   onVideoDrop(event: DragEvent): void {
@@ -464,18 +505,17 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     if (!file) return;
     if (!this.isValidVideoFile(file)) {
       this.errorMessage = 'Format video non supporte (MP4).';
-      this.cdr.detectChanges();
       return;
     }
     this.selectedVideoFile = file;
     this.videoPreviewName = file.name;
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS DROP VIDÉO
+    this.cdr.markForCheck();
   }
 
   clearVideo(): void {
     this.selectedVideoFile = null;
     this.videoPreviewName = '';
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS SUPPRESSION VIDÉO
+    this.cdr.markForCheck();
   }
  
   getFieldError(fieldName: string): string {
@@ -496,30 +536,30 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
   async onSubmit(): Promise<void> {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
-      // Jump to first section with error
       const errFields = ['titre', 'description', 'type', 'statut'];
       const locFields = ['adresse', 'country', 'city'];
       const priceFields = ['prixVente', 'prixLocation'];
       if (errFields.some(f => this.form.get(f)?.invalid)) this.activeSection = 'general';
       else if (locFields.some(f => this.form.get(f)?.invalid)) this.activeSection = 'location';
       else if (priceFields.some(f => this.form.get(f)?.invalid)) this.activeSection = 'pricing';
-      this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE DES ERREURS
+      this.cdr.markForCheck();
       return;
     }
  
     this.saving = true;
     this.successMessage = '';
     this.errorMessage = '';
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE PENDANT LA SAUVEGARDE
+    this.cdr.markForCheck();
  
     const v = this.form.value;
+    const isVente = v.categorie === 'VENTE';
     const payload: PropertyPayload = {
       titre: v.titre,
       description: v.description,
       type: v.type,
       statut: v.statut,
-      prixVente: v.categorie === 'VENTE' ? v.prixVente : null,
-      prixLocation: v.categorie === 'LOCATION' ? v.prixLocation : null,
+      prixVente: isVente ? v.prixVente : null,
+      prixLocation: isVente ? null : v.prixLocation,
       surface: v.surface,
       nbChambres: v.nbChambres,
       adresse: v.adresse,
@@ -527,8 +567,10 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       city: v.city,
       latitude: v.latitude,
       longitude: v.longitude,
-      commissionPercentage: v.commissionPercentage,
-      commissionType: v.commissionType,
+      // Commission + affiliate workflow apply to VENTE only
+      commissionPercentage: isVente ? v.commissionPercentage : null,
+      commissionType: isVente ? v.commissionType : 'PERCENTAGE',
+      isAffiliateEligible: isVente ? (v.isAffiliateEligible ?? false) : false,
     };
  
     try {
@@ -565,17 +607,17 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       this.successMessage = this.isEditMode
         ? 'Bien modifié avec succès !'
         : 'Bien créé avec succès !';
-      this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE DU MESSAGE DE SUCCÈS
+      this.cdr.markForCheck();
 
       setTimeout(() => {
         this.router.navigate(['/admin/properties']);
       }, 1800);
     } catch (err: any) {
       this.errorMessage = err?.error?.message || err?.message || 'Une erreur est survenue.';
-      this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE DE L'ERREUR
+      this.cdr.markForCheck();
     } finally {
       this.saving = false;
-      this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS LA SAUVEGARDE
+      this.cdr.markForCheck();
     }
   }
 
@@ -616,27 +658,27 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
 
   private async uploadModel(propertyId: number, file: File): Promise<void> {
     this.uploadingModel = true;
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE PENDANT L'UPLOAD
+    this.cdr.markForCheck();
     try {
       const formData = new FormData();
       formData.append('file', file);
       await firstValueFrom(this.http.post(`${this.modelUploadUrl}/${propertyId}/upload`, formData));
     } finally {
       this.uploadingModel = false;
-      this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS L'UPLOAD
+      this.cdr.markForCheck();
     }
   }
 
   private async uploadVideo(propertyId: number, file: File): Promise<void> {
     this.uploadingVideo = true;
-    this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE PENDANT L'UPLOAD
+    this.cdr.markForCheck();
     try {
       const formData = new FormData();
       formData.append('file', file);
       await firstValueFrom(this.http.post(`${this.videoUploadUrl}/${propertyId}/upload`, formData));
     } finally {
       this.uploadingVideo = false;
-      this.cdr.detectChanges();  // ← FORCE L'AFFICHAGE APRÈS L'UPLOAD
+      this.cdr.markForCheck();
     }
   }
 
@@ -679,6 +721,58 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       .replace('/api/public/models/', '/api/models/public/');
   }
  
+  // ─── Sharing (Super Admin only) ─────────────────────────────────────────────
+
+  loadSharingInfo(propertyId: number): void {
+    this.sharingLoading = true;
+    this.propertiesService.getSharingInfo(propertyId).subscribe({
+      next: admins => {
+        this.availableAdmins = admins;
+        this.selectedAdminIds = new Set(admins.filter(a => a.alreadyShared).map(a => a.id));
+        this.sharingLoading = false;
+        this.cdr.markForCheck();
+      },
+      error: () => {
+        this.sharingLoading = false;
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  toggleAdmin(adminId: number): void {
+    if (this.selectedAdminIds.has(adminId)) {
+      this.selectedAdminIds.delete(adminId);
+    } else {
+      this.selectedAdminIds.add(adminId);
+    }
+  }
+
+  isAdminSelected(adminId: number): boolean {
+    return this.selectedAdminIds.has(adminId);
+  }
+
+  saveSharing(): void {
+    if (!this.propertyId) return;
+    this.sharingLoading = true;
+    this.shareSaved = false;
+    const ids = Array.from(this.selectedAdminIds);
+
+    this.propertiesService.updateSharing(this.propertyId, ids).subscribe({
+      next: () => {
+        this.shareSaved = true;
+        this.sharingLoading = false;
+        this.cdr.markForCheck();
+        setTimeout(() => { this.shareSaved = false; this.cdr.markForCheck(); }, 2500);
+      },
+      error: () => {
+        this.sharingLoading = false;
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
   cancel(): void {
     this.router.navigate(['/admin/properties']);
   }
@@ -703,7 +797,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     const city$ = this.form.get('city')?.valueChanges || of('');
     const country$ = this.form.get('country')?.valueChanges || of('');
 
-    combineLatest([address$, city$, country$])
+    const sub1 = combineLatest([address$, city$, country$])
       .pipe(
         debounceTime(600),
         filter(() => !this.formSyncLock),
@@ -715,11 +809,12 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
         this.searchControl.setValue(query, { emitEvent: false });
         this.geocodeAndMove(query);
       });
+    this.subscriptions.push(sub1);
 
     const lat$ = this.form.get('latitude')?.valueChanges || of(null);
     const lng$ = this.form.get('longitude')?.valueChanges || of(null);
 
-    combineLatest([lat$, lng$])
+    const sub2 = combineLatest([lat$, lng$])
       .pipe(
         debounceTime(300),
         filter(() => !this.formSyncLock)
@@ -728,6 +823,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
         if (lat == null || lng == null) return;
         this.setMarkerPosition(Number(lat), Number(lng), true);
       });
+    this.subscriptions.push(sub2);
   }
 
   private initializeMap(): void {
@@ -763,19 +859,23 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     this.marker.on('dragend', () => {
       const position = this.marker?.getLatLng();
       if (!position) return;
-      this.updateFormFromCoords(position.lat, position.lng, true);
+      this.ngZone.run(() => {
+        this.updateFormFromCoords(position.lat, position.lng, true);
+      });
     });
 
     this.map.on('click', event => {
       const latlng = event.latlng;
-      this.setMarkerPosition(latlng.lat, latlng.lng, true);
-      this.updateFormFromCoords(latlng.lat, latlng.lng, true);
+      this.ngZone.run(() => {
+        this.setMarkerPosition(latlng.lat, latlng.lng, true);
+        this.updateFormFromCoords(latlng.lat, latlng.lng, true);
+      });
     });
 
     setTimeout(() => {
       this.map?.invalidateSize(true);
       this.mapReady = true;
-      this.cdr.detectChanges();
+      this.cdr.markForCheck();
     }, 200);
   }
 
@@ -829,19 +929,19 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
   onUseCurrentLocation(): void {
     if (!navigator.geolocation) {
       this.errorMessage = 'Geolocalisation indisponible.';
-      this.cdr.detectChanges();
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       position => {
         const { latitude, longitude } = position.coords;
-        this.setMarkerPosition(latitude, longitude, true);
-        this.updateFormFromCoords(latitude, longitude, true);
+        this.ngZone.run(() => {
+          this.setMarkerPosition(latitude, longitude, true);
+          this.updateFormFromCoords(latitude, longitude, true);
+        });
       },
       () => {
         this.errorMessage = 'Impossible de recuperer votre position.';
-        this.cdr.detectChanges();
       },
       { enableHighAccuracy: true, timeout: 8000 }
     );
@@ -853,15 +953,17 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     this.geocodingService.geocodeAddress(query)
       .pipe(finalize(() => {
         this.isGeocoding = false;
-        this.cdr.detectChanges();
+        this.cdr.markForCheck();
       }))
       .subscribe(result => {
         const item = Array.isArray(result) ? result[0] : null;
         if (!item) return;
         const lat = Number(item.lat);
         const lng = Number(item.lon);
-        this.setMarkerPosition(lat, lng, true);
-        this.updateFormFromCoords(lat, lng, false, item);
+        this.ngZone.run(() => {
+          this.setMarkerPosition(lat, lng, true);
+          this.updateFormFromCoords(lat, lng, false, item);
+        });
       });
   }
 
@@ -874,6 +976,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     this.formSyncLock = true;
     this.form.patchValue({ latitude: lat, longitude: lng }, { emitEvent: false });
     this.formSyncLock = false;
+    this.cdr.markForCheck();
 
     if (!withReverseGeocode && geocodeResult) {
       this.applyGeocodeResult(geocodeResult, lat, lng);
@@ -885,11 +988,13 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     this.geocodingService.reverseGeocode(lat, lng)
       .pipe(finalize(() => {
         this.isReverseGeocoding = false;
-        this.cdr.detectChanges();
+        this.cdr.markForCheck();
       }))
       .subscribe(result => {
         if (!result) return;
-        this.applyGeocodeResult(result, lat, lng);
+        this.ngZone.run(() => {
+          this.applyGeocodeResult(result, lat, lng);
+        });
       });
   }
 
@@ -911,7 +1016,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       { emitEvent: false }
     );
     this.formSyncLock = false;
-    this.cdr.detectChanges();
+    this.cdr.markForCheck();
   }
 
   private setMarkerPosition(lat: number, lng: number, animate: boolean): void {

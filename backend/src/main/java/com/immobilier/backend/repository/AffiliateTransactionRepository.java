@@ -31,10 +31,17 @@ public interface AffiliateTransactionRepository extends JpaRepository<AffiliateT
            "GROUP BY at.affiliate ORDER BY COUNT(at) DESC")
     List<Object[]> getAffiliateRanking(@Param("startDate") LocalDateTime startDate);
     
+    // Legacy — keeps paid-only ranking for payout reports
     @Query("SELECT at.affiliate, COUNT(at) as saleCount, SUM(at.commissionAmount) as totalCommission " +
            "FROM AffiliateTransaction at WHERE at.transactionDate >= :startDate AND at.isPaid = true " +
            "GROUP BY at.affiliate ORDER BY SUM(at.commissionAmount) DESC")
     List<Object[]> getAffiliateRankingByRevenue(@Param("startDate") LocalDateTime startDate);
+
+    // Ranking counts ALL transactions (paid and unpaid) — used for monthly leaderboard and bonus calculation
+    @Query("SELECT at.affiliate, COUNT(at) as saleCount, SUM(at.commissionAmount) as totalCommission " +
+           "FROM AffiliateTransaction at WHERE at.transactionDate >= :startDate " +
+           "GROUP BY at.affiliate ORDER BY SUM(at.commissionAmount) DESC")
+    List<Object[]> getRankingByAllCommissions(@Param("startDate") LocalDateTime startDate);
     
     @Query("SELECT at FROM AffiliateTransaction at WHERE at.transactionDate BETWEEN :startDate AND :endDate")
     List<AffiliateTransaction> findByTransactionDateBetween(@Param("startDate") LocalDateTime startDate, 
