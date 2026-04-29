@@ -11,7 +11,6 @@ import com.immobilier.backend.service.AuthService;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*") // CORS
 public class AuthController {
 
     private final AuthService authService;

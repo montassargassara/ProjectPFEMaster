@@ -20,7 +20,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/properties")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class PropertyController {
 
     private final PropertyService propertyService;

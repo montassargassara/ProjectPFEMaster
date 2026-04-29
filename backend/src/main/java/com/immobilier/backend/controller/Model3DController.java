@@ -17,7 +17,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/models")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:4200", allowCredentials = "true", maxAge = 3600)
 public class Model3DController {
 
     private final Model3DService model3DService;
@@ -51,7 +50,6 @@ public class Model3DController {
             headers.setContentLength(modelData.length);
             headers.setCacheControl("public, max-age=86400");
             headers.setContentDispositionFormData("inline", modelInfo.getFileName());
-            headers.set("Access-Control-Allow-Origin", "http://localhost:4200");
             
             log.info("✅ Serving public model ID: {}, size: {} bytes, type: {}", 
                 id, modelData.length, modelInfo.getFileType());
@@ -100,7 +98,6 @@ public class Model3DController {
             headers.setContentLength(modelData.length);
             headers.setCacheControl("public, max-age=86400");
             headers.setContentDispositionFormData("inline", modelInfo.getFileName());
-            headers.set("Access-Control-Allow-Origin", "http://localhost:4200");
             
             log.info("✅ Serving model for property ID: {}, model ID: {}, size: {} bytes", 
                 propertyId, modelInfo.getId(), modelData.length);

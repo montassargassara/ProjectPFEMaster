@@ -20,5 +20,9 @@ public enum NotificationType {
     SALE_OFFER_COMPLETED,     // affiliate notified sale was finalised
 
     // ── Monthly bonus ────────────────────────────────────────────────────────
-    MONTHLY_BONUS_AWARDED     // affiliate notified of a bonus for next month
+    MONTHLY_BONUS_AWARDED,    // affiliate notified of a bonus for next month
+
+    // ── Public client interest ───────────────────────────────────────────────
+    PROPERTY_INTEREST_RECEIVED // agency/super-admin notified a public client
+                               // expressed interest in one of their properties
 }

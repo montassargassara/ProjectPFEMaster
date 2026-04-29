@@ -149,8 +149,19 @@ admin/
   services/                     → HTTP wrappers (properties, share-request, notification,
                                   auth, affiliate, …)
   guards/                       → Route guards (auth protection + role isolation)
+public/                         → Public visitor portal — fully isolated from admin shell
+  layout/                       → Public header + footer + outlet
+  pages/home/                   → Hero + featured grids
+  pages/listing/                → /biens/vente and /biens/location (mode via route data)
+  pages/property-detail/        → /biens/:id with gallery, video, <model-viewer> 3D, similar
+  pages/account/                → /compte/login, /compte/register, /compte/dashboard
+  components/                   → Public property card, filter bar, interest modal
+  services/                     → ClientAuthService (own token store), InterestRequestService,
+                                  PublicPortalService, clientAuthGuard
+  models/                       → Public DTOs (PublicPropertyCard, PublicPropertyDetail, …)
 components/     → Shared / reusable UI components
-services/       → App-level HTTP clients
+services/       → App-level HTTP clients (incl. dual-token jwt-interceptor +
+                                          client-auth-error interceptor)
 models/         → TypeScript interfaces mirroring backend DTOs
                   (affiliate.model.ts mirrors backend affiliate DTOs exactly)
 app.routes.ts   → Central route definitions
@@ -171,7 +182,8 @@ The frontend calls the backend at `http://localhost:8080`. JWT tokens are attach
 | Responsable Commercial | Agency employee; sees agency properties                                    |
 | Commercial             | Agency employee; sees agency properties                                    |
 | Affiliate              | External sales partner; zone-based commission; isolated workspace          |
-| Buyer                  | Browses public listings, requests visits/info                              |
+| Client Public          | `CLIENT_PUBLIC` — self-registered buyer account; browses listings, sends "Intéressé" requests, tracks them in their dashboard. Distinct from the legacy in-agency `CLIENT` lead role |
+| Buyer (anonymous)      | Visitor with no account; browses public listings only                      |
 
 The role hierarchy for property access is:
 `SUPER_ADMIN → ADMIN → RESPONSABLE_COMMERCIAL → COMMERCIAL`
@@ -425,6 +437,7 @@ The affiliate interface operates as an isolated mini-portal within the admin she
 - `GET  /api/affiliate/my-ranking` — own ranking position (AFFILIATE only)
 - `GET  /api/affiliate/transactions` — own commission history (AFFILIATE only)
 - `GET  /api/affiliate/regions` — own assigned zones (AFFILIATE only)
+- `GET  /api/affiliate/suggested-zones` — top 5 expansion zones outside the affiliate's current scope (AFFILIATE only; returns `[]` on internal error, never 500)
 
 ### Sale Offers (`/api/sale-offers/**` — authenticated, method-level `@PreAuthorize`)
 
@@ -454,8 +467,9 @@ The affiliate interface operates as an isolated mini-portal within the admin she
 ## Key Backend Entities
 
 - `AffiliateProfile` — tracks status, bonus, approval metadata; linked 1:1 to `User`
-- `AffiliateRegion` — affiliate's assigned geographic zones with commission rates; `regionName` stored lowercase
-- `SaleOffer` — sale proposal submitted by affiliate; links affiliate, property, and buyer info
+- `AffiliateRegion` — affiliate's assigned geographic zone with commission rate. Stores explicit `country` + `city` columns (preferred — used by strict zone-key matching) plus a legacy `regionName` (lowercase) that an `@PrePersist`/`@PreUpdate` parser will derive from a `"Country, City"` string when the explicit columns are missing. `regionDescription` stores the country for display.
+- `Property` — has `isReservedByAffiliate` flag (set true on offer ACCEPTED, kept true after COMPLETED). For `LOCATION` category the entity's `@PrePersist` force-resets `commissionPercentage = 0`, `commissionType = "PERCENTAGE"`, `basePriceForCommission = null`, `isAffiliateEligible = false`, `isReservedByAffiliate = false` — so rentals can never enter the affiliate workflow even via direct API calls.
+- `SaleOffer` — sale proposal submitted by affiliate; links affiliate, property, and buyer info. On ACCEPTED, snapshots commission % + amount and triggers sibling auto-rejection.
 - `AffiliateTransaction` — completed commission record; tracks paid/unpaid state
 - `AffiliateActivity` — tracks VIEW/SHARE/CONTACT/VISIT actions for analytics
 - `MonthlyBonus` — persisted ranking bonus records per affiliate per month
@@ -476,6 +490,110 @@ The affiliate interface operates as an isolated mini-portal within the admin she
 | `transactionDate`      | `transactionDate`      |
 | `propertyPrice`        | `propertyPrice`        |
 | `paymentDate`          | `paymentDate`          |
+
+---
+
+# PUBLIC CLIENT PORTAL
+
+## Purpose
+
+A premium marketplace-style portal where visitors and registered public clients
+browse properties without ever entering the admin shell. Completely isolated
+from the agency/affiliate workspaces — different layout, different routes,
+different auth store, different token. The only thing it shares with the admin
+side is the backend property data and the JWT signing secret.
+
+## Frontend Routes (`maison3d-immobilier/src/app/public/`)
+
+| Route                | Component                          | Auth                              |
+|----------------------|------------------------------------|-----------------------------------|
+| `/`                  | `PublicHomeComponent`              | Public                            |
+| `/biens/vente`       | `PublicListingComponent` (mode=VENTE)    | Public                      |
+| `/biens/location`    | `PublicListingComponent` (mode=LOCATION) | Public                      |
+| `/biens/:id`         | `PublicPropertyDetailComponent`    | Public                            |
+| `/compte/login`      | `PublicLoginComponent`             | Public                            |
+| `/compte/register`   | `PublicRegisterComponent`          | Public                            |
+| `/compte/dashboard`  | `PublicDashboardComponent`         | `clientAuthGuard` (CLIENT_PUBLIC) |
+
+All public routes are nested under `PublicLayoutComponent` — its own header
+(brand + nav + login/avatar) and footer, fully separate from the admin shell.
+Legacy `/property/:id` redirects to `/biens/:id` for backward compatibility.
+
+## Public Browsing Visibility
+
+Visitors see any property where `isActive = true AND statut = 'DISPONIBLE'`.
+The vente/location split is by price field (`prixVente > 0` vs `prixLocation > 0`).
+Multi-tenant share-request gating does NOT apply to the public portal — that
+restriction only governs the internal admin views.
+
+## Public Portal Backend API (`/api/properties/public/portal/**` — `permitAll`)
+
+- `GET /vente` — sale listings; filters: `q, country, city, type, minPrice, maxPrice, minSurface, maxSurface, minRooms`
+- `GET /location` — rental listings; same filter set
+- `GET /featured/vente?limit=N`, `GET /featured/location?limit=N` — homepage grids
+- `GET /{id}` — detail (gallery URLs, video URLs, 3D model URL, agency name, map coords)
+- `GET /{id}/similar?limit=N` — same-city/same-type fallbacks
+- `GET /facets/{countries|cities|types}` — filter dropdown data
+
+Detail DTO uses these media URL prefixes (must match the SecurityConfig
+`permitAll` rules exactly): `/api/images/public/{id}`, `/api/videos/public/{id}`,
+`/api/models/public/{id}`. Wrong prefix → 403 from the public-asset filter.
+
+## Client Public Auth (`/api/client/auth/**`)
+
+- `POST /register` — `permitAll`. Creates `User(role=CLIENT_PUBLIC, isActive=true)`
+  and immediately returns a JWT. No approval workflow.
+- `POST /login` — `permitAll`. Refuses non-`CLIENT_PUBLIC` accounts so admins
+  cannot accidentally log into the public space and vice versa.
+- `GET /me` — `hasRole('CLIENT_PUBLIC')`. Returns the current profile.
+
+Service `ClientPublicAuthService` lives separate from `AuthService`. Tokens
+share the same JWT signing secret but the role claim (`CLIENT_PUBLIC`) is what
+gates everything downstream.
+
+## Interest Request Workflow ("Intéressé par ce bien")
+
+1. Public client clicks the CTA on `/biens/:id`.
+2. **Not logged in** → redirected to `/compte/login?redirect=/biens/{id}`.
+   Login bounces back to the same property after success.
+3. **Logged in** → `InterestModalComponent` opens, prefilled with the user's
+   name + phone. Fields: `fullName`, `telephone`, `proposedBudget` (optional),
+   `message`.
+4. Submit → `POST /api/client/interests`. `InterestRequestService.submit()`:
+   - Creates an `InterestRequest` row (status=PENDING).
+   - Resolves the property's owner: `agencyAdmin` for `AGENCY_OWNED`, first
+     SUPER_ADMIN for `SUPER_ADMIN_OWNED`.
+   - **Per-agency CRM lead auto-creation**: if the public client has no
+     `ClientInfo` row tied to that `agencyAdminId` yet, creates one with
+     `visibilityType=AGENCY_CLIENT` and `source="Portail public — Intéressé"`.
+     Idempotent — repeat interest from the same client to the same agency
+     reuses the existing row.
+   - **Multi-agency rule**: same client → property B from a different agency
+     → a NEW `ClientInfo` row in that other agency's CRM. Never share leads
+     across agencies.
+   - Sends `PROPERTY_INTEREST_RECEIVED` notification to the owner.
+5. Public client sees the submission on `/compte/dashboard` under
+   "Mes biens d'intérêt".
+
+`GET /api/client/interests/mine` returns the current client's submissions.
+
+## 3D Model Viewer
+
+Inline rendering uses Google's `<model-viewer>` web component, loaded once
+via `<script type="module" src="…@google/model-viewer…">` in `index.html`.
+The detail page declares `schemas: [CUSTOM_ELEMENTS_SCHEMA]` to accept the
+custom element. **Never** stream a GLB/GLTF directly into an `<iframe>` —
+browsers treat it as a download and prompt the user to install something.
+
+## Key Public Portal Backend Entities
+
+- `User.role = CLIENT_PUBLIC` — distinct from the legacy in-agency `CLIENT`.
+- `InterestRequest` — links public client + property + owner-at-submission;
+  status PENDING / CONTACTED / CLOSED.
+- `users.role` column **must be VARCHAR(40)**, not MySQL ENUM. Same trap as
+  `notifications.type` — a fresh role added to the enum will trigger
+  `Data truncated for column 'role'` until you run:
+  `ALTER TABLE users MODIFY COLUMN role VARCHAR(40) NOT NULL;`
 
 ---
 
@@ -539,6 +657,7 @@ Spring Security enforces role checks at every API endpoint:
 - `/api/affiliate/**` → `hasRole('AFFILIATE')` (security config wildcard — evaluated after the ranking exception above)
 - `/api/admin/affiliates/**` → `hasRole('SUPER_ADMIN')` (class-level `@PreAuthorize`)
 - `/api/sale-offers/**` → authenticated + method-level `@PreAuthorize` per operation
+- `/api/notifications/**` → `authenticated()` — must be listed explicitly so all roles (including AFFILIATE) can fetch their own notifications and unread count without 403
 
 Frontend role checks are UX only. Backend is always the authoritative security layer.
 
@@ -574,6 +693,7 @@ Users receive in-app notifications for all key lifecycle events relevant to thei
 | `SALE_OFFER_REJECTED`      | Affiliate    | Agency admin rejects the sale offer              |
 | `SALE_OFFER_COMPLETED`     | Affiliate    | Sale offer marked as completed                   |
 | `MONTHLY_BONUS_AWARDED`    | Affiliate    | Affiliate receives a ranking bonus               |
+| `PROPERTY_INTEREST_RECEIVED` | Agency Admin **or** Super Admin | Public client clicks "Intéressé par ce bien"; routed to the property's `agencyAdmin` for AGENCY_OWNED, or the first Super Admin for SUPER_ADMIN_OWNED |
 
 ## Implementation
 
@@ -605,6 +725,9 @@ Users receive in-app notifications for all key lifecycle events relevant to thei
 - **Never expose one agency's data to another.** Any query that returns property lists must go through `PropertyVisibilityService` or the visibility JPQL query.
 - **Always preserve Super Admin master visibility.** Super Admin bypasses agency filtering entirely.
 - **Always secure backend filtering first.** Frontend role checks are UX only — they can be bypassed. The backend must enforce the same rules independently.
+- **LOCATION (rental) properties never use commission or the affiliate network.** The property-edit form hides the Commission and Réseau affilié blocks for rentals, and `Property.@PrePersist` force-resets `commissionPercentage = 0`, `isAffiliateEligible = false`, `basePriceForCommission = null`, `isReservedByAffiliate = false` for `LOCATION`. Do not bypass this rule with optional UI overrides — it is the single source of truth.
+- **Do not put `@NotNull` on `prixVente` in `CreatePropertyRequest`.** A LOCATION property legitimately leaves `prixVente` null. Cross-field "at least one price" validation is enforced by `PropertyService.validateCategoryAndPrices()` and `Property.@PrePersist`.
+- **In the property-edit Angular component, use `markForCheck()` — never `detectChanges()` — for form sync triggered by map clicks, drag, geolocation, or geocode results.** Synchronous `detectChanges()` inside `ngZone.run(...)` causes NG0100 (`ExpressionChangedAfterItHasBeenCheckedError`).
 
 ## Sharing Workflow
 
@@ -617,6 +740,69 @@ Users receive in-app notifications for all key lifecycle events relevant to thei
 - **Never count the full sale price as agency revenue for shared properties.** When a `SUPER_ADMIN_OWNED` property is transacted through an agency, only the negotiated commission amount is attributed to the agency.
 - **Commission calculation lives on the backend.** `expectedCommissionAmount` is computed at query time — never stored — to prevent stale values if the property price changes.
 
+## Public Client Portal
+
+- **`CLIENT_PUBLIC` is not the same role as `CLIENT`.** `CLIENT` is the legacy
+  in-agency CRM lead role. `CLIENT_PUBLIC` is the self-registered buyer
+  account that owns the public dashboard. Don't reuse one for the other.
+- **Public-portal endpoints must NEVER leak commission or affiliate metadata.**
+  `PublicPortalService` returns lean DTOs with only buyer-facing fields
+  (price, location, images, video, 3D model). No `commissionPercentage`,
+  no `isAffiliateEligible`, no share-request state.
+- **Image/video/model URLs in public DTOs must use the SecurityConfig
+  permitAll prefixes**: `/api/images/public/{id}`, `/api/videos/public/{id}`,
+  `/api/models/public/{id}`. Anything else (e.g. `/api/public/images/{id}`)
+  returns 403 because it doesn't match the permit rule.
+- **3D models render in-page via `<model-viewer>`, never via `<iframe>`.**
+  Iframes pointing at GLB/GLTF binaries trigger a download prompt.
+- **Auto-create a per-agency CRM lead on every interest submission.**
+  `InterestRequestService.submit()` ensures a `ClientInfo` row exists for the
+  pair (`publicClient`, `agencyAdmin`) with `visibilityType=AGENCY_CLIENT`.
+  Multi-agency rule: the same public client interested in property B from a
+  different agency creates a SECOND `ClientInfo` row — never share leads
+  across agencies.
+- **Login/register endpoints are `permitAll`; everything else under
+  `/api/client/**` is `hasRole('CLIENT_PUBLIC')`.** SecurityConfig order
+  matters — the two `permitAll` POST matchers must come BEFORE the wildcard
+  `hasRole` rule.
+- **`users.role` column must be VARCHAR, not ENUM.** Adding any new role
+  (next time we extend `RoleType`) breaks inserts with
+  `Data truncated for column 'role'` until the DBA runs the ALTER. Same trap
+  as the `notifications.type` migration.
+
+## CORS
+
+- **There is exactly ONE CORS configuration in the project**: the
+  `CorsConfigurationSource` bean in `SecurityConfig`. It uses
+  `setAllowedOrigins(List.of("http://localhost:4200"))` (explicit list, not
+  wildcard pattern).
+- **Never add `@CrossOrigin` to a controller.** Spring MVC's annotation-based
+  CORS handler runs in addition to Spring Security's filter — both add
+  `Access-Control-Allow-Origin` and the browser rejects the response with
+  "header contains multiple values, only one is allowed".
+- **Never call `headers.set("Access-Control-Allow-Origin", …)` in an endpoint
+  body.** Same duplication problem as `@CrossOrigin`. The historical bug had
+  this in `Model3DController` and `VideoController`, blocking the 3D viewer
+  for the entire public portal.
+
+## JWT Interceptor (Frontend)
+
+The app has TWO independent token stores in localStorage:
+- `AdminAuthService` → admin/agency/affiliate JWT
+- `ClientAuthService` → public-client JWT (`client_public_token`)
+
+The interceptor in `services/http/jwt-interceptor.ts` routes by request URL:
+
+- `/api/client/**` → ALWAYS uses the client token (never the admin token).
+  Sending an admin JWT here causes a role mismatch and 403.
+- everything else → prefers the admin token, falls back to the client token
+  only if no admin is logged in.
+
+A second interceptor (`client-auth-error.interceptor.ts`) auto-clears the
+client token and redirects to `/compte/login?redirect=…` on 401/403 from
+`/api/client/**` (excluding the login/register endpoints, which surface
+their own form errors).
+
 ## Affiliate Module
 
 - **Never expose admin spaces to affiliate users.** `AdminAuthGuard` must reject all non-affiliate routes for `ROLE_AFFILIATE`.
@@ -627,6 +813,12 @@ Users receive in-app notifications for all key lifecycle events relevant to thei
 - **Never throw 500 for missing affiliate profile.** `getMyProfile` returns a default PENDING DTO from the `User` entity when no `AffiliateProfile` row exists. `getEligibleProperties` returns an empty list when the affiliate is not ACTIVE.
 - **Use `/api/affiliate/ranking` for the ranking page** — not `/api/admin/affiliates/ranking`. SecurityConfig has a specific `authenticated()` exception for this path before the `hasRole('AFFILIATE')` wildcard, making it reachable by all roles.
 - **Always use `/api/images/public/{id}` for property image URLs** in DTO converters (`AffiliateService.toAffiliatePropertyDTO`, `SaleOfferService.toDTO`). The wrong path `/api/public/images/{id}` causes 403 because it does not match the `permitAll()` rule in SecurityConfig.
+- **Match affiliate zones strictly by `(country, city)` pair.** The repository query `findEligiblePropertiesForAffiliateZoneKeys` uses `CONCAT(LOWER(country), '|', LOWER(city)) IN :zoneKeys`. The legacy `findEligiblePropertiesForAffiliateRegions` (single region name) is kept only for affiliates whose `AffiliateRegion` rows have not yet been backfilled with explicit country/city — never use it for new code.
+- **Reserve a property the moment an affiliate's offer is ACCEPTED.** `SaleOfferService.respondToOffer` flips `property.isReservedByAffiliate = true`, then calls `autoRejectSiblingOffers` which moves every other PENDING offer on that property to REJECTED with reason `"Une autre offre a été retenue pour ce bien."` and notifies each losing affiliate. Never accept a second concurrent offer for the same property.
+- **Block new submissions on reserved properties.** `SaleOfferService.submitOffer` throws if `property.isReservedByAffiliate` is true. Defense-in-depth, even though the eligible-properties query already excludes reserved rows.
+- **Mark the property SOLD/RENTED on offer COMPLETED.** `SaleOfferService.completeOffer` sets `property.statut = "VENDU"` for VENTE properties (or `"LOUE"` for rentals) and keeps `isReservedByAffiliate = true`. The property then disappears from agency property management and never resurfaces in any listing — do not rely on the reservation flag alone.
+- **Never throw 500 from `getSuggestedZones`.** Wrap the entire computation in a try/catch that logs the error and returns `[]`. Affiliate dashboard widgets must degrade silently when data is missing — they must never break the dashboard load.
+- **The Modifier client modal is role-aware.** For `AFFILIATE` clients it must show country/city dropdowns sourced from `/api/properties/public/countries` + `/api/properties/public/cities` and persist the change through `UpdateClientRequest.country` + `city`, which `ClientManagementService.updateClient()` uses to rebuild `clientInfo.zoneRecherchee` and update the affiliate's `AffiliateRegion`. Normal clients keep the legacy free-text Budget + Zone fields.
 
 ---
 
@@ -638,8 +830,11 @@ Users receive in-app notifications for all key lifecycle events relevant to thei
 4. Role visibility isolation (AFFILIATE workspace, route guard, sidebar, API guard)
 5. Commission engine (agency per-share negotiation + affiliate zone-based rates)
 6. Dashboard financial accuracy (commission-only revenue for shared properties)
-7. Mobile responsive UI
-8. 3D premium module
+7. Public client portal (browsing, CLIENT_PUBLIC accounts, Intéressé workflow,
+   per-agency lead auto-creation, in-page 3D viewer)
+8. Mobile responsive UI
+9. 3D premium module
+10. Reviews + favorites for public clients (Phase 3 — pending)
 
 ---
 
@@ -647,10 +842,12 @@ Users receive in-app notifications for all key lifecycle events relevant to thei
 
 - Agency marketplace sharing (cross-platform property syndication)
 - Advanced commissions engine (tiered rates, split commissions, referral chains)
-- Affiliate public registration portal (standalone onboarding page)
 - Lead distribution system (auto-assign leads to agents by zone / availability)
 - Smart property matching AI (buyer profile → property recommendations)
 - Affiliate performance analytics (conversion funnel, zone heat maps)
+- Property reviews / avis system (public clients, with verified-interaction badge)
+- Favorites / saved searches for `CLIENT_PUBLIC` accounts
+- Recently viewed + recommended properties on the public portal
 
 ---
 

@@ -22,7 +22,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/affiliate")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class AffiliateController {
 
     private final AffiliateService affiliateService;

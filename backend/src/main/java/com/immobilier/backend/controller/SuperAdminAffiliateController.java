@@ -25,7 +25,6 @@ import java.util.List;
 @RequestMapping("/api/admin/affiliates")
 @PreAuthorize("hasRole('SUPER_ADMIN')")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class SuperAdminAffiliateController {
 
     private final AffiliateService affiliateService;

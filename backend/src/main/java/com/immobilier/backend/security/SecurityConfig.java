@@ -51,6 +51,12 @@ public class SecurityConfig {
                 // Affiliate public registration (creates PENDING account; login blocked until approved)
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/affiliate/register").permitAll()
 
+                // ── Public client auth (register/login open; me requires JWT) ────────
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/client/auth/register").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/client/auth/login").permitAll()
+                .requestMatchers("/api/client/auth/**").authenticated()
+                .requestMatchers("/api/client/**").hasRole("CLIENT_PUBLIC")
+
                 // ── Super Admin only ─────────────────────────────────────────────────
                 .requestMatchers("/api/super-admin/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/api/admin/affiliates/**").hasRole("SUPER_ADMIN")
@@ -101,16 +107,24 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
         
+    /**
+     * Single source of truth for CORS. ALL controllers must rely on this —
+     * no `@CrossOrigin` annotations anywhere, otherwise Spring MVC's CORS
+     * handler runs in addition to Spring Security's filter and you end up
+     * with duplicated `Access-Control-Allow-Origin` headers (browsers reject
+     * the response with "header contains multiple values").
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.addAllowedOriginPattern("*");
+        // Dev front-end origin. Add prod hosts here as needed.
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:4200"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList(
-            "Authorization", 
-            "Content-Type", 
-            "Accept", 
-            "Origin", 
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "Origin",
             "X-Requested-With"
         ));
         configuration.setExposedHeaders(Arrays.asList("Authorization"));

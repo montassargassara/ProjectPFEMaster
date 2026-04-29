@@ -1,0 +1,211 @@
+import { Component, Input, inject } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
+import { PublicPropertyCard } from '../models/public-property.model';
+import { PublicPortalService } from '../services/public-portal.service';
+
+@Component({
+  selector: 'app-public-property-card',
+  standalone: true,
+  imports: [CommonModule, RouterLink],
+  template: `
+    <a class="card" [routerLink]="['/biens', property.id]" *ngIf="property">
+      <div class="thumb" [class.has-3d]="property.hasModel3d">
+        <img *ngIf="imageUrl()" [src]="imageUrl()" [alt]="property.titre" loading="lazy" />
+        <div class="thumb-fallback" *ngIf="!imageUrl()">
+          <span>{{ initials() }}</span>
+        </div>
+        <span class="badge category" [class.rent]="property.category === 'LOCATION'">
+          {{ property.category === 'LOCATION' ? 'Location' : 'Vente' }}
+        </span>
+        <span class="badge tridi" *ngIf="property.hasModel3d">Visite 3D</span>
+      </div>
+      <div class="body">
+        <h3 class="title">{{ property.titre }}</h3>
+        <div class="location">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+            <circle cx="12" cy="10" r="3"/>
+          </svg>
+          <span>{{ locationLabel() }}</span>
+        </div>
+        <div class="meta">
+          <span *ngIf="property.surface"><strong>{{ property.surface }}</strong> m²</span>
+          <span *ngIf="property.nbChambres"><strong>{{ property.nbChambres }}</strong> ch.</span>
+          <span *ngIf="property.type">{{ formatType(property.type) }}</span>
+        </div>
+        <div class="footer">
+          <span class="price">{{ priceLabel() }}</span>
+          <span class="agency" *ngIf="property.agencyName">{{ property.agencyName }}</span>
+        </div>
+      </div>
+    </a>
+  `,
+  styles: [
+    `
+      :host { display: block; }
+      .card {
+        display: flex;
+        flex-direction: column;
+        border-radius: 14px;
+        overflow: hidden;
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        text-decoration: none;
+        color: inherit;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        height: 100%;
+      }
+      .card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 18px 40px -16px rgba(15, 23, 42, 0.18);
+        border-color: #cbd5e1;
+      }
+      .thumb {
+        position: relative;
+        aspect-ratio: 4 / 3;
+        background: #f1f5f9;
+        overflow: hidden;
+      }
+      .thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        transition: transform 0.4s ease;
+      }
+      .card:hover .thumb img { transform: scale(1.05); }
+      .thumb-fallback {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #cbd5e1, #94a3b8);
+        color: #fff;
+        font-weight: 700;
+        font-size: 28px;
+        letter-spacing: 1px;
+      }
+      .badge {
+        position: absolute;
+        top: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 5px 10px;
+        border-radius: 999px;
+        backdrop-filter: blur(6px);
+      }
+      .category {
+        left: 12px;
+        background: rgba(11, 107, 203, 0.92);
+        color: #fff;
+      }
+      .category.rent {
+        background: rgba(16, 185, 129, 0.92);
+      }
+      .tridi {
+        right: 12px;
+        background: rgba(245, 158, 11, 0.94);
+        color: #fff;
+      }
+      .body {
+        padding: 16px 16px 18px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        flex: 1;
+      }
+      .title {
+        font-size: 16px;
+        font-weight: 600;
+        margin: 0;
+        color: #0f172a;
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .location {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        color: #64748b;
+        font-size: 13px;
+      }
+      .meta {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: #475569;
+        padding-top: 4px;
+        border-top: 1px dashed #e2e8f0;
+        margin-top: 4px;
+        padding-top: 10px;
+      }
+      .meta strong { color: #0f172a; }
+      .footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        margin-top: auto;
+        padding-top: 8px;
+      }
+      .price {
+        font-size: 18px;
+        font-weight: 700;
+        color: #0b6bcb;
+      }
+      .agency {
+        font-size: 12px;
+        color: #94a3b8;
+        max-width: 50%;
+        text-align: right;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+    `,
+  ],
+})
+export class PublicPropertyCardComponent {
+  @Input({ required: true }) property!: PublicPropertyCard;
+  private portal = inject(PublicPortalService);
+
+  imageUrl(): string {
+    return this.portal.resolveImage(this.property.mainImageUrl);
+  }
+
+  initials(): string {
+    return (this.property.titre || '?').slice(0, 2).toUpperCase();
+  }
+
+  locationLabel(): string {
+    const parts = [this.property.city, this.property.country].filter(Boolean);
+    return parts.length ? parts.join(', ') : 'Localisation non spécifiée';
+  }
+
+  priceLabel(): string {
+    if (this.property.category === 'LOCATION' && this.property.prixLocation) {
+      return `${this.formatNumber(this.property.prixLocation)} TND/mois`;
+    }
+    if (this.property.prixVente) {
+      return `${this.formatNumber(this.property.prixVente)} TND`;
+    }
+    return 'Prix sur demande';
+  }
+
+  formatType(t: string): string {
+    if (!t) return '';
+    return t.charAt(0) + t.slice(1).toLowerCase();
+  }
+
+  private formatNumber(n: number): string {
+    return new Intl.NumberFormat('fr-FR').format(n);
+  }
+}

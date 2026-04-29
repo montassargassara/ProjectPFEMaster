@@ -1,7 +1,5 @@
 // app.routes.ts
 import { Routes } from '@angular/router';
-import { PropertyListComponent } from './components/property-list/property-list';
-import { PropertyViewerComponent } from './components/property-viewer/property-viewer';
 import { AdminComponent } from './admin/admin-component/admin-component';
 import { AdminAuthGuard } from './admin/guards/admin-auth-guard';
 import { AdminLoginComponent } from './admin/admin-login/admin-login';
@@ -24,12 +22,37 @@ import { AffiliateOffersComponent } from './admin/affiliate-offers/affiliate-off
 import { AffiliateEarningsComponent } from './admin/affiliate-earnings/affiliate-earnings';
 import { AffiliateIncomingOffersComponent } from './admin/affiliate-incoming-offers/affiliate-incoming-offers';
 
-export const routes: Routes = [
-  // Routes publiques
-  { path: '', component: PropertyListComponent },
-  { path: 'property/:id', component: PropertyViewerComponent },
+import { PublicLayoutComponent } from './public/layout/public-layout.component';
+import { PublicHomeComponent } from './public/pages/home/home.component';
+import { PublicListingComponent } from './public/pages/listing/listing.component';
+import { PublicPropertyDetailComponent } from './public/pages/property-detail/property-detail.component';
+import { PublicLoginComponent } from './public/pages/account/login.component';
+import { PublicRegisterComponent } from './public/pages/account/register.component';
+import { PublicDashboardComponent } from './public/pages/account/dashboard.component';
+import { clientAuthGuard } from './public/services/client-auth.guard';
 
-  // Routes admin
+export const routes: Routes = [
+  // ── Public visitor portal ─────────────────────────────────────────────────
+  {
+    path: '',
+    component: PublicLayoutComponent,
+    children: [
+      { path: '', component: PublicHomeComponent, pathMatch: 'full' },
+      { path: 'biens/vente', component: PublicListingComponent, data: { mode: 'VENTE' } },
+      { path: 'biens/location', component: PublicListingComponent, data: { mode: 'LOCATION' } },
+      { path: 'biens/:id', component: PublicPropertyDetailComponent },
+
+      // Public client account
+      { path: 'compte/login', component: PublicLoginComponent },
+      { path: 'compte/register', component: PublicRegisterComponent },
+      { path: 'compte/dashboard', component: PublicDashboardComponent, canActivate: [clientAuthGuard] },
+    ],
+  },
+
+  // Backward-compat: legacy /property/:id → new /biens/:id
+  { path: 'property/:id', redirectTo: 'biens/:id', pathMatch: 'full' },
+
+  // ── Admin portal (unchanged) ──────────────────────────────────────────────
   {
     path: 'admin/login',
     component: AdminLoginComponent
@@ -65,6 +88,6 @@ export const routes: Routes = [
     ]
   },
 
-  // Redirection pour les routes non trouvées
+  // Catch-all → home
   { path: '**', redirectTo: '' }
 ];

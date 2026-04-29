@@ -17,7 +17,6 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/videos")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "http://localhost:4200", allowCredentials = "true", maxAge = 3600)
 public class VideoController {
 
     private final VideoService videoService;
@@ -48,7 +47,6 @@ public class VideoController {
             headers.setContentLength(videoInfo.getFileSize());
             headers.setCacheControl("public, max-age=86400");
             headers.set(HttpHeaders.ACCEPT_RANGES, "bytes");
-            headers.set("Access-Control-Allow-Origin", "http://localhost:4200");
             
             log.info("✅ Serving video ID: {}, size: {} bytes", id, videoData.length);
             
@@ -66,7 +64,6 @@ public class VideoController {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.IMAGE_JPEG);
             headers.setCacheControl("public, max-age=86400");
-            headers.set("Access-Control-Allow-Origin", "http://localhost:4200");
             
             return new ResponseEntity<>(thumbnail, headers, HttpStatus.OK);
         } catch (RuntimeException e) {

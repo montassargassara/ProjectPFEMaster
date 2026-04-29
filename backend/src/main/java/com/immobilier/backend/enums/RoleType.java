@@ -6,5 +6,6 @@ public enum RoleType {
     RESPONSABLE_COMMERCIAL,
     COMMERCIAL,
     AFFILIATE,
-    CLIENT
+    CLIENT,
+    CLIENT_PUBLIC
 }

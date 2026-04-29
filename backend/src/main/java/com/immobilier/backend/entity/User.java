@@ -44,8 +44,11 @@ public class User {
     @Column(unique = true)
     private String telephone;
     
+    // VARCHAR (not MySQL ENUM) so adding a new RoleType value doesn't require
+    // a destructive schema change. Migration for existing DBs:
+    //   ALTER TABLE users MODIFY COLUMN role VARCHAR(40) NOT NULL;
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "VARCHAR(40)")
     private RoleType role;
     
     @Column(name = "is_active")

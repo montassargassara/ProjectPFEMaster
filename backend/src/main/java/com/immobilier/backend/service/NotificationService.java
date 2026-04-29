@@ -62,6 +62,8 @@ public class NotificationService {
                 return "SALE_OFFER";
             case MONTHLY_BONUS_AWARDED:
                 return "MONTHLY_BONUS";
+            case PROPERTY_INTEREST_RECEIVED:
+                return "PROPERTY_INTEREST";
             default:
                 return null;
         }

@@ -15,7 +15,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/public")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*", maxAge = 3600)
 public class PublicMediaController {
 
     private final PropertyService propertyService;
