@@ -1,5 +1,6 @@
 import { ChangeDetectorRef, Component, HostBinding, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import {
   ApexAxisChartSeries,
@@ -18,15 +19,19 @@ import {
 } from 'ng-apexcharts';
 import {
   AdminDashboardService,
+  DashboardPropertyItem,
   DashboardSnapshot,
-  PropertyListItem,
+  DashboardValidationItem,
+  ExpiredRentalItem,
   RecentClient,
 } from '../services/admin-dashboard.service';
+import { MessageService, MessageDTO } from '../services/message.service';
+import { AdminAuthService } from '../services/admin-auth';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterModule, NgApexchartsModule],
+  imports: [CommonModule, RouterModule, NgApexchartsModule, FormsModule],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss',
 })
@@ -45,13 +50,44 @@ export class DashboardComponent implements OnInit {
   recentClients: RecentClient[] = [];
   recentAffiliates: RecentClient[] = [];
 
-  constructor(private dashboardService: AdminDashboardService,
-    private cdr: ChangeDetectorRef 
+  // ── Messaging state ───────────────────────────────────────────────────
+  unreadMessages: MessageDTO[] = [];
+  recentConversations: MessageDTO[] = [];
+  unreadCount = 0;
+
+  // ── Expired rentals state ─────────────────────────────────────────────
+  expiredRentals: ExpiredRentalItem[] = [];
+
+  // ── Validation items state ────────────────────────────────────────────
+  validationItems: DashboardValidationItem[] = [];
+
+  // ── Send message modal ────────────────────────────────────────────────
+  showSendMsgModal = false;
+  sendMsgReceiverId: number | null = null;
+  sendMsgReceiverName = '';
+  sendMsgContent = '';
+  sendMsgLoading = false;
+  sendMsgError = '';
+
+  get currentUserId(): number | null {
+    return this.authService.getCurrentUser()?.id ?? null;
+  }
+
+  get currentUserRole(): string {
+    return (this.authService.getCurrentUser()?.role ?? '').toUpperCase();
+  }
+
+  constructor(
+    private dashboardService: AdminDashboardService,
+    private messageService: MessageService,
+    private authService: AdminAuthService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
     this.loadTheme();
     this.loadDashboardData();
+    this.loadSideData();
   }
 
   ngAfterViewInit(): void {
@@ -117,6 +153,98 @@ export class DashboardComponent implements OnInit {
     });
   }
 
+  loadSideData(): void {
+    const role = this.currentUserRole;
+    if (role === 'AFFILIATE' || role === 'CLIENT_PUBLIC') return;
+
+    this.messageService.getInbox().subscribe({
+      next: msgs => {
+        this.unreadMessages = msgs.filter(m => !m.read).slice(0, 6);
+        this.unreadCount = this.unreadMessages.length;
+      },
+      error: () => {}
+    });
+
+    this.messageService.getConversations().subscribe({
+      next: convs => { this.recentConversations = convs; },
+      error: () => {}
+    });
+
+    this.dashboardService.getExpiredRentals().subscribe({
+      next: items => { this.expiredRentals = items; },
+      error: () => {}
+    });
+
+    this.dashboardService.getDashboardValidations(6).subscribe({
+      next: items => { this.validationItems = items; },
+      error: () => {}
+    });
+  }
+
+  openSendMsg(receiverId: number, receiverName: string): void {
+    this.sendMsgReceiverId = receiverId;
+    this.sendMsgReceiverName = receiverName;
+    this.sendMsgContent = '';
+    this.sendMsgError = '';
+    this.showSendMsgModal = true;
+  }
+
+  closeSendMsg(): void {
+    this.showSendMsgModal = false;
+  }
+
+  submitSendMsg(): void {
+    if (!this.sendMsgContent.trim() || !this.sendMsgReceiverId) return;
+    this.sendMsgLoading = true;
+    this.sendMsgError = '';
+    this.messageService.sendMessage({ receiverId: this.sendMsgReceiverId, content: this.sendMsgContent.trim() }).subscribe({
+      next: () => {
+        this.sendMsgLoading = false;
+        this.showSendMsgModal = false;
+        this.loadSideData();
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.sendMsgLoading = false;
+        this.sendMsgError = err?.error?.error ?? 'Erreur lors de l\'envoi.';
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  markMessageRead(id: number): void {
+    this.messageService.markAsRead(id).subscribe({
+      next: () => {
+        this.unreadMessages = this.unreadMessages.map(m => m.id === id ? { ...m, read: true } : m);
+        this.unreadCount = this.unreadMessages.filter(m => !m.read).length;
+        this.cdr.detectChanges();
+      },
+      error: () => {}
+    });
+  }
+
+  getValidationLabel(item: DashboardValidationItem): string {
+    if (item.ownerType === 'AGENCY_OWNED') return item.agencyAdminName ?? 'Agence';
+    if (item.ownerType === 'SUPER_ADMIN_OWNED') return 'Super Admin';
+    return item.createdByName ?? '—';
+  }
+
+  getValidationClass(item: DashboardValidationItem): string {
+    if (item.ownerType === 'AGENCY_OWNED') return 'badge-agency';
+    if (item.ownerType === 'SUPER_ADMIN_OWNED') return 'pill-highlight';
+    return 'pill-available';
+  }
+
+  formatRoleName(role: string): string {
+    switch ((role ?? '').toUpperCase()) {
+      case 'SUPER_ADMIN': return 'Super Admin';
+      case 'ADMIN': return 'Admin Agence';
+      case 'RESPONSABLE_COMMERCIAL': return 'Resp. Commercial';
+      case 'COMMERCIAL': return 'Commercial';
+      default: return role ?? '—';
+    }
+  }
+
   toggleTheme(): void {
     this.isDarkTheme = !this.isDarkTheme;
     localStorage.setItem('adminTheme', this.isDarkTheme ? 'dark' : 'light');
@@ -177,7 +305,7 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  formatPropertyTitle(property: PropertyListItem): string {
+  formatPropertyTitle(property: DashboardPropertyItem): string {
     return property.titre || 'Bien sans titre';
   }
 
@@ -196,7 +324,7 @@ export class DashboardComponent implements OnInit {
     }
   }
 
-  trackById(_: number, item: PropertyListItem): number {
+  trackById(_: number, item: DashboardPropertyItem): number {
     return item.id;
   }
 

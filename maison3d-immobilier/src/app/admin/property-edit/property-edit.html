@@ -11,12 +11,44 @@
     </div>
     <div class="pe-topbar-actions">
       <button class="btn-ghost" type="button" (click)="cancel()">Annuler</button>
-      <button class="btn-primary" type="button" [disabled]="saving" (click)="onSubmit()">
+      <button *ngIf="canApprove" class="btn-success" type="button" (click)="approveProperty()">
+        <i class="fas fa-check"></i> Valider
+      </button>
+      <button *ngIf="canApprove" class="btn-warning" type="button" (click)="rejectProperty()">
+        <i class="fas fa-ban"></i> Refuser
+      </button>
+      <button *ngIf="!isReadOnlyForSuperAdmin && !isFinalized"
+              class="btn-primary" type="button" [disabled]="saving" (click)="onSubmit()">
         <i class="fas" [class.fa-save]="!saving" [class.fa-spinner]="saving" [class.fa-spin]="saving"></i>
         {{ saving ? 'Enregistrement…' : (isEditMode ? 'Sauvegarder' : 'Créer le bien') }}
       </button>
     </div>
   </header>
+
+  <!-- ── READ-ONLY BANNER ── -->
+  <div class="pe-validation-banner banner-info" *ngIf="isReadOnly">
+    <i class="fas fa-lock"></i>
+    {{ readOnlyBannerMessage }}
+  </div>
+
+  <!-- ── VALIDATION STATUS BANNER ── -->
+  <div class="pe-validation-banner"
+       *ngIf="isEditMode && validationStatus && validationStatus !== 'APPROVED'"
+       [class.banner-warning]="validationStatus === 'PENDING_RESPONSABLE' || validationStatus === 'PENDING_ADMIN'"
+       [class.banner-danger]="validationStatus === 'REJECTED'">
+    <i class="fas"
+       [class.fa-clock]="validationStatus === 'PENDING_RESPONSABLE' || validationStatus === 'PENDING_ADMIN'"
+       [class.fa-times-circle]="validationStatus === 'REJECTED'"></i>
+    <span *ngIf="validationStatus === 'PENDING_RESPONSABLE'">En attente de validation par le Responsable Commercial.</span>
+    <span *ngIf="validationStatus === 'PENDING_ADMIN'">En attente de validation finale et de définition de la commission par l'Admin.</span>
+    <span *ngIf="validationStatus === 'REJECTED'">
+      Bien refusé. Raison : <strong>{{ rejectionReason || 'Non précisée' }}</strong>
+    </span>
+  </div>
+  <div class="pe-validation-banner banner-info" *ngIf="isCommercial && isEditMode">
+    <i class="fas fa-info-circle"></i>
+    Vous êtes Commercial : prix et commission sont définis par votre hiérarchie.
+  </div>
 
   <!-- ── ALERTS ── -->
   <div class="pe-alerts" *ngIf="successMessage || errorMessage">
@@ -86,6 +118,25 @@
           <span class="char-count">{{ form.get('description')?.value?.length || 0 }} / 2000</span>
         </div>
 
+        <!-- Status lock banner -->
+        @if (isEditMode && isFinalized) {
+          <div class="alert alert-danger d-flex align-items-start gap-2 mb-3">
+            <i class="fas fa-gavel mt-1"></i>
+            <div>
+              <strong>Bien définitivement vendu — consultation seule</strong>
+              <div style="font-size:0.85rem; margin-top:0.2rem;">Ce bien a été vendu et ne peut plus être modifié. Retrouvez-le dans <strong>Transactions &amp; Ventes</strong>.</div>
+            </div>
+          </div>
+        } @else if (isEditMode && isStatusLocked) {
+          <div class="alert alert-warning d-flex align-items-start gap-2 mb-3">
+            <i class="fas fa-lock mt-1"></i>
+            <div>
+              <strong>Statut verrouillé</strong>
+              <div style="font-size:0.85rem; margin-top:0.2rem;">{{ statusLockReason }}</div>
+            </div>
+          </div>
+        }
+
         <div class="fields-row">
           <div class="field-group">
             <label class="field-label required">Type de bien</label>
@@ -98,8 +149,21 @@
             <select class="field-select" formControlName="statut">
               <option *ngFor="let s of availableStatusOptions" [value]="s.value">{{ s.label }}</option>
             </select>
+            @if (isStatusLocked) {
+              <small class="text-muted"><i class="fas fa-lock me-1"></i>Modification désactivée</small>
+            }
           </div>
         </div>
+
+        <!-- Rental duration — shown only for LOCATION category when LOUE status selected -->
+        @if (form.get('categorie')?.value === 'LOCATION' && form.get('statut')?.value === 'LOUE') {
+          <div class="field-group">
+            <label class="field-label required">Durée de location (mois)</label>
+            <input class="field-input" type="number" formControlName="rentalDurationMonths"
+                   placeholder="ex. 12" min="1">
+            <small class="text-muted">Utilisé pour déverrouiller automatiquement le bien à l'expiration.</small>
+          </div>
+        }
 
         <div class="fields-row">
           <div class="field-group">
@@ -247,6 +311,49 @@
             <span class="unit">TND/mois</span>
           </div>
           <span class="error-msg" *ngIf="getFieldError('prixLocation')">{{ getFieldError('prixLocation') }}</span>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- SALE APPROVAL STATUS BADGES (AJOUTÉ) -->
+        <!-- ============================================ -->
+
+        <!-- PENDING badge -->
+        <div class="sale-approval-badge" *ngIf="pendingSaleApproval === 'PENDING'">
+          <i class="fas fa-hourglass-half"></i>
+          <div class="badge-content">
+            <strong>Demande de vente en attente</strong>
+            <span *ngIf="pendingSaleApproverRole === 'ADMIN'">En attente d'approbation par l'Admin de l'agence</span>
+            <span *ngIf="pendingSaleApproverRole === 'SUPER_ADMIN'">En attente d'approbation par le Super Admin</span>
+            <span *ngIf="pendingSaleStatut">Statut demandé : <strong>{{ pendingSaleStatut }}</strong></span>
+          </div>
+        </div>
+
+        <!-- APPROVED badge -->
+        <div class="sale-approval-badge approved" *ngIf="pendingSaleApproval === 'APPROVED'">
+          <i class="fas fa-check-circle"></i>
+          <div class="badge-content">
+            <strong>Demande de vente approuvée</strong>
+            <span>Le bien a été marqué comme {{ pendingSaleStatut }}</span>
+          </div>
+        </div>
+
+        <!-- REJECTED badge -->
+        <div class="sale-approval-badge rejected" *ngIf="pendingSaleApproval === 'REJECTED'">
+          <i class="fas fa-times-circle"></i>
+          <div class="badge-content">
+            <strong>Demande de vente refusée</strong>
+            <span *ngIf="pendingSaleRejectionReason">Raison : {{ pendingSaleRejectionReason }}</span>
+          </div>
+        </div>
+
+        <!-- Approval controls for ADMIN/SUPER_ADMIN -->
+        <div class="approval-controls" *ngIf="canApproveSale && pendingSaleApproval === 'PENDING'">
+          <button class="btn-success" type="button" (click)="approveSale()" [disabled]="approvingSale">
+            <i class="fas fa-check"></i> Approuver la vente
+          </button>
+          <button class="btn-warning" type="button" (click)="rejectSale()" [disabled]="approvingSale">
+            <i class="fas fa-ban"></i> Refuser la vente
+          </button>
         </div>
 
         <!-- Commission + Réseau affilié — uniquement pour les biens en VENTE -->
@@ -505,3 +612,83 @@
   </div>
 
 </div>
+
+<!-- ── Status confirmation modal ──────────────────────────────────────────── -->
+@if (statusConfirmModalOpen && pendingStatusValue) {
+  <div class="modal-overlay" (click)="cancelStatusConfirm()">
+    <div class="modal-panel status-confirm-panel" (click)="$event.stopPropagation()">
+
+      <!-- VENDU modal -->
+      @if (pendingStatusValue === 'VENDU') {
+        <div class="modal-header">
+          <h5><i class="fas fa-gavel text-danger me-2"></i>Confirmer la vente</h5>
+          <button class="btn-close" (click)="cancelStatusConfirm()"></button>
+        </div>
+        <div class="modal-body">
+          <div class="confirm-warning">
+            <i class="fas fa-exclamation-triangle text-danger fa-2x mb-3"></i>
+            <p class="fw-semibold mb-1">Cette action est <strong>définitive et irréversible</strong>.</p>
+            <p class="text-muted" style="font-size:0.875rem;">
+              Le bien sera marqué comme vendu, verrouillé en édition et transféré dans la
+              section <em>Transactions &amp; Ventes</em>. Aucune modification ne sera plus possible.
+            </p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" (click)="cancelStatusConfirm()">Annuler</button>
+          <button class="btn btn-danger" (click)="confirmStatusChange()">
+            <i class="fas fa-gavel me-1"></i>Confirmer la vente
+          </button>
+        </div>
+      }
+
+      <!-- LOUE modal -->
+      @if (pendingStatusValue === 'LOUE') {
+        <div class="modal-header">
+          <h5><i class="fas fa-key text-warning me-2"></i>Confirmer la mise en location</h5>
+          <button class="btn-close" (click)="cancelStatusConfirm()"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted mb-3" style="font-size:0.875rem;">
+            Le bien sera verrouillé jusqu'à la fin de la période de location.
+            Renseignez la durée <em>ou</em> la date de fin.
+          </p>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Durée (mois)</label>
+            <input type="number" class="form-control" [(ngModel)]="loueMonths" min="1"
+                   placeholder="ex. 12" (input)="loueEndDate = null" />
+          </div>
+
+          <div class="text-center text-muted small mb-3">— ou —</div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Date de fin de location</label>
+            <input type="date" class="form-control" [(ngModel)]="loueEndDate"
+                   [min]="today" (input)="loueMonths = null" />
+          </div>
+
+          @if (loueEndDatePreview) {
+            <div class="alert alert-info py-2" style="font-size:0.8rem;">
+              <i class="fas fa-calendar-check me-1"></i>
+              Fin de location prévue le <strong>{{ loueEndDatePreview }}</strong>.
+              Le bien redeviendra modifiable automatiquement après cette date.
+            </div>
+          }
+
+          @if (!loueMonths && !loueEndDate) {
+            <div class="text-danger small">Durée ou date de fin requise.</div>
+          }
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline-secondary" (click)="cancelStatusConfirm()">Annuler</button>
+          <button class="btn btn-warning text-white" (click)="confirmStatusChange()"
+                  [disabled]="!loueConfirmEnabled">
+            <i class="fas fa-key me-1"></i>Confirmer la location
+          </button>
+        </div>
+      }
+
+    </div>
+  </div>
+}

@@ -25,10 +25,6 @@ public class AffiliateProfileDTO {
     private LocalDateTime reviewedAt;
     private String rejectionReason;
 
-    private Double bonusPercentage;
-    private LocalDateTime bonusExpiresAt;
-    private Boolean hasBonusActive;
-
     private List<AffiliateRegionDTO> regions;
 
     private LocalDateTime createdAt;

@@ -136,7 +136,11 @@ public class PublicPortalService {
 
     private java.util.stream.Stream<Property> browsable() {
         return propertyRepository.findByIsActiveTrue().stream()
-                .filter(p -> STATUT_DISPONIBLE.equalsIgnoreCase(p.getStatut()));
+                .filter(p -> STATUT_DISPONIBLE.equalsIgnoreCase(p.getStatut()))
+                // Only APPROVED properties are exposed to the public portal.
+                // Legacy rows (validationStatus = null) are treated as approved.
+                .filter(p -> p.getValidationStatus() == null
+                        || p.getValidationStatus() == com.immobilier.backend.enums.PropertyValidationStatus.APPROVED);
     }
 
     private boolean isForSale(Property p) {

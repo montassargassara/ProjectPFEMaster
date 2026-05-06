@@ -3,11 +3,14 @@ package com.immobilier.backend.dto;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 public class AffiliateStatsDTO {
     private Long affiliateId;
     private String affiliateName;
+
+    private List<AffiliateRegionDTO> regions;
 
     // Sales / activities
     private Integer totalSales;
@@ -31,7 +34,6 @@ public class AffiliateStatsDTO {
     private Integer rank;
     private LocalDateTime lastActivity;
 
-    // Bonus for current month (0.0 if none active)
-    private Double currentBonusPercentage;
-    private LocalDateTime bonusExpiresAt;
+    // Monthly reward (TND) for this ranking period — null if not in top 3
+    private Double monthlyRewardAmount;
 }

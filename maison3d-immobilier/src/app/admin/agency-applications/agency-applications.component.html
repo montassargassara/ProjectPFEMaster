@@ -1,0 +1,157 @@
+<div class="page-wrapper">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h2><i class="fas fa-building-user"></i> Candidatures Agences</h2>
+      <p class="page-subtitle">Examinez et approuvez les demandes d'inscription d'agences immobilières</p>
+    </div>
+    <div class="page-header-right">
+      <button class="btn btn-outline" (click)="load()">
+        <i class="fas fa-sync-alt"></i> Actualiser
+      </button>
+    </div>
+  </div>
+
+  @if (successMessage) {
+    <div class="alert alert-success" (click)="clearMessages()">
+      <i class="fas fa-check-circle"></i> {{ successMessage }}
+    </div>
+  }
+  @if (errorMessage) {
+    <div class="alert alert-danger" (click)="clearMessages()">
+      <i class="fas fa-exclamation-circle"></i> {{ errorMessage }}
+    </div>
+  }
+
+  @if (loading) {
+    <div class="loading-state">
+      <i class="fas fa-spinner fa-spin"></i>
+      <span>Chargement des candidatures…</span>
+    </div>
+  } @else if (applications.length === 0) {
+    <div class="empty-state">
+      <i class="fas fa-inbox fa-3x"></i>
+      <h3>Aucune candidature en attente</h3>
+      <p>Toutes les demandes d'inscription d'agences ont été traitées.</p>
+    </div>
+  } @else {
+    <div class="applications-grid">
+      @for (app of applications; track app.id) {
+        <div class="application-card">
+          <div class="card-header-info">
+            <div class="avatar-circle agency">{{ app.agencyName.charAt(0).toUpperCase() }}</div>
+            <div class="applicant-info">
+              <h4>{{ app.agencyName }}</h4>
+              <span class="subtitle">{{ app.prenom }} {{ app.nom }}</span>
+              <span class="email">{{ app.email }}</span>
+            </div>
+            <span class="status-badge status-pending">En attente</span>
+          </div>
+
+          <div class="card-body-info">
+            <div class="info-row">
+              <i class="fas fa-calendar-alt"></i>
+              <span>Candidature : {{ formatDate(app.createdAt) }}</span>
+            </div>
+            @if (app.telephone) {
+              <div class="info-row">
+                <i class="fas fa-phone"></i>
+                <span>{{ app.telephone }}</span>
+              </div>
+            }
+            @if (app.description) {
+              <div class="description-section">
+                <p class="description-text"><i class="fas fa-align-left"></i> {{ app.description }}</p>
+              </div>
+            }
+          </div>
+
+          <div class="card-actions">
+            <button class="btn btn-ghost" (click)="openDetail(app)">
+              <i class="fas fa-eye"></i> Détails
+            </button>
+            <button class="btn btn-danger-outline" (click)="openRejectModal(app)">
+              <i class="fas fa-times"></i> Rejeter
+            </button>
+            <button class="btn btn-success" (click)="approve(app)" [disabled]="actionLoading">
+              <i class="fas fa-check"></i> Approuver
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+</div>
+
+<!-- Detail Modal -->
+@if (detailModalOpen && selectedApp) {
+  <div class="modal-overlay" (click)="closeDetail()">
+    <div class="modal-box" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3><i class="fas fa-building"></i> Détails de la candidature</h3>
+        <button class="modal-close" (click)="closeDetail()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-row"><label>Agence</label><span>{{ selectedApp.agencyName }}</span></div>
+        <div class="detail-row"><label>Responsable</label><span>{{ selectedApp.prenom }} {{ selectedApp.nom }}</span></div>
+        <div class="detail-row"><label>Email</label><span>{{ selectedApp.email }}</span></div>
+        @if (selectedApp.telephone) {
+          <div class="detail-row"><label>Téléphone</label><span>{{ selectedApp.telephone }}</span></div>
+        }
+        <div class="detail-row"><label>Date de candidature</label><span>{{ formatDate(selectedApp.createdAt) }}</span></div>
+        @if (selectedApp.description) {
+          <div class="detail-row detail-row--block">
+            <label>Description</label>
+            <span>{{ selectedApp.description }}</span>
+          </div>
+        }
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger-outline" (click)="closeDetail(); openRejectModal(selectedApp)">
+          <i class="fas fa-times"></i> Rejeter
+        </button>
+        <button class="btn btn-success" (click)="approve(selectedApp)" [disabled]="actionLoading">
+          <i class="fas fa-check"></i> Approuver
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Reject Reason Modal -->
+@if (rejectModalOpen && rejectTarget) {
+  <div class="modal-overlay" (click)="closeRejectModal()">
+    <div class="modal-box modal-sm" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3><i class="fas fa-times-circle text-danger"></i> Rejeter la candidature</h3>
+        <button class="modal-close" (click)="closeRejectModal()"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <p>
+          Vous êtes sur le point de rejeter la candidature de l'agence
+          <strong>{{ rejectTarget.agencyName }}</strong>.
+        </p>
+        <div class="form-group">
+          <label>Motif du rejet <span class="required">*</span></label>
+          <textarea
+            [(ngModel)]="rejectReason"
+            rows="4"
+            placeholder="Expliquez la raison du rejet…"
+            class="form-control"
+          ></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" (click)="closeRejectModal()">Annuler</button>
+        <button
+          class="btn btn-danger"
+          (click)="confirmReject()"
+          [disabled]="!rejectReason.trim() || actionLoading"
+        >
+          <i class="fas fa-times-circle"></i> Confirmer le rejet
+        </button>
+      </div>
+    </div>
+  </div>
+}

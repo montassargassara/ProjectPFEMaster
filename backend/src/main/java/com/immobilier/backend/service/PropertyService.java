@@ -2,6 +2,8 @@ package com.immobilier.backend.service;
 
 import com.immobilier.backend.dto.*;
 import com.immobilier.backend.entity.*;
+import com.immobilier.backend.enums.PendingSaleApprovalStatus;
+import com.immobilier.backend.enums.PropertyValidationStatus;
 import com.immobilier.backend.enums.RoleType;
 import com.immobilier.backend.repository.*;
 
@@ -33,6 +35,7 @@ public class PropertyService {
     private final UserRepository userRepository;
     private final PropertySharedAgencyRepository sharedAgencyRepository;
     private final PropertyVisibilityService visibilityService;
+    private final PropertyWorkflowService workflowService;
 
     // ========== CREATE ==========
     
@@ -100,23 +103,68 @@ public class PropertyService {
     }
 
     /**
-     * Create a property and assign ownership based on the calling user's role.
+     * Create a property and assign ownership + initial workflow state based on the
+     * calling user's role. Role-based field stripping is enforced here:
+     *
+     *   COMMERCIAL → cannot set price or commission. status = PENDING_RESPONSABLE.
+     *   RESPONSABLE_COMMERCIAL → may set price; cannot set commission. status = PENDING_ADMIN.
+     *   ADMIN/SUPER_ADMIN → full fields, immediately APPROVED, commission locked.
      */
     @Transactional
     public PropertyDTO createPropertyForUser(@Valid CreatePropertyRequest request, User currentUser) {
         log.info("Création propriété par {} (role={})", currentUser.getEmail(), currentUser.getRole());
 
-        validateCategoryAndPrices(request);
+        RoleType role = currentUser.getRole();
+
+        // ─── Role-based field stripping (server-side authoritative) ──────────
+        if (role == RoleType.COMMERCIAL) {
+            // COMMERCIAL cannot set price or commission. Force-clear before validation.
+            request.setPrixVente(null);
+            request.setPrixLocation(null);
+            request.setCommissionPercentage(null);
+            request.setBasePriceForCommission(null);
+            request.setIsAffiliateEligible(false);
+        } else if (role == RoleType.RESPONSABLE_COMMERCIAL) {
+            // RESPONSABLE may set price but never commission.
+            request.setCommissionPercentage(null);
+            request.setBasePriceForCommission(null);
+            request.setIsAffiliateEligible(false);
+        }
+
+        // Skip the "at least one price" check for COMMERCIAL — they don't set prices.
+        // Their submission is a draft awaiting price from RESPONSABLE.
+        if (role != RoleType.COMMERCIAL) {
+            validateCategoryAndPrices(request);
+        }
 
         Property property = new Property();
-        mapRequestToProperty(request, property);
+
+        if (role == RoleType.COMMERCIAL) {
+            // Build a draft without price; bypass mapRequestToProperty's status check.
+            property.setTitre(request.getTitre());
+            property.setDescription(request.getDescription());
+            property.setType(request.getType());
+            property.setStatut("EN_ATTENTE");
+            property.setSurface(request.getSurface());
+            property.setNbChambres(request.getNbChambres());
+            property.setAdresse(request.getAdresse());
+            property.setCountry(request.getCountry());
+            property.setCity(request.getCity());
+            property.setRegion(extractRegionFromAddress(request.getAdresse()));
+            property.setLatitude(request.getLatitude());
+            property.setLongitude(request.getLongitude());
+            // Stub price so the entity's @PrePersist category check passes — overwritten by RESPONSABLE.
+            property.setPrixVente(1.0);
+        } else {
+            mapRequestToProperty(request, property);
+        }
 
         // Ownership assignment
         property.setOwnerType(visibilityService.resolveOwnerType(currentUser));
         User propertyOwner = visibilityService.resolvePropertyOwner(currentUser);
 
         // SUPER_ADMIN may explicitly assign to an agency via agencyAdminId in request
-        if (currentUser.getRole() == RoleType.SUPER_ADMIN && request.getAgencyAdminId() != null) {
+        if (role == RoleType.SUPER_ADMIN && request.getAgencyAdminId() != null) {
             User assignedAdmin = userRepository.findById(request.getAgencyAdminId())
                     .orElseThrow(() -> new RuntimeException("Agence introuvable: " + request.getAgencyAdminId()));
             if (assignedAdmin.getRole() != RoleType.ADMIN) {
@@ -128,11 +176,29 @@ public class PropertyService {
             property.setAgencyAdmin(propertyOwner);
         }
 
+        // Authoring + workflow state
+        property.setCreatedBy(currentUser);
+        property.setOwnerRole(role);
+        PropertyValidationStatus initial = workflowService.initialStatusFor(role);
+        property.setValidationStatus(initial);
+
+        // Locks: ADMIN/SUPER_ADMIN approval implicitly locks both fields once set
+        boolean isApprover = role == RoleType.ADMIN || role == RoleType.SUPER_ADMIN;
+        property.setPriceLocked(isApprover);
+        property.setCommissionLocked(isApprover && property.getCommissionPercentage() != null
+                && property.getCommissionPercentage() > 0);
+
         property.setIsActive(true);
         property.setIsAffiliateEligible(
             request.getIsAffiliateEligible() != null && request.getIsAffiliateEligible());
+
         Property saved = propertyRepository.save(property);
-        log.info("Propriété {} créée avec ownerType={}", saved.getId(), saved.getOwnerType());
+        log.info("Propriété {} créée par {} (role={}) avec ownerType={}, validationStatus={}",
+                saved.getId(), currentUser.getEmail(), role, saved.getOwnerType(), saved.getValidationStatus());
+
+        // Notify upstream validators if not already approved
+        workflowService.notifySubmission(saved, currentUser);
+
         return convertToFullDTO(saved);
     }
 
@@ -144,6 +210,78 @@ public class PropertyService {
     public List<PropertyListDTO> getAllPropertiesListForUser(User currentUser) {
         List<Property> properties = visibilityService.getVisibleProperties(currentUser);
         return properties.stream().map(this::convertToListDTO).collect(Collectors.toList());
+    }
+
+    /**
+     * Returns all VENDU (sold) properties visible to the current user, newest first.
+     */
+    public List<PropertyListDTO> getSoldPropertiesForUser(User currentUser) {
+        List<Property> all = visibilityService.getVisibleProperties(currentUser);
+        return all.stream()
+                .filter(p -> "VENDU".equals(p.getStatut()))
+                .sorted((a, b) -> {
+                    if (b.getUpdatedAt() == null && a.getUpdatedAt() == null) return 0;
+                    if (b.getUpdatedAt() == null) return -1;
+                    if (a.getUpdatedAt() == null) return 1;
+                    return b.getUpdatedAt().compareTo(a.getUpdatedAt());
+                })
+                .map(this::convertToListDTO)
+                .collect(Collectors.toList());
+    }
+
+    public List<PropertyListDTO> getRentedPropertiesForUser(User currentUser) {
+        List<Property> all = visibilityService.getVisibleProperties(currentUser);
+        return all.stream()
+                .filter(p -> "LOUE".equals(p.getStatut()))
+                .sorted((a, b) -> {
+                    if (b.getUpdatedAt() == null && a.getUpdatedAt() == null) return 0;
+                    if (b.getUpdatedAt() == null) return -1;
+                    if (a.getUpdatedAt() == null) return 1;
+                    return b.getUpdatedAt().compareTo(a.getUpdatedAt());
+                })
+                .map(this::convertToListDTO)
+                .collect(Collectors.toList());
+    }
+
+    public List<PropertyListDTO> getExpiredRentalsForUser(User currentUser) {
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        List<Property> all = visibilityService.getVisibleProperties(currentUser);
+        return all.stream()
+                .filter(p -> "LOUE".equals(p.getStatut())
+                        && p.getRentalEndDate() != null
+                        && now.isAfter(p.getRentalEndDate()))
+                .sorted((a, b) -> {
+                    if (a.getRentalEndDate() == null) return 1;
+                    if (b.getRentalEndDate() == null) return -1;
+                    return a.getRentalEndDate().compareTo(b.getRentalEndDate());
+                })
+                .map(this::convertToListDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * SUPER_ADMIN may view and share AGENCY_OWNED properties, but must NEVER mutate them.
+     * Strict separation between super-admin and agency ownership.
+     *
+     * Both signals are checked for defense-in-depth: legacy rows may have ownerType set
+     * but no ownerRole (backfilled retroactively), while newer rows always have both.
+     *
+     * Throws with the "Accès refusé" prefix so PropertyController maps it to HTTP 403.
+     */
+    private void assertSuperAdminCanMutate(Property property, User currentUser) {
+        if (currentUser.getRole() != RoleType.SUPER_ADMIN) return;
+
+        boolean agencyOwnedByType = "AGENCY_OWNED".equals(property.getOwnerType());
+        boolean agencyOwnedByRole = property.getOwnerRole() == RoleType.ADMIN
+                || property.getOwnerRole() == RoleType.RESPONSABLE_COMMERCIAL
+                || property.getOwnerRole() == RoleType.COMMERCIAL;
+        boolean createdByAgencyUser = property.getCreatedBy() != null
+                && property.getCreatedBy().getRole() != RoleType.SUPER_ADMIN;
+
+        if (agencyOwnedByType || agencyOwnedByRole || (property.getOwnerType() == null && createdByAgencyUser)) {
+            throw new RuntimeException(
+                    "Accès refusé: le Super Admin ne peut pas modifier un bien appartenant à une agence");
+        }
     }
 
     /**
@@ -160,7 +298,16 @@ public class PropertyService {
     }
 
     /**
-     * Update a property after verifying the current user has access.
+     * Update a property with role-based field stripping, ownership checks, and locks.
+     *
+     *   COMMERCIAL: only own properties, only when not yet APPROVED. Cannot edit price/commission.
+     *               Modifications fire an audit notification to RESPONSABLE + ADMIN.
+     *   RESPONSABLE_COMMERCIAL: any property in the agency. Cannot edit commission. May edit price
+     *               only while priceLocked = false.
+     *   ADMIN: any property in the agency. Cannot edit SUPER_ADMIN_OWNED properties.
+     *   SUPER_ADMIN: any SUPER_ADMIN_OWNED property. Cannot edit AGENCY_OWNED ones.
+     *
+     * If commissionLocked = true, lower roles' attempted commission edits are silently dropped.
      */
     @Transactional
     @CacheEvict(value = {"properties", "property"}, key = "#id")
@@ -171,11 +318,60 @@ public class PropertyService {
         if (!visibilityService.canAccess(currentUser, property)) {
             throw new RuntimeException("Accès refusé à la propriété " + id);
         }
-        return updateProperty(id, request);
+
+        RoleType role = currentUser.getRole();
+        boolean isCreator = property.getCreatedBy() != null
+                && property.getCreatedBy().getId().longValue() == currentUser.getId().longValue();
+
+        // ─── Role-based authorization ────────────────────────────────────────
+        if (role == RoleType.COMMERCIAL) {
+            if (!isCreator) {
+                throw new RuntimeException("Accès refusé: un commercial ne peut modifier que ses propres biens");
+            }
+            if (property.getValidationStatus() == PropertyValidationStatus.APPROVED) {
+                throw new RuntimeException("Ce bien est validé et verrouillé pour les commerciaux");
+            }
+        }
+        assertSuperAdminCanMutate(property, currentUser);
+        if (role == RoleType.ADMIN && "SUPER_ADMIN_OWNED".equals(property.getOwnerType())) {
+            throw new RuntimeException("Accès refusé: une agence ne peut pas modifier un bien Super Admin");
+        }
+        if (role == RoleType.RESPONSABLE_COMMERCIAL && "SUPER_ADMIN_OWNED".equals(property.getOwnerType())) {
+            throw new RuntimeException("Accès refusé: un Responsable ne peut pas modifier un bien Super Admin");
+        }
+
+        // ─── Field stripping based on locks + role ───────────────────────────
+        if (role == RoleType.COMMERCIAL) {
+            request.setPrixVente(null);
+            request.setPrixLocation(null);
+            request.setIsAffiliateEligible(null);
+        }
+        // RESPONSABLE and COMMERCIAL cannot set affiliate eligibility (commission via separate endpoint is also blocked)
+        if (role == RoleType.RESPONSABLE_COMMERCIAL || role == RoleType.COMMERCIAL) {
+            request.setIsAffiliateEligible(null);
+        }
+        if (role != RoleType.ADMIN && role != RoleType.SUPER_ADMIN) {
+            // Only ADMIN/SUPER_ADMIN can ever change the affiliate flag (commission gate).
+            request.setIsAffiliateEligible(null);
+        }
+        if (Boolean.TRUE.equals(property.getPriceLocked())
+                && role != RoleType.ADMIN && role != RoleType.SUPER_ADMIN) {
+            request.setPrixVente(null);
+            request.setPrixLocation(null);
+        }
+
+        PropertyDTO result = updateProperty(id, request);
+
+        // Audit notification when COMMERCIAL modifies (no approval required per spec)
+        if (role == RoleType.COMMERCIAL) {
+            workflowService.notifyModification(property, currentUser);
+        }
+        return result;
     }
 
     /**
      * Soft-delete a property after verifying the current user has access.
+     * SUPER_ADMIN cannot delete AGENCY_OWNED properties (strict ownership separation).
      */
     @Transactional
     @CacheEvict(value = {"properties", "property"}, key = "#id")
@@ -186,6 +382,7 @@ public class PropertyService {
         if (!visibilityService.canAccess(currentUser, property)) {
             throw new RuntimeException("Accès refusé à la propriété " + id);
         }
+        assertSuperAdminCanMutate(property, currentUser);
         deleteProperty(id);
     }
 
@@ -422,14 +619,25 @@ public class PropertyService {
         return properties.stream().map(this::convertToCommissionDTO).collect(Collectors.toList());
     }
 
+    /**
+     * Update commission. ADMIN/SUPER_ADMIN only — caller authorization is enforced
+     * in PropertyController via @PreAuthorize. After ADMIN sets a non-zero commission,
+     * commissionLocked flips to true so lower roles can never overwrite it.
+     */
     @Transactional
     @CacheEvict(value = {"properties", "property"}, key = "#id")
-    public PropertyDTO updatePropertyCommission(Long id, UpdateCommissionRequest request) {
-        log.info("Mise à jour de la commission pour la propriété ID: {}", id);
-        
+    public PropertyDTO updatePropertyCommission(Long id, UpdateCommissionRequest request, User currentUser) {
+        log.info("Mise à jour de la commission pour la propriété ID: {} par {}", id, currentUser.getEmail());
+
+        if (currentUser.getRole() != RoleType.ADMIN && currentUser.getRole() != RoleType.SUPER_ADMIN) {
+            throw new RuntimeException("Seul un Admin ou Super Admin peut définir la commission");
+        }
+
         Property property = propertyRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Propriété non trouvée avec ID: " + id));
-        
+
+        assertSuperAdminCanMutate(property, currentUser);
+
         if (request.getCommissionPercentage() != null) {
             property.setCommissionPercentage(request.getCommissionPercentage());
         }
@@ -439,11 +647,14 @@ public class PropertyService {
         if (request.getBasePriceForCommission() != null) {
             property.setBasePriceForCommission(request.getBasePriceForCommission());
         }
-        
+        if (property.getCommissionPercentage() != null && property.getCommissionPercentage() > 0) {
+            property.setCommissionLocked(true);
+        }
+
         Property updatedProperty = propertyRepository.save(property);
-        log.info("Commission mise à jour pour propriété ID {}: {}%", 
-                 id, updatedProperty.getCommissionPercentage());
-        
+        log.info("Commission mise à jour pour propriété ID {}: {}% (locked={})",
+                 id, updatedProperty.getCommissionPercentage(), updatedProperty.getCommissionLocked());
+
         return convertToFullDTO(updatedProperty);
     }
 
@@ -502,7 +713,7 @@ public class PropertyService {
         // Image principale
         if (property.getMainImageId() != null) {
             dto.setHasMainImage(true);
-            dto.setMainImageUrl("/api/public/images/" + property.getMainImageId());
+            dto.setMainImageUrl("/api/images/public/" + property.getMainImageId());
             
             try {
                 ImageDTO imageInfo = imageService.getImageInfoById(property.getMainImageId());
@@ -519,7 +730,7 @@ public class PropertyService {
         // Modèle 3D
         if (property.getMainModel3dId() != null) {
             dto.setHasModel3d(true);
-            dto.setModel3dUrl("/api/public/models/" + property.getMainModel3dId());
+            dto.setModel3dUrl("/api/models/public/" + property.getMainModel3dId());
             
             try {
                 Model3DDTO modelInfo = model3DService.getModel3DInfoById(property.getMainModel3dId());
@@ -674,6 +885,9 @@ public class PropertyService {
         if (request.getDescription() != null) property.setDescription(request.getDescription());
         if (request.getType() != null) property.setType(request.getType());
         if (request.getStatut() != null) {
+            // Enforce business-rule locks before the category check
+            validateStatusTransition(property, request.getStatut());
+
             // Validate status is allowed for current category
             String currentCategory = property.getCategory();
             if (!Property.isStatusAllowedForCategory(currentCategory, request.getStatut())) {
@@ -685,7 +899,33 @@ public class PropertyService {
                                   Property.getAllowedStatusesForCategory(currentCategory))
                 );
             }
-            property.setStatut(request.getStatut());
+            String incomingStatus = request.getStatut();
+            // When transitioning TO LOUE: stamp start date and compute end date
+            if ("LOUE".equals(incomingStatus) && !"LOUE".equals(property.getStatut())) {
+                java.time.LocalDateTime now = java.time.LocalDateTime.now();
+                property.setRentalStartDate(now);
+                Integer months = request.getRentalDurationMonths() != null
+                        ? request.getRentalDurationMonths()
+                        : property.getRentalDurationMonths();
+                if (months != null && months > 0) {
+                    property.setRentalEndDate(now.plusMonths(months));
+                }
+            }
+            // When transitioning TO VENDU: permanently finalize
+            // Also covers existing rows where isFinalized was null (legacy data)
+            if ("VENDU".equals(incomingStatus) || Boolean.TRUE.equals(property.getIsFinalized())) {
+                property.setIsFinalized(true);
+            }
+            property.setStatut(incomingStatus);
+        }
+        if (request.getRentalDurationMonths() != null) {
+            property.setRentalDurationMonths(request.getRentalDurationMonths());
+            // Recompute end date if already LOUE and duration changed
+            if ("LOUE".equals(property.getStatut()) && property.getRentalStartDate() != null) {
+                property.setRentalEndDate(
+                    property.getRentalStartDate().plusMonths(request.getRentalDurationMonths())
+                );
+            }
         }
         if (request.getSurface() != null) property.setSurface(request.getSurface());
         if (request.getNbChambres() != null) property.setNbChambres(request.getNbChambres());
@@ -695,13 +935,134 @@ public class PropertyService {
         if (request.getLatitude() != null) property.setLatitude(request.getLatitude());
         if (request.getLongitude() != null) property.setLongitude(request.getLongitude());
         if (request.getIsActive() != null) property.setIsActive(request.getIsActive());
-        if (request.getIsAffiliateEligible() != null) property.setIsAffiliateEligible(request.getIsAffiliateEligible());
+        // Defense-in-depth: never allow this generic update path to flip the affiliate
+        // flag once commission is locked unless the caller already passed role checks.
+        if (request.getIsAffiliateEligible() != null) {
+            if (Boolean.TRUE.equals(property.getCommissionLocked())
+                    && (property.getCommissionPercentage() == null || property.getCommissionPercentage() == 0)) {
+                // Skip — affiliate eligibility requires a real commission
+            } else {
+                property.setIsAffiliateEligible(request.getIsAffiliateEligible());
+            }
+        }
 
         Property updatedProperty = propertyRepository.save(property);
         log.info("Propriété ID {} mise à jour - Catégorie: {}, Statut: {}", 
                  id, updatedProperty.getCategory(), updatedProperty.getStatut());
         
         return convertToFullDTO(updatedProperty);
+    }
+
+    /**
+     * Update status with role-aware sale routing.
+     * When the new status is VENDU/LOUE, fire the upward notifications:
+     *   - COMMERCIAL/RESPONSABLE → notify ADMIN
+     *   - SUPER_ADMIN_OWNED sold by agency → notify SUPER_ADMIN
+     *   - Sold without commission → COMMISSION_REQUIRED to ADMIN
+     */
+    @Transactional
+    @CacheEvict(value = {"properties", "property"}, key = "#id")
+    public PropertyDTO updatePropertyStatusForUser(Long id, String newStatus,
+                                                    Integer rentalDurationMonths, User currentUser) {
+        Property property = propertyRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Propriété non trouvée avec ID: " + id));
+
+        if (!visibilityService.canAccess(currentUser, property)) {
+            throw new RuntimeException("Accès refusé à la propriété " + id);
+        }
+
+        // Enforce business locks: VENDU is permanent, LOUE is locked until rental ends
+        validateStatusTransition(property, newStatus);
+
+        String category = property.getCategory();
+        if (!Property.isStatusAllowedForCategory(category, newStatus)) {
+            throw new IllegalArgumentException(
+                String.format("Le statut '%s' n'est pas autorisé pour une propriété en %s.",
+                              newStatus, category.toLowerCase()));
+        }
+
+        // Route through workflow whenever cross-ownership + significant status
+        if (workflowService.requiresSaleApproval(property, currentUser, newStatus)) {
+            workflowService.requestSaleApproval(property, currentUser, newStatus);
+            return convertToFullDTO(property); // statut unchanged; pendingSaleApproval = PENDING
+        }
+
+        // Direct apply
+        boolean isSaleFinal = "VENDU".equals(newStatus) || "LOUE".equals(newStatus);
+        property.setStatut(newStatus);
+
+        // VENDU: permanently finalize
+        if ("VENDU".equals(newStatus)) {
+            property.setIsFinalized(true);
+        }
+
+        // LOUE: stamp rental period
+        if ("LOUE".equals(newStatus)) {
+            java.time.LocalDateTime now = java.time.LocalDateTime.now();
+            property.setRentalStartDate(now);
+            Integer months = rentalDurationMonths != null ? rentalDurationMonths
+                    : property.getRentalDurationMonths();
+            if (months != null && months > 0) {
+                property.setRentalDurationMonths(months);
+                property.setRentalEndDate(now.plusMonths(months));
+            }
+        }
+
+        if (isSaleFinal) {
+            property.setPendingSaleApproval(null);
+            property.setPendingSaleStatut(null);
+            property.setPendingSaleRequestedBy(null);
+            property.setPendingSaleApproverRole(null);
+        }
+        Property saved = propertyRepository.save(property);
+        if (isSaleFinal) {
+            workflowService.notifySale(property, currentUser, newStatus);
+        }
+        return convertToFullDTO(saved);
+    }
+
+    /**
+     * ADMIN or SUPER_ADMIN approves a pending sale request on a property.
+     */
+    @Transactional
+    @CacheEvict(value = {"properties", "property"}, key = "#id")
+    public PropertyDTO approvePendingSaleForUser(Long id, User approver) {
+        Property property = propertyRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Propriété non trouvée avec ID: " + id));
+
+        if (property.getPendingSaleApproval() != PendingSaleApprovalStatus.PENDING) {
+            throw new RuntimeException("Aucune vente en attente pour cette propriété");
+        }
+        assertCallerIsExpectedApprover(property, approver);
+        workflowService.approveSaleRequest(property, approver);
+        return convertToFullDTO(property);
+    }
+
+    /**
+     * ADMIN or SUPER_ADMIN rejects a pending sale request on a property.
+     */
+    @Transactional
+    @CacheEvict(value = {"properties", "property"}, key = "#id")
+    public PropertyDTO rejectPendingSaleForUser(Long id, String reason, User approver) {
+        Property property = propertyRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Propriété non trouvée avec ID: " + id));
+
+        if (property.getPendingSaleApproval() != PendingSaleApprovalStatus.PENDING) {
+            throw new RuntimeException("Aucune vente en attente pour cette propriété");
+        }
+        assertCallerIsExpectedApprover(property, approver);
+        workflowService.rejectSaleRequest(property, approver, reason);
+        return convertToFullDTO(property);
+    }
+
+    private void assertCallerIsExpectedApprover(Property property, User caller) {
+        RoleType expected = property.getPendingSaleApproverRole();
+        RoleType actual = caller.getRole();
+        if (expected == null) return; // legacy / no-role set — allow ADMIN/SUPER_ADMIN
+        if (actual != expected) {
+            throw new RuntimeException("Accès refusé: cette demande doit être approuvée par un "
+                    + expected.name() + ", pas par un " + actual.name());
+        }
     }
 
         @Transactional
@@ -891,14 +1252,86 @@ public class PropertyService {
         return model3DService.getModel3DData(property.getMainModel3dId());
     }
     
+    /**
+     * Workflow validation. The exact transition depends on the property's current state:
+     *   PENDING_RESPONSABLE → PENDING_ADMIN  (caller must be RESPONSABLE_COMMERCIAL+)
+     *   PENDING_ADMIN       → APPROVED       (caller must be ADMIN+; commission must be set)
+     *   REJECTED            → re-validation works the same as the original state
+     */
     @Transactional
     @CacheEvict(value = {"properties", "property"}, key = "#id")
-    public PropertyDTO validateProperty(Long id) {
+    public PropertyDTO validateProperty(Long id, User currentUser) {
         Property property = propertyRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Propriété non trouvée avec ID: " + id));
-        property.setStatut("VALIDÉ");
-        Property validatedProperty = propertyRepository.save(property);
-        return convertToFullDTO(validatedProperty);
+
+        if (!visibilityService.canAccess(currentUser, property)) {
+            throw new RuntimeException("Accès refusé à la propriété " + id);
+        }
+        assertSuperAdminCanMutate(property, currentUser);
+
+        PropertyValidationStatus current = property.getValidationStatus();
+        if (current == null) current = PropertyValidationStatus.APPROVED;
+
+        if (current == PropertyValidationStatus.PENDING_RESPONSABLE) {
+            workflowService.validateByResponsable(property, currentUser);
+        } else if (current == PropertyValidationStatus.PENDING_ADMIN
+                || current == PropertyValidationStatus.REJECTED) {
+            if (property.getCommissionPercentage() == null || property.getCommissionPercentage() <= 0) {
+                if ("VENTE".equals(property.getCategory())) {
+                    throw new RuntimeException("La commission doit être définie avant l'approbation finale");
+                }
+            }
+            workflowService.validateByAdmin(property, currentUser);
+        }
+        return convertToFullDTO(propertyRepository.findById(id).orElseThrow());
+    }
+
+    @Transactional
+    @CacheEvict(value = {"properties", "property"}, key = "#id")
+    public PropertyDTO rejectProperty(Long id, String reason, User currentUser) {
+        Property property = propertyRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Propriété non trouvée avec ID: " + id));
+
+        if (!visibilityService.canAccess(currentUser, property)) {
+            throw new RuntimeException("Accès refusé à la propriété " + id);
+        }
+        assertSuperAdminCanMutate(property, currentUser);
+        workflowService.reject(property, currentUser, reason);
+        return convertToFullDTO(propertyRepository.findById(id).orElseThrow());
+    }
+
+    // ========== STATUS TRANSITION VALIDATION ==========
+
+    /**
+     * Enforces business rules that block manual status changes.
+     * Called before every status change in updateProperty().
+     * VENDU   → always final, no edits.
+     * EN_ATTENTE + isReservedByAffiliate → managed by affiliate workflow.
+     * LOUE    → locked until rentalStartDate + rentalDurationMonths has passed.
+     */
+    private void validateStatusTransition(Property property, String newStatut) {
+        String current = property.getStatut();
+        if (current == null || newStatut == null || newStatut.equals(current)) return;
+
+        if (Boolean.TRUE.equals(property.getIsFinalized()) || "VENDU".equals(current)) {
+            throw new IllegalStateException(
+                "Ce bien est définitivement vendu. Aucune modification n'est possible."
+            );
+        }
+        if ("EN_ATTENTE".equals(current) && Boolean.TRUE.equals(property.getIsReservedByAffiliate())) {
+            throw new IllegalStateException(
+                "Ce bien est en cours de transaction via le réseau affilié. " +
+                "Le statut sera mis à jour automatiquement à la finalisation de l'offre."
+            );
+        }
+        if ("LOUE".equals(current) && property.getRentalEndDate() != null) {
+            if (java.time.LocalDateTime.now().isBefore(property.getRentalEndDate())) {
+                throw new IllegalStateException(
+                    "Ce bien est loué jusqu'au " + property.getRentalEndDate().toLocalDate() +
+                    ". Modification du statut bloquée jusqu'à cette date."
+                );
+            }
+        }
     }
 
     // ========== MÉTHODES DE CONVERSION ==========
@@ -932,9 +1365,50 @@ public class PropertyService {
             dto.setAgencyAdminName(property.getAgencyAdmin().getFullName());
         }
 
+        // Validation workflow + locks
+        dto.setValidationStatus(property.getValidationStatus() != null ? property.getValidationStatus().name() : null);
+        dto.setOwnerRole(property.getOwnerRole() != null ? property.getOwnerRole().name() : null);
+        dto.setCommissionLocked(property.getCommissionLocked());
+        dto.setPriceLocked(property.getPriceLocked());
+        if (property.getCreatedBy() != null) {
+            dto.setCreatedById(property.getCreatedBy().getId());
+            dto.setCreatedByName(property.getCreatedBy().getFullName());
+        }
+
+        // Rental / finalized
+        dto.setRentalEndDate(property.getRentalEndDate());
+        dto.setRentalDurationMonths(property.getRentalDurationMonths());
+        dto.setIsFinalized(Boolean.TRUE.equals(property.getIsFinalized()));
+
+        // Compute status lock (mirrors convertToFullDTO logic)
+        String statut = property.getStatut();
+        boolean lockedVendu = Boolean.TRUE.equals(property.getIsFinalized()) || "VENDU".equals(statut);
+        boolean lockedEnAttente = "EN_ATTENTE".equals(statut) && Boolean.TRUE.equals(property.getIsReservedByAffiliate());
+        boolean lockedLoue = "LOUE".equals(statut)
+                && property.getRentalEndDate() != null
+                && java.time.LocalDateTime.now().isBefore(property.getRentalEndDate());
+        dto.setIsStatusLocked(lockedVendu || lockedEnAttente || lockedLoue);
+        if (lockedVendu) {
+            dto.setStatusLockReason("Ce bien est définitivement vendu. Aucune modification n'est possible.");
+        } else if (lockedEnAttente) {
+            dto.setStatusLockReason("Ce bien est en attente d'une offre affiliée en cours.");
+        } else if (lockedLoue) {
+            dto.setStatusLockReason("Bien loué jusqu'au " + property.getRentalEndDate().toLocalDate() + ". Statut verrouillé jusqu'à cette date.");
+        }
+
+        // Pending sale approval
+        dto.setPendingSaleApproval(property.getPendingSaleApproval() != null ? property.getPendingSaleApproval().name() : null);
+        dto.setPendingSaleStatut(property.getPendingSaleStatut());
+        dto.setPendingSaleRejectionReason(property.getPendingSaleRejectionReason());
+        dto.setPendingSaleApproverRole(property.getPendingSaleApproverRole() != null ? property.getPendingSaleApproverRole().name() : null);
+        if (property.getPendingSaleRequestedBy() != null) {
+            dto.setPendingSaleRequestedById(property.getPendingSaleRequestedBy().getId());
+            dto.setPendingSaleRequestedByName(property.getPendingSaleRequestedBy().getFullName());
+        }
+
         if (property.getMainImageId() != null) {
             dto.setHasMainImage(true);
-            dto.setMainImageUrl("/api/public/images/" + property.getMainImageId());
+            dto.setMainImageUrl("/api/images/public/" + property.getMainImageId());
 
             try {
                 ImageDTO imageInfo = imageService.getImageInfoById(property.getMainImageId());
@@ -950,7 +1424,7 @@ public class PropertyService {
 
         if (property.getMainModel3dId() != null) {
             dto.setHasModel3d(true);
-            dto.setModel3dUrl("/api/public/models/" + property.getMainModel3dId());
+            dto.setModel3dUrl("/api/models/public/" + property.getMainModel3dId());
 
             try {
                 Model3DDTO modelInfo = model3DService.getModel3DInfoById(property.getMainModel3dId());
@@ -1002,9 +1476,51 @@ public class PropertyService {
         }
         dto.setSharedWithAgencyIds(sharedAgencyRepository.findAgencyAdminIdsByPropertyId(property.getId()));
 
+        // Validation workflow + locks
+        dto.setValidationStatus(property.getValidationStatus() != null ? property.getValidationStatus().name() : null);
+        dto.setOwnerRole(property.getOwnerRole() != null ? property.getOwnerRole().name() : null);
+        dto.setCommissionLocked(property.getCommissionLocked());
+        dto.setPriceLocked(property.getPriceLocked());
+        dto.setRejectionReason(property.getRejectionReason());
+        if (property.getCreatedBy() != null) {
+            dto.setCreatedById(property.getCreatedBy().getId());
+            dto.setCreatedByName(property.getCreatedBy().getFullName());
+        }
+
+        // Rental lock fields
+        dto.setRentalDurationMonths(property.getRentalDurationMonths());
+        dto.setRentalStartDate(property.getRentalStartDate());
+        dto.setRentalEndDate(property.getRentalEndDate());
+        dto.setIsFinalized(Boolean.TRUE.equals(property.getIsFinalized()));
+        // Compute status lock for the frontend
+        String statut = property.getStatut();
+        boolean lockedVendu = Boolean.TRUE.equals(property.getIsFinalized()) || "VENDU".equals(statut);
+        boolean lockedEnAttente = "EN_ATTENTE".equals(statut) && Boolean.TRUE.equals(property.getIsReservedByAffiliate());
+        boolean lockedLoue = "LOUE".equals(statut)
+                && property.getRentalEndDate() != null
+                && java.time.LocalDateTime.now().isBefore(property.getRentalEndDate());
+        dto.setIsStatusLocked(lockedVendu || lockedEnAttente || lockedLoue);
+        if (lockedVendu) {
+            dto.setStatusLockReason("Ce bien est définitivement vendu. Aucune modification n'est possible.");
+        } else if (lockedEnAttente) {
+            dto.setStatusLockReason("Ce bien est en attente d'une offre affiliée en cours.");
+        } else if (lockedLoue) {
+            dto.setStatusLockReason("Bien loué jusqu'au " + property.getRentalEndDate().toLocalDate() + ". Statut verrouillé jusqu'à cette date.");
+        }
+
+        // Pending sale approval workflow
+        dto.setPendingSaleApproval(property.getPendingSaleApproval() != null ? property.getPendingSaleApproval().name() : null);
+        dto.setPendingSaleStatut(property.getPendingSaleStatut());
+        dto.setPendingSaleRejectionReason(property.getPendingSaleRejectionReason());
+        dto.setPendingSaleApproverRole(property.getPendingSaleApproverRole() != null ? property.getPendingSaleApproverRole().name() : null);
+        if (property.getPendingSaleRequestedBy() != null) {
+            dto.setPendingSaleRequestedById(property.getPendingSaleRequestedBy().getId());
+            dto.setPendingSaleRequestedByName(property.getPendingSaleRequestedBy().getFullName());
+        }
+
         if (property.getMainImageId() != null) {
             dto.setHasMainImage(true);
-            dto.setMainImageUrl("/api/public/images/" + property.getMainImageId());
+            dto.setMainImageUrl("/api/images/public/" + property.getMainImageId());
 
             try {
                 ImageDTO imageInfo = imageService.getImageInfoById(property.getMainImageId());
@@ -1020,7 +1536,7 @@ public class PropertyService {
 
         if (property.getMainModel3dId() != null) {
             dto.setHasModel3d(true);
-            dto.setModel3dUrl("/api/public/models/" + property.getMainModel3dId());
+            dto.setModel3dUrl("/api/models/public/" + property.getMainModel3dId());
 
             try {
                 Model3DDTO modelInfo = model3DService.getModel3DInfoById(property.getMainModel3dId());
@@ -1057,7 +1573,7 @@ public class PropertyService {
         PropertyMediaDTO dto = new PropertyMediaDTO();
         dto.setId(image.getId());
         dto.setType("IMAGE");
-        dto.setUrl("/api/public/images/" + image.getId());
+        dto.setUrl("/api/images/public/" + image.getId());
         dto.setFileName(image.getFileName());
         dto.setFileType(image.getFileType());
         dto.setFileSize(image.getFileSize());
@@ -1071,7 +1587,7 @@ public class PropertyService {
         PropertyMediaDTO dto = new PropertyMediaDTO();
         dto.setId(video.getId());
         dto.setType("VIDEO");
-        dto.setUrl("/api/public/videos/" + video.getId());
+        dto.setUrl("/api/videos/public/" + video.getId());
         dto.setFileName(video.getFileName());
         dto.setFileType(video.getFileType());
         dto.setFileSize(video.getFileSize());
@@ -1085,7 +1601,7 @@ public class PropertyService {
         PropertyMediaDTO dto = new PropertyMediaDTO();
         dto.setId(model.getId());
         dto.setType("MODEL_3D");
-        dto.setUrl("/api/public/models/" + model.getId());
+        dto.setUrl("/api/models/public/" + model.getId());
         dto.setFileName(model.getFileName());
         dto.setFileType(model.getFileType());
         dto.setFileSize(model.getFileSize());

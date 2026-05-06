@@ -44,6 +44,15 @@ public interface AffiliateTransactionRepository extends JpaRepository<AffiliateT
     List<Object[]> getRankingByAllCommissions(@Param("startDate") LocalDateTime startDate);
     
     @Query("SELECT at FROM AffiliateTransaction at WHERE at.transactionDate BETWEEN :startDate AND :endDate")
-    List<AffiliateTransaction> findByTransactionDateBetween(@Param("startDate") LocalDateTime startDate, 
+    List<AffiliateTransaction> findByTransactionDateBetween(@Param("startDate") LocalDateTime startDate,
                                                             @Param("endDate") LocalDateTime endDate);
+
+    // ── Agency-scoped queries ─────────────────────────────────────────────────
+
+    @Query("SELECT at FROM AffiliateTransaction at WHERE at.property.agencyAdmin.id = :agencyAdminId ORDER BY at.transactionDate DESC")
+    List<AffiliateTransaction> findByAgencyAdminIdOrderByDateDesc(@Param("agencyAdminId") Long agencyAdminId);
+
+    @Query("SELECT at FROM AffiliateTransaction at WHERE at.affiliate.id = :affiliateId AND at.property.agencyAdmin.id = :agencyAdminId ORDER BY at.transactionDate DESC")
+    List<AffiliateTransaction> findByAffiliateIdAndAgencyAdminId(@Param("affiliateId") Long affiliateId,
+                                                                  @Param("agencyAdminId") Long agencyAdminId);
 }

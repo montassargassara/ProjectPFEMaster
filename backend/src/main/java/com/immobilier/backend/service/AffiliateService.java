@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -30,6 +31,7 @@ public class AffiliateService {
     private final AffiliateActivityRepository affiliateActivityRepository;
     private final PropertyRepository propertyRepository;
     private final SaleOfferRepository saleOfferRepository;
+    private final ClientInfoRepository clientInfoRepository;
     private final NotificationService notificationService;
     private final PasswordEncoder passwordEncoder;
 
@@ -52,7 +54,8 @@ public class AffiliateService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setNom(request.getNom());
         user.setPrenom(request.getPrenom());
-        user.setTelephone(request.getTelephone());
+        String tel = request.getTelephone();
+        user.setTelephone((tel != null && !tel.isBlank()) ? tel : null);
         user.setRole(RoleType.AFFILIATE);
         user.setIsActive(false); // not active until approved
 
@@ -73,7 +76,6 @@ public class AffiliateService {
                 region.setCountry(rs.getCountry());
                 region.setCity(rs.getCity());
                 region.setRegionDescription(rs.getRegionDescription());
-                region.setCommissionPercentage(rs.getCommissionPercentage());
                 region.setIsActive(true);
                 affiliateRegionRepository.save(region);
             }
@@ -109,16 +111,39 @@ public class AffiliateService {
         profile.setStatus(AffiliateStatus.ACTIVE);
         profile.setReviewedBy(approver);
         profile.setReviewedAt(LocalDateTime.now());
-        profile.getUser().setIsActive(true);
-        userRepository.save(profile.getUser());
+
+        User affiliateUser = profile.getUser();
+        affiliateUser.setIsActive(true);
+        userRepository.save(affiliateUser);
         affiliateProfileRepository.save(profile);
 
+        // Auto-create ClientInfo so the affiliate appears in Gestion des clients
+        if (!clientInfoRepository.findByUserId(affiliateUser.getId()).isPresent()) {
+            String zone = affiliateRegionRepository.findByAffiliateIdAndIsActiveTrue(affiliateUser.getId())
+                .stream().findFirst()
+                .map(r -> r.getCountry() != null && r.getCity() != null
+                    ? r.getCountry() + ", " + r.getCity()
+                    : r.getRegionName())
+                .orElse(null);
+
+            ClientInfo clientInfo = new ClientInfo();
+            clientInfo.setUser(affiliateUser);
+            clientInfo.setCreatedBy(approver);
+            clientInfo.setVisibilityType("AGENCY_CLIENT");
+            clientInfo.setAgencyAdminId(null);
+            clientInfo.setZoneRecherchee(zone);
+            clientInfo.setCodeAffiliation("AFF-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+            clientInfo.setTauxCommission(5.0);
+            clientInfoRepository.save(clientInfo);
+            log.info("ClientInfo created for self-registered affiliate userId={}", affiliateUser.getId());
+        }
+
         notificationService.create(
-            profile.getUser(),
+            affiliateUser,
             NotificationType.AFFILIATE_APPROVED,
             "Compte affilié approuvé",
             "Félicitations ! Votre compte affilié a été approuvé. Vous pouvez maintenant accéder à la plateforme.",
-            profile.getUser().getId()
+            affiliateUser.getId()
         );
 
         log.info("Affiliate {} approved by {}", affiliateId, approverId);
@@ -215,7 +240,6 @@ public class AffiliateService {
                     dto.setTelephone(user.getTelephone());
                     dto.setIsActive(user.getIsActive());
                     dto.setStatus(AffiliateStatus.PENDING);
-                    dto.setHasBonusActive(false);
                     dto.setRegions(new java.util.ArrayList<>());
                     dto.setCreatedAt(LocalDateTime.now());
                     return dto;
@@ -288,25 +312,70 @@ public class AffiliateService {
 
     // ── Region management ─────────────────────────────────────────────────────
 
+    private static final int MAX_ZONES           = 3;
+    private static final double STANDARD_ZONE_PRICE = 50.0;
+    private static final double PREMIUM_ZONE_PRICE  = 100.0;
+    private static final int    PREMIUM_DEMAND_THRESHOLD = 3;
+
+    /**
+     * Adds a new zone to the affiliate's account.
+     * - First zone is always free.
+     * - Zones 2 and 3 require a simulated payment (50 TND standard, 100 TND premium).
+     * - Max 3 active zones enforced.
+     */
     @Transactional
-    public AffiliateRegionDTO addRegion(Long affiliateId, RegionSelection rs) {
+    public AffiliateRegionDTO addZone(Long affiliateId, AddZoneRequest req) {
+        assertAffiliateActive(affiliateId);
+
         User affiliate = userRepository.findById(affiliateId)
                 .orElseThrow(() -> new RuntimeException("Affiliate not found"));
 
-        if (affiliateRegionRepository.findByAffiliateIdAndRegionName(affiliateId, rs.getRegionName()).isPresent()) {
-            throw new RuntimeException("Cette zone est déjà assignée à cet affilié");
+        List<AffiliateRegion> existing = affiliateRegionRepository.findByAffiliateIdAndIsActiveTrue(affiliateId);
+        if (existing.size() >= MAX_ZONES) {
+            throw new RuntimeException("Vous avez atteint le maximum de " + MAX_ZONES + " zones actives.");
         }
+
+        // Duplicate check (country + city)
+        String newKey = buildZoneKey(req.getCountry(), req.getCity());
+        if (newKey != null) {
+            boolean duplicate = existing.stream().anyMatch(r -> newKey.equals(buildZoneKey(r.getCountry(), r.getCity())));
+            if (duplicate) throw new RuntimeException("Cette zone est déjà dans votre compte.");
+        }
+
+        boolean isFreeZone = existing.isEmpty();
+        boolean premiumZone = computeIsPremiumZone(req.getCountry(), req.getCity());
+        double price = isFreeZone ? 0.0 : (premiumZone ? PREMIUM_ZONE_PRICE : STANDARD_ZONE_PRICE);
+
+        if (!isFreeZone && (req.getPaymentConfirmed() == null || !req.getPaymentConfirmed())) {
+            throw new RuntimeException("Le paiement de " + (int) price + " TND doit être confirmé pour ajouter cette zone.");
+        }
+
+        String regionName = (req.getCity() != null && !req.getCity().isBlank())
+                ? req.getCity() : (req.getCountry() != null ? req.getCountry() : "Zone");
 
         AffiliateRegion region = new AffiliateRegion();
         region.setAffiliate(affiliate);
-        region.setRegionName(rs.getRegionName());
-        region.setCountry(rs.getCountry());
-        region.setCity(rs.getCity());
-        region.setRegionDescription(rs.getRegionDescription());
-        region.setCommissionPercentage(rs.getCommissionPercentage());
+        region.setRegionName(regionName.trim().toLowerCase());
+        region.setCountry(req.getCountry());
+        region.setCity(req.getCity());
+        region.setRegionDescription(req.getCountry());
         region.setIsActive(true);
+        region.setIsPaid(!isFreeZone);
+        region.setPricePaid(isFreeZone ? null : price);
+        region.setIsPremium(premiumZone);
 
         return toRegionDTO(affiliateRegionRepository.save(region));
+    }
+
+    /** Returns true when the given zone is classified as premium (high demand). */
+    private boolean computeIsPremiumZone(String country, String city) {
+        String key = buildZoneKey(country, city);
+        if (key == null) return false;
+        long demand = saleOfferRepository.findAcceptedOrCompletedOffers().stream()
+                .filter(o -> o.getProperty() != null)
+                .filter(o -> key.equals(buildZoneKey(o.getProperty().getCountry(), o.getProperty().getCity())))
+                .count();
+        return demand >= PREMIUM_DEMAND_THRESHOLD;
     }
 
     @Transactional(readOnly = true)
@@ -328,13 +397,12 @@ public class AffiliateService {
         if (rs.getCountry()           != null) region.setCountry(rs.getCountry());
         if (rs.getCity()              != null) region.setCity(rs.getCity());
         if (rs.getRegionDescription() != null) region.setRegionDescription(rs.getRegionDescription());
-        if (rs.getCommissionPercentage() != null) region.setCommissionPercentage(rs.getCommissionPercentage());
 
         return toRegionDTO(affiliateRegionRepository.save(region));
     }
 
     @Transactional
-    public void removeRegion(Long affiliateId, Long regionId) {
+    public void removeZone(Long affiliateId, Long regionId) {
         AffiliateRegion region = affiliateRegionRepository.findById(regionId)
                 .orElseThrow(() -> new RuntimeException("Region not found"));
 
@@ -342,6 +410,35 @@ public class AffiliateService {
             throw new RuntimeException("Cette zone n'appartient pas à cet affilié");
         }
         affiliateRegionRepository.delete(region);
+    }
+
+    /** Legacy alias — kept so existing callers (SuperAdminAffiliateController etc.) don't break. */
+    @Transactional
+    public void removeRegion(Long affiliateId, Long regionId) {
+        removeZone(affiliateId, regionId);
+    }
+
+    /** Legacy alias used by admin-side region creation paths. */
+    @Transactional
+    public AffiliateRegionDTO addRegion(Long affiliateId, RegionSelection rs) {
+        User affiliate = userRepository.findById(affiliateId)
+                .orElseThrow(() -> new RuntimeException("Affiliate not found"));
+
+        if (affiliateRegionRepository.findByAffiliateIdAndRegionName(affiliateId, rs.getRegionName()).isPresent()) {
+            throw new RuntimeException("Cette zone est déjà assignée à cet affilié");
+        }
+
+        AffiliateRegion region = new AffiliateRegion();
+        region.setAffiliate(affiliate);
+        region.setRegionName(rs.getRegionName());
+        region.setCountry(rs.getCountry());
+        region.setCity(rs.getCity());
+        region.setRegionDescription(rs.getRegionDescription());
+        region.setIsActive(true);
+        region.setIsPaid(false);
+        region.setIsPremium(false);
+
+        return toRegionDTO(affiliateRegionRepository.save(region));
     }
 
     // ── Activity tracking ─────────────────────────────────────────────────────
@@ -405,12 +502,6 @@ public class AffiliateService {
         affiliateActivityRepository.findByAffiliateOrderByActivityDateDesc(affiliate)
             .stream().findFirst().ifPresent(a -> stats.setLastActivity(a.getActivityDate()));
 
-        // Bonus info
-        affiliateProfileRepository.findByUserId(affiliateId).ifPresent(p -> {
-            stats.setCurrentBonusPercentage(p.hasActiveBonus() ? p.getBonusPercentage() : 0.0);
-            stats.setBonusExpiresAt(p.getBonusExpiresAt());
-        });
-
         return stats;
     }
 
@@ -435,10 +526,6 @@ public class AffiliateService {
             s.setTotalSales(saleCount.intValue());
             s.setTotalRevenue(revenue);
             s.setRank(rank++);
-
-            affiliateProfileRepository.findByUserId(affiliate.getId()).ifPresent(p -> {
-                s.setCurrentBonusPercentage(p.hasActiveBonus() ? p.getBonusPercentage() : 0.0);
-            });
 
             ranking.add(s);
         }
@@ -517,9 +604,6 @@ public class AffiliateService {
         dto.setNotes(p.getNotes());
         dto.setRejectionReason(p.getRejectionReason());
         dto.setReviewedAt(p.getReviewedAt());
-        dto.setBonusPercentage(p.getBonusPercentage());
-        dto.setBonusExpiresAt(p.getBonusExpiresAt());
-        dto.setHasBonusActive(p.hasActiveBonus());
         dto.setCreatedAt(p.getCreatedAt());
         dto.setUpdatedAt(p.getUpdatedAt());
 
@@ -542,8 +626,10 @@ public class AffiliateService {
         dto.setCountry(r.getCountry());
         dto.setCity(r.getCity());
         dto.setRegionDescription(r.getRegionDescription());
-        dto.setCommissionPercentage(r.getCommissionPercentage());
         dto.setIsActive(r.getIsActive());
+        dto.setIsPaid(r.getIsPaid());
+        dto.setPricePaid(r.getPricePaid());
+        dto.setIsPremium(r.getIsPremium());
         dto.setCreatedAt(r.getCreatedAt());
         dto.setUpdatedAt(r.getUpdatedAt());
         return dto;
@@ -652,6 +738,9 @@ public class AffiliateService {
                 byZone.computeIfAbsent(key, k -> new java.util.ArrayList<>()).add(p);
             }
 
+            // Determine if the affiliate already has a free zone (for price calculation)
+            boolean affiliateHasAnyZone = !myZoneKeys.isEmpty();
+
             List<SuggestedZoneDTO> suggestions = new java.util.ArrayList<>();
             for (java.util.Map.Entry<String, List<Property>> entry : byZone.entrySet()) {
                 List<Property> props = entry.getValue();
@@ -670,17 +759,25 @@ public class AffiliateService {
                         ? first.getCity()
                         : (first.getRegion() != null ? first.getRegion() : "Zone inconnue");
                 String country = first.getCountry();
+                String city    = first.getCity();
                 int demandScore = demandByZone.getOrDefault(entry.getKey(), 0L).intValue();
                 double score = props.size() * avgCommission + demandScore * 10.0;
+                boolean premium = demandScore >= PREMIUM_DEMAND_THRESHOLD;
+                double zonePrice = affiliateHasAnyZone
+                        ? (premium ? PREMIUM_ZONE_PRICE : STANDARD_ZONE_PRICE)
+                        : 0.0;
 
                 SuggestedZoneDTO dto = new SuggestedZoneDTO();
                 dto.setZoneName(displayName);
                 dto.setCountry(country);
+                dto.setCity(city);
                 dto.setPropertyCount(props.size());
                 dto.setAverageCommission(Math.round(avgCommission * 100.0) / 100.0);
                 dto.setAveragePrice(Math.round(avgPrice));
                 dto.setDemandScore(demandScore);
                 dto.setOpportunityScore(score);
+                dto.setPrice(zonePrice);
+                dto.setPremium(premium);
                 suggestions.add(dto);
             }
 

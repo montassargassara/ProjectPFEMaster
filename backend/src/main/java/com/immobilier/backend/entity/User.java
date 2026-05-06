@@ -43,7 +43,10 @@ public class User {
     
     @Column(unique = true)
     private String telephone;
-    
+
+    @Column(name = "profile_image_path")
+    private String profileImagePath;
+
     // VARCHAR (not MySQL ENUM) so adding a new RoleType value doesn't require
     // a destructive schema change. Migration for existing DBs:
     //   ALTER TABLE users MODIFY COLUMN role VARCHAR(40) NOT NULL;

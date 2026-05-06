@@ -2,6 +2,8 @@ package com.immobilier.backend.controller;
 
 import com.immobilier.backend.dto.*;
 import com.immobilier.backend.entity.User;
+import com.immobilier.backend.repository.UserRepository;
+import com.immobilier.backend.security.CustomUserDetails;
 import com.immobilier.backend.security.SecurityUtils;
 import com.immobilier.backend.service.PropertyService;
 import com.immobilier.backend.service.PropertyShareRequestService;
@@ -11,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,6 +28,7 @@ public class PropertyController {
     private final PropertyService propertyService;
     private final PropertyShareRequestService shareRequestService;
     private final SecurityUtils securityUtils;
+    private final UserRepository userRepository;  // ✅ AJOUTER CETTE LIGNE
 
     // ==================== LOCATION / PUBLIC ENDPOINTS ====================
 
@@ -195,6 +199,12 @@ public class PropertyController {
                     full.setMainImageUrl(dto.getMainImageUrl());
                     full.setHasModel3d(dto.isHasModel3d());
                     full.setModel3dUrl(dto.getModel3dUrl());
+                    full.setValidationStatus(dto.getValidationStatus());
+                    full.setOwnerRole(dto.getOwnerRole());
+                    full.setCreatedById(dto.getCreatedById());
+                    full.setCreatedByName(dto.getCreatedByName());
+                    full.setCommissionLocked(dto.getCommissionLocked());
+                    full.setPriceLocked(dto.getPriceLocked());
                     return full;
                 })
                 .collect(java.util.stream.Collectors.toList()));
@@ -205,6 +215,27 @@ public class PropertyController {
     public ResponseEntity<List<PropertyListDTO>> getAllPropertiesList() {
         User currentUser = securityUtils.getCurrentUser();
         return ResponseEntity.ok(propertyService.getAllPropertiesListForUser(currentUser));
+    }
+
+    @GetMapping("/sold")
+    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<List<PropertyListDTO>> getSoldProperties() {
+        User currentUser = securityUtils.getCurrentUser();
+        return ResponseEntity.ok(propertyService.getSoldPropertiesForUser(currentUser));
+    }
+
+    @GetMapping("/expired-rentals")
+    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<List<PropertyListDTO>> getExpiredRentals() {
+        User currentUser = securityUtils.getCurrentUser();
+        return ResponseEntity.ok(propertyService.getExpiredRentalsForUser(currentUser));
+    }
+
+    @GetMapping("/rented")
+    @PreAuthorize("hasAnyRole('COMMERCIAL', 'RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<List<PropertyListDTO>> getRentedProperties() {
+        User currentUser = securityUtils.getCurrentUser();
+        return ResponseEntity.ok(propertyService.getRentedPropertiesForUser(currentUser));
     }
 
     @GetMapping("/active")
@@ -276,8 +307,7 @@ public class PropertyController {
     public ResponseEntity<?> validateProperty(@PathVariable Long id) {
         try {
             User currentUser = securityUtils.getCurrentUser();
-            propertyService.getPropertyByIdForUser(id, currentUser); // access check
-            return ResponseEntity.ok(propertyService.validateProperty(id));
+            return ResponseEntity.ok(propertyService.validateProperty(id, currentUser));
         } catch (RuntimeException e) {
             String msg = e.getMessage();
             if (msg != null && msg.contains("Accès refusé")) {
@@ -285,6 +315,50 @@ public class PropertyController {
             }
             return ResponseEntity.badRequest().body(Map.of("error", msg));
         }
+    }
+
+    @PutMapping("/{id}/reject")
+    @PreAuthorize("hasAnyRole('RESPONSABLE_COMMERCIAL', 'ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<?> rejectProperty(@PathVariable Long id,
+                                            @RequestBody RejectPropertyRequest request) {
+        try {
+            User currentUser = securityUtils.getCurrentUser();
+            return ResponseEntity.ok(propertyService.rejectProperty(id, request.getReason(), currentUser));
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("Accès refusé")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
+    // ✅ Méthodes d'approbation de vente - CORRIGÉES avec userRepository injecté
+    @PutMapping("/{id}/approve-sale")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<PropertyDTO> approvePendingSale(@PathVariable Long id) {
+        User currentUser = getCurrentUser();
+        log.info("User {} approuve la vente pour la propriété {}", currentUser.getId(), id);
+        return ResponseEntity.ok(propertyService.approvePendingSaleForUser(id, currentUser));
+    }
+
+    @PutMapping("/{id}/reject-sale")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    public ResponseEntity<PropertyDTO> rejectPendingSale(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        User currentUser = getCurrentUser();
+        String reason = body.getOrDefault("reason", "");
+        log.info("User {} rejette la vente pour la propriété {}: {}", currentUser.getId(), id, reason);
+        return ResponseEntity.ok(propertyService.rejectPendingSaleForUser(id, reason, currentUser));
+    }
+
+    // ✅ Helper method corrigée - utilise userRepository
+    private User getCurrentUser() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof CustomUserDetails ud) {
+            return userRepository.findById(ud.getUserId())
+                .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+        }
+        throw new RuntimeException("Utilisateur non authentifié");
     }
 
     @DeleteMapping("/{id}")
@@ -309,8 +383,8 @@ public class PropertyController {
                                                   @Valid @RequestBody UpdateStatusRequest request) {
         try {
             User currentUser = securityUtils.getCurrentUser();
-            propertyService.getPropertyByIdForUser(id, currentUser); // access check
-            PropertyDTO updated = propertyService.updatePropertyStatus(id, request.getStatut());
+            PropertyDTO updated = propertyService.updatePropertyStatusForUser(
+                    id, request.getStatut(), request.getRentalDurationMonths(), currentUser);
             return ResponseEntity.ok(updated);
         } catch (RuntimeException e) {
             String msg = e.getMessage();
@@ -322,13 +396,13 @@ public class PropertyController {
     }
 
     @PutMapping("/{id}/commission")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN', 'RESPONSABLE_COMMERCIAL')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<?> updatePropertyCommission(@PathVariable Long id,
                                                       @RequestBody UpdateCommissionRequest request) {
         try {
             User currentUser = securityUtils.getCurrentUser();
             propertyService.getPropertyByIdForUser(id, currentUser); // access check
-            return ResponseEntity.ok(propertyService.updatePropertyCommission(id, request));
+            return ResponseEntity.ok(propertyService.updatePropertyCommission(id, request, currentUser));
         } catch (RuntimeException e) {
             String msg = e.getMessage();
             if (msg != null && msg.contains("Accès refusé")) {
@@ -339,7 +413,7 @@ public class PropertyController {
     }
 
     @PutMapping("/region/{region}/commission")
-    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN', 'RESPONSABLE_COMMERCIAL')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<Map<String, Object>> updateCommissionByRegion(
             @PathVariable String region,
             @RequestParam Double commissionPercentage) {

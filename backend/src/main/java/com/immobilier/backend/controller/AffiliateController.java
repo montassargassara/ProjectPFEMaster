@@ -59,6 +59,20 @@ public class AffiliateController {
         return ResponseEntity.ok(affiliateService.getRegions(currentUserId()));
     }
 
+    @PostMapping("/add-zone")
+    @PreAuthorize("hasRole('AFFILIATE')")
+    public ResponseEntity<AffiliateRegionDTO> addZone(@RequestBody AddZoneRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(affiliateService.addZone(currentUserId(), request));
+    }
+
+    @DeleteMapping("/remove-zone/{regionId}")
+    @PreAuthorize("hasRole('AFFILIATE')")
+    public ResponseEntity<Void> removeZone(@PathVariable Long regionId) {
+        affiliateService.removeZone(currentUserId(), regionId);
+        return ResponseEntity.noContent().build();
+    }
+
     // ── Activity tracking ─────────────────────────────────────────────────────
 
     @PostMapping("/track")

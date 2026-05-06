@@ -13,8 +13,10 @@ public class AffiliateRegionDTO {
     private String country;
     private String city;
     private String regionDescription;
-    private Double commissionPercentage;
     private Boolean isActive;
+    private Boolean isPaid;
+    private Double pricePaid;
+    private Boolean isPremium;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

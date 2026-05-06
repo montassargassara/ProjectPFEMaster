@@ -111,9 +111,10 @@ public class SaleOfferService {
             offer.setStatus(SaleOfferStatus.ACCEPTED);
             snapshotCommission(offer);
 
-            // Reserve the property so other affiliates can no longer submit offers on it
+            // Reserve the property and mark it EN_ATTENTE so no manual edits can override it
             Property property = offer.getProperty();
             property.setIsReservedByAffiliate(true);
+            property.setStatut("EN_ATTENTE");
             propertyRepository.save(property);
 
             notificationService.create(
@@ -169,6 +170,9 @@ public class SaleOfferService {
         String terminalStatus = property.getPrixVente() != null ? "VENDU" : "LOUE";
         property.setStatut(terminalStatus);
         property.setIsReservedByAffiliate(true);
+        if ("VENDU".equals(terminalStatus)) {
+            property.setIsFinalized(true);
+        }
         propertyRepository.save(property);
 
         // Record the affiliate transaction

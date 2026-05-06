@@ -44,6 +44,29 @@ public class PropertyListDTO {
 
     private Boolean isAffiliateEligible;
 
+    // Validation workflow
+    private String validationStatus;
+    private String ownerRole;
+    private Long createdById;
+    private String createdByName;
+    private Boolean commissionLocked;
+    private Boolean priceLocked;
+
+    // Rental lock / finalized fields
+    private java.time.LocalDateTime rentalEndDate;
+    private Integer rentalDurationMonths;
+    private Boolean isFinalized;
+    private Boolean isStatusLocked;
+    private String statusLockReason;
+
+    // Pending sale approval workflow
+    private String pendingSaleApproval;        // PENDING | APPROVED | REJECTED | null
+    private String pendingSaleStatut;          // VENDU or LOUE — the requested status
+    private String pendingSaleRejectionReason;
+    private Long pendingSaleRequestedById;
+    private String pendingSaleRequestedByName;
+    private String pendingSaleApproverRole;    // ADMIN | SUPER_ADMIN — who must approve next
+
     // ✅ Pour les listes, pas de médias (trop lourd)
     // private List<PropertyMediaDTO> medias;
 }

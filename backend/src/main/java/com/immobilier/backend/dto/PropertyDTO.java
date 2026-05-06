@@ -35,7 +35,33 @@ public class PropertyDTO {
     private java.util.List<Long> sharedWithAgencyIds;
 
     private Boolean isAffiliateEligible;
+
+    // ─── Validation workflow ─────────────────────────────────────────────────
+    private String validationStatus;     // PENDING_RESPONSABLE | PENDING_ADMIN | APPROVED | REJECTED
+    private String ownerRole;            // role of the creator
+    private Long createdById;
+    private String createdByName;
+    private Boolean commissionLocked;
+    private Boolean priceLocked;
+    private String rejectionReason;
+
+    // ─── Pending sale approval workflow ──────────────────────────────────────
+    private String pendingSaleApproval;        // PENDING | APPROVED | REJECTED | null
+    private String pendingSaleStatut;          // VENDU or LOUE — the requested status
+    private String pendingSaleRejectionReason;
+    private Long pendingSaleRequestedById;
+    private String pendingSaleRequestedByName;
+    private String pendingSaleApproverRole;    // ADMIN | SUPER_ADMIN — who must approve next
     
+    // ─── Rental lock fields ────────────────────────────────────────────────────
+    private Integer rentalDurationMonths;
+    private LocalDateTime rentalStartDate;
+    private LocalDateTime rentalEndDate;
+    private Boolean isFinalized;
+    // True when manual status changes are blocked (VENDU, locked LOUE, EN_ATTENTE via affiliate)
+    private Boolean isStatusLocked;
+    private String statusLockReason;
+
     // Image fields
     private String mainImageName;
     private String mainImageType;

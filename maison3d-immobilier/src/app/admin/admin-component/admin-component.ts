@@ -2,11 +2,15 @@
 import { Component, HostListener, OnDestroy, OnInit, Renderer2, Inject, PLATFORM_ID, ChangeDetectorRef } from '@angular/core';
 import { NavigationEnd, Router, RouterModule } from '@angular/router';
 import { filter, Subscription } from 'rxjs';
+import { SafeUrl } from '@angular/platform-browser';
 import { AdminAuthService } from '../services/admin-auth';
+import { ProfileService } from '../services/profile.service';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { UserService } from '../../services/user.service';
 import { AdminDashboardService } from '../services/admin-dashboard.service';
 import { NotificationService, NotificationDTO } from '../services/notification.service';
+import { MessageService } from '../services/message.service';
+import { interval } from 'rxjs';
 
 @Component({
   selector: 'app-admin-component',
@@ -26,8 +30,11 @@ export class AdminComponent implements OnInit, OnDestroy {
   propertiesCount = 0;
   agentsCount = 0;
   unreadNotifications = 0;
+  unreadMessageCount = 0;
   notifPanelOpen = false;
   recentNotifications: NotificationDTO[] = [];
+  currentAvatarBlobUrl: SafeUrl | null = null;
+  private _lastAvatarUrl: string | null = null;
 
   private subscriptions: Subscription[] = [];
   private readonly mobileBreakpoint = 992;
@@ -36,9 +43,11 @@ export class AdminComponent implements OnInit, OnDestroy {
   constructor(
     private router: Router,
     private authService: AdminAuthService,
+    private profileService: ProfileService,
     private userService: UserService,
     private dashboardService: AdminDashboardService,
     public notificationService: NotificationService,
+    private messageService: MessageService,
     private renderer: Renderer2,
     private cdr: ChangeDetectorRef,
     @Inject(PLATFORM_ID) private platformId: Object
@@ -67,6 +76,18 @@ export class AdminComponent implements OnInit, OnDestroy {
         if (user) {
           this.loadCounts();
           this.notificationService.startPolling();
+          // Fetch avatar blob when URL changes (avoids 403 from plain <img src>)
+          const avatarUrl = user.avatarUrl || null;
+          if (avatarUrl && avatarUrl !== this._lastAvatarUrl) {
+            this._lastAvatarUrl = avatarUrl;
+            this.profileService.fetchAvatarBlob(avatarUrl).subscribe({
+              next: (safe) => { this.currentAvatarBlobUrl = safe; this.cdr.detectChanges(); },
+              error: () => { this.currentAvatarBlobUrl = null; }
+            });
+          } else if (!avatarUrl) {
+            this._lastAvatarUrl = null;
+            this.currentAvatarBlobUrl = null;
+          }
           // redirect /admin root to the role-appropriate default page
           if (this.router.url === '/admin' || this.router.url === '/admin/') {
             this.router.navigate([this.authService.getDefaultRoute()], { replaceUrl: true });
@@ -89,6 +110,18 @@ export class AdminComponent implements OnInit, OnDestroy {
    */
   loadCounts(): void {
     if (this.currentUser?.role === 'AFFILIATE') return;
+
+    const msgPoll = interval(30000).subscribe(() => {
+      this.messageService.getUnreadCount().subscribe({
+        next: r => { this.unreadMessageCount = r.count; this.cdr.detectChanges(); },
+        error: () => {}
+      });
+    });
+    this.subscriptions.push(msgPoll);
+    this.messageService.getUnreadCount().subscribe({
+      next: r => { this.unreadMessageCount = r.count; this.cdr.detectChanges(); },
+      error: () => {}
+    });
 
     // ✅ Utiliser l'API sécurisée pour le comptage des clients
     const clientCountSub = this.dashboardService.getClientCount().subscribe({
@@ -200,6 +233,10 @@ export class AdminComponent implements OnInit, OnDestroy {
     });
 
     return match?.title || 'Administration';
+  }
+
+  getAvatarUrl(): SafeUrl | null {
+    return this.currentAvatarBlobUrl;
   }
 
   getUserInitials(): string {
@@ -329,6 +366,8 @@ export class AdminComponent implements OnInit, OnDestroy {
 
     if (type.includes('SHARE_REQUEST')) {
       this.router.navigate([role === 'ADMIN' ? '/admin/incoming-share-requests' : '/admin/share-requests']);
+    } else if (type === 'AGENCY_REGISTRATION' && role === 'SUPER_ADMIN') {
+      this.router.navigate(['/admin/agency-applications']);
     } else if (type === 'AFFILIATE_REGISTRATION' && role === 'SUPER_ADMIN') {
       this.router.navigate(['/admin/affiliate-applications']);
     } else if ((type === 'AFFILIATE_APPROVED' || type === 'AFFILIATE_REJECTED' || type === 'AFFILIATE_SUSPENDED') && role === 'AFFILIATE') {
@@ -339,6 +378,19 @@ export class AdminComponent implements OnInit, OnDestroy {
       this.router.navigate(['/admin/affiliate-offers']);
     } else if (type === 'MONTHLY_BONUS_AWARDED' && role === 'AFFILIATE') {
       this.router.navigate(['/admin/affiliate-dashboard']);
+    } else if (type === 'PROPERTY_PENDING_VALIDATION' && notif.relatedEntityId) {
+      this.router.navigate(['/admin/properties/edit', notif.relatedEntityId]);
+    } else if ((type === 'PROPERTY_VALIDATED' || type === 'PROPERTY_REJECTED'
+                || type === 'PROPERTY_MODIFIED') && notif.relatedEntityId) {
+      this.router.navigate(['/admin/properties/edit', notif.relatedEntityId]);
+    } else if (type === 'COMMISSION_REQUIRED' && notif.relatedEntityId) {
+      this.router.navigate(['/admin/properties/edit', notif.relatedEntityId]);
+    } else if (type === 'PROPERTY_SOLD_BY_AGENCY' && notif.relatedEntityId) {
+      this.router.navigate(['/admin/properties/edit', notif.relatedEntityId]);
+    } else if (type === 'SALE_APPROVAL_REQUESTED') {
+      this.router.navigate(['/admin/properties']);
+    } else if ((type === 'SALE_APPROVAL_GRANTED' || type === 'SALE_APPROVAL_REJECTED') && notif.relatedEntityId) {
+      this.router.navigate(['/admin/properties/edit', notif.relatedEntityId]);
     }
   }
 
@@ -348,7 +400,10 @@ export class AdminComponent implements OnInit, OnDestroy {
       case 'SHARE_REQUEST_ACCEPTED':  return 'fa-check-circle text-success';
       case 'SHARE_REQUEST_REJECTED':  return 'fa-times-circle text-danger';
       case 'SHARE_REQUEST_CANCELLED': return 'fa-ban text-warning';
-      case 'AFFILIATE_REGISTRATION':  return 'fa-user-clock text-primary';
+      case 'AGENCY_REGISTRATION':      return 'fa-building text-primary';
+      case 'AGENCY_APPROVED':          return 'fa-building-circle-check text-success';
+      case 'AGENCY_REJECTED':          return 'fa-building-circle-xmark text-danger';
+      case 'AFFILIATE_REGISTRATION':   return 'fa-user-clock text-primary';
       case 'AFFILIATE_APPROVED':      return 'fa-user-check text-success';
       case 'AFFILIATE_REJECTED':      return 'fa-user-times text-danger';
       case 'AFFILIATE_SUSPENDED':     return 'fa-user-slash text-warning';
@@ -357,6 +412,15 @@ export class AdminComponent implements OnInit, OnDestroy {
       case 'SALE_OFFER_REJECTED':     return 'fa-times-circle text-danger';
       case 'SALE_OFFER_COMPLETED':    return 'fa-flag-checkered text-success';
       case 'MONTHLY_BONUS_AWARDED':   return 'fa-star text-warning';
+      case 'PROPERTY_PENDING_VALIDATION': return 'fa-clock text-warning';
+      case 'PROPERTY_VALIDATED':      return 'fa-check-double text-success';
+      case 'PROPERTY_REJECTED':       return 'fa-ban text-danger';
+      case 'PROPERTY_MODIFIED':       return 'fa-pen-to-square text-secondary';
+      case 'COMMISSION_REQUIRED':     return 'fa-coins text-warning';
+      case 'PROPERTY_SOLD_BY_AGENCY': return 'fa-money-bill-trend-up text-success';
+      case 'SALE_APPROVAL_REQUESTED': return 'fa-gavel text-warning';
+      case 'SALE_APPROVAL_GRANTED':   return 'fa-circle-check text-success';
+      case 'SALE_APPROVAL_REJECTED':  return 'fa-circle-xmark text-danger';
       default: return 'fa-bell text-secondary';
     }
   }

@@ -215,6 +215,7 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
     @Query("SELECT p FROM Property p WHERE p.isActive = true " +
            "AND p.isAffiliateEligible = true " +
            "AND p.statut = 'DISPONIBLE' " +
+           "AND (p.validationStatus IS NULL OR p.validationStatus = com.immobilier.backend.enums.PropertyValidationStatus.APPROVED) " +
            "AND (p.isReservedByAffiliate IS NULL OR p.isReservedByAffiliate = false) " +
            "AND p.commissionPercentage IS NOT NULL AND p.commissionPercentage > 0 " +
            "AND p.country IS NOT NULL AND p.city IS NOT NULL " +
@@ -228,6 +229,7 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
     @Query("SELECT p FROM Property p WHERE p.isActive = true " +
            "AND p.isAffiliateEligible = true " +
            "AND p.statut = 'DISPONIBLE' " +
+           "AND (p.validationStatus IS NULL OR p.validationStatus = com.immobilier.backend.enums.PropertyValidationStatus.APPROVED) " +
            "AND (p.isReservedByAffiliate IS NULL OR p.isReservedByAffiliate = false) " +
            "AND p.commissionPercentage IS NOT NULL AND p.commissionPercentage > 0 " +
            "AND (LOWER(TRIM(p.region)) IN :regions OR LOWER(TRIM(p.city)) IN :regions)")
@@ -240,6 +242,7 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
     @Query("SELECT p FROM Property p WHERE p.isActive = true " +
            "AND p.isAffiliateEligible = true " +
            "AND p.statut = 'DISPONIBLE' " +
+           "AND (p.validationStatus IS NULL OR p.validationStatus = com.immobilier.backend.enums.PropertyValidationStatus.APPROVED) " +
            "AND (p.isReservedByAffiliate IS NULL OR p.isReservedByAffiliate = false) " +
            "AND p.commissionPercentage IS NOT NULL AND p.commissionPercentage > 0")
     List<Property> findAllAffiliateEligibleProperties();
@@ -261,9 +264,22 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
            ")")
     List<Property> findVisiblePropertiesForAgency(@Param("agencyAdminId") Long agencyAdminId);
 
+    /**
+     * Properties visible to a COMMERCIAL: only those they created within their agency.
+     */
+    @Query("SELECT p FROM Property p WHERE p.isActive = true " +
+           "AND p.agencyAdmin.id = :agencyAdminId " +
+           "AND p.createdBy.id = :userId")
+    List<Property> findVisiblePropertiesForCommercial(@Param("userId") Long userId,
+                                                      @Param("agencyAdminId") Long agencyAdminId);
+
     /** Properties owned by a specific agency admin (for ownership checks). */
     @Query("SELECT p FROM Property p WHERE p.isActive = true AND p.agencyAdmin.id = :agencyAdminId")
     List<Property> findByAgencyAdminId(@Param("agencyAdminId") Long agencyAdminId);
+
+    /** Properties with no validation status — used by the backfill runner on startup. */
+    @Query("SELECT p FROM Property p WHERE p.validationStatus IS NULL")
+    List<Property> findAllNeedingValidationBackfill();
 
     /** Single property access check for an agency (visible = owns it OR it's shared with them). */
     @Query("SELECT COUNT(p) > 0 FROM Property p WHERE p.id = :propertyId AND p.isActive = true AND (" +

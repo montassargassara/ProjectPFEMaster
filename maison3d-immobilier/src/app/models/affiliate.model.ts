@@ -12,8 +12,10 @@ export interface AffiliateRegionDTO {
   country?: string;
   city?: string;
   regionDescription?: string;
-  commissionPercentage: number;
   isActive?: boolean;
+  isPaid?: boolean;
+  pricePaid?: number;
+  isPremium?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -30,9 +32,6 @@ export interface AffiliateProfileDTO {
   experienceLevel?: string;
   notes?: string;
   regions?: AffiliateRegionDTO[];
-  bonusPercentage?: number;
-  bonusExpiresAt?: string;
-  hasBonusActive: boolean;
   reviewedById?: number;
   reviewedByName?: string;
   reviewedAt?: string;
@@ -57,10 +56,9 @@ export interface AffiliateStatsDTO {
   totalOffersAccepted: number;
   totalOffersRejected: number;
   conversionRate?: number;
-  currentBonusPercentage?: number;
-  bonusExpiresAt?: string;
   rank?: number;
   lastActivity?: string;
+  monthlyRewardAmount?: number;
 }
 
 export interface CreateAffiliateRequest {
@@ -79,7 +77,6 @@ export interface RegionSelection {
   country?: string;
   city?: string;
   regionDescription?: string;
-  commissionPercentage: number;
 }
 
 export interface AffiliateApprovalRequest {
@@ -114,11 +111,20 @@ export interface AffiliatePropertyDTO {
 export interface SuggestedZoneDTO {
   zoneName: string;
   country?: string;
+  city?: string;
   propertyCount: number;
   averageCommission: number;
   averagePrice: number;
   demandScore: number;
   opportunityScore?: number;
+  price: number;
+  isPremium: boolean;
+}
+
+export interface AddZoneRequest {
+  country: string;
+  city: string;
+  paymentConfirmed?: boolean;
 }
 
 export interface CreateSaleOfferRequest {
@@ -183,6 +189,24 @@ export interface AffiliateTransactionDTO {
   transactionDate: string;
 }
 
+export interface ZonePaymentRequestDTO {
+  id: number;
+  affiliateId: number;
+  affiliateName: string;
+  affiliateEmail: string;
+  country: string;
+  city: string;
+  zoneName: string;
+  amount: number;
+  isPremium: boolean;
+  proofImageUrl?: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  rejectionReason?: string;
+  reviewedByName?: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
 export interface MonthlyBonusDTO {
   id: number;
   affiliateId: number;
@@ -190,8 +214,6 @@ export interface MonthlyBonusDTO {
   rankingMonth: number;
   rankingYear: number;
   rank: number;
-  bonusPercentage: number;
-  bonusMonth: number;
-  bonusYear: number;
-  isApplied: boolean;
+  rewardAmount: number;
+  isPaid: boolean;
 }

@@ -1,0 +1,309 @@
+\documentclass[12pt,a4paper]{report}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amssymb,amsmath}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage[left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm,headheight=15pt]{geometry}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+
+% Configuration fancyhdr pour les en-têtes et pieds de page
+\pagestyle{fancy}
+\fancyhf{} % Réinitialiser tous les en-têtes et pieds de page
+
+% En-tête pour les pages normales (pas la première page du chapitre)
+\fancyhead[L]{\nouppercase{\leftmark}} % Titre du chapitre à gauche (format Chapitre X. Titre)
+\fancyhead[R]{} % Rien à droite
+
+% Pied de page : numéro centré
+\fancyfoot[C]{\thepage}
+
+% Style spécial pour la première page de chaque chapitre
+\fancypagestyle{plain}{%
+    \fancyhf{}%
+    \renewcommand{\headrulewidth}{0pt}% Pas de ligne d'en-tête
+    \fancyfoot[C]{\thepage}% Numéro centré en pied de page
+}
+
+% Épaisseur de la ligne d'en-tête
+\renewcommand{\headrulewidth}{0.4pt}
+
+% Formatage du titre du chapitre dans l'en-tête
+% La commande \leftmark contient par défaut "CHAPITRE X. TITRE" en majuscules
+% On utilise \nouppercase pour conserver la casse d'origine
+% On redéfinit la commande \chaptermark pour contrôler précisément le contenu
+\renewcommand{\chaptermark}[1]{%
+    \markboth{\chaptername\ \thechapter. \ #1}{}%
+}
+
+% Pour les sections dans l'en-tête (optionnel, ici on n'utilise que le chapitre)
+\renewcommand{\sectionmark}[1]{}
+
+\begin{document}
+
+% Page de titre
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    {\huge\bfseries Rapport de Projet de Fin d'Études\par}
+    \vspace{1.5cm}
+    {\Large\bfseries Maison3D Immobilier\par}
+    \vspace{1cm}
+    {\large Plateforme multi-tenant de gestion immobilière\par}
+    \vspace{2cm}
+    {\large\textbf{Auteur :} Votre Nom\par}
+    \vspace{0.5cm}
+    {\large\textbf{Encadrant :} Nom de l'encadrant\par}
+    \vspace{0.5cm}
+    {\large\textbf{Entreprise :} We Are Tech\par}
+    \vspace{2cm}
+    {\large Année universitaire 2024-2025\par}
+    \vfill
+\end{titlepage}
+
+% Table des matières
+\tableofcontents
+\newpage
+
+% Liste des figures (optionnel)
+\listoffigures
+\newpage
+
+% Liste des tableaux (optionnel)
+\listoftables
+\newpage
+
+% Chapitre 1
+\chapter{Cadre général du projet}
+
+\section*{Introduction}
+\addcontentsline{toc}{section}{Introduction}
+
+Dans un contexte où la transformation numérique s'impose comme un levier stratégique incontournable, le secteur immobilier ne fait pas exception à cette dynamique. Les acteurs du marché — agences, commerciaux, affiliés et acheteurs — font face à une fragmentation croissante des outils de gestion, à un manque de collaboration inter-agences et à une expérience utilisateur insuffisamment différenciante. C'est dans cette logique que s'inscrit le projet \og Maison3D Immobilier \fg{}, une plateforme intégrée de gestion immobilière alliant architecture multi-tenant, réseau d'affiliation structuré et visualisation tridimensionnelle des biens.
+
+Ce premier chapitre a pour vocation de poser les fondements conceptuels et analytiques du projet. Nous commençons par présenter l'organisme d'accueil au sein duquel ce travail a été réalisé. Nous procédons ensuite à une étude de l'existant, permettant d'identifier les limites des solutions actuelles et de justifier la pertinence de la solution proposée. La problématique est alors formalisée, suivie de la présentation des spécifications fonctionnelles et non fonctionnelles qui constitueront le cadre directeur du développement.
+
+\section{Présentation de l'organisme d'accueil}
+
+\subsection{Présentation générale de We Are Tech}
+
+Le présent projet de fin d'études a été réalisé au sein de la société \textbf{We Are Tech}, une entreprise de services numériques (ESN) spécialisée dans l'accompagnement digital des organisations. Positionnée comme partenaire stratégique de la transformation numérique, l'entreprise se définit par la devise suivante : \og \textit{Elevate Your Brand with Us — From Ideas to Implementation} \fg{}. Cette philosophie traduit la volonté d'accompagner les clients à chaque étape de leur projet, depuis la conception initiale jusqu'à la mise en production opérationnelle.
+
+We Are Tech intervient auprès d'un spectre varié de clients, allant des startups aux grandes entreprises, en passant par les PME, dans une logique de partenariat durable axée sur la création de valeur et l'innovation technologique. La société se distingue par sa capacité à proposer des solutions sur mesure, adaptées aux besoins spécifiques de chaque client, tout en intégrant les dernières avancées technologiques et méthodologiques.
+
+\subsection{Services de la société}
+
+L'offre de services de We Are Tech s'articule autour de quatre pôles de compétences complémentaires, couvrant l'ensemble des besoins liés à la présence et à la performance numériques des entreprises.
+
+\subsubsection{Développement web et mobile}
+Ce pôle regroupe les compétences techniques nécessaires à la conception, au développement et à la maintenance d'applications web et mobiles. L'entreprise mobilise des technologies modernes et éprouvées — notamment Spring Boot, Angular et React Native — pour livrer des solutions robustes, évolutives et sécurisées. Ce pôle inclut également l'intégration de fonctionnalités avancées telles que le paiement en ligne, les interfaces de programmation tierces (API), les tableaux de bord analytiques et les modules d'intelligence artificielle.
+
+\subsubsection{Marketing digital}
+Le pôle marketing digital accompagne les entreprises dans l'élaboration et la mise en œuvre de leur stratégie de présence en ligne. Il couvre la gestion des réseaux sociaux, la publicité en ligne (Google Ads, campagnes sur les réseaux sociaux), l'emailing et l'inbound marketing. La performance des campagnes fait l'objet d'un suivi rigoureux au travers d'indicateurs clés permettant d'optimiser le retour sur investissement.
+
+\subsubsection{Optimisation SEO}
+Le référencement naturel constitue un axe prioritaire de toute stratégie digitale. We Are Tech réalise des audits SEO complets, une recherche approfondie de mots-clés, une optimisation technique et sémantique des sites web, ainsi qu'une stratégie de netlinking. L'objectif est d'améliorer durablement le positionnement des clients sur les moteurs de recherche et d'accroître leur trafic organique.
+
+\subsubsection{Création de contenu}
+La production de contenu de qualité représente un levier essentiel du marketing digital. Ce pôle prend en charge la rédaction d'articles, de fiches produits et de livres blancs, ainsi que la production de supports visuels (infographies, vidéos, présentations), dans le but de renforcer l'autorité des marques et d'engager leur audience cible.
+
+\subsection{Structure des équipes}
+
+We Are Tech s'appuie sur une organisation par pôles fonctionnels, favorisant la collaboration transversale et la montée en compétence continue. Le tableau suivant décrit les différentes équipes constitutives de la société ainsi que leurs rôles respectifs.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{|p{4cm}|p{10cm}|}
+\hline
+\textbf{Équipe} & \textbf{Rôles et responsabilités} \\
+\hline
+Direction & Définition de la stratégie globale, développement commercial, supervision de la qualité des prestations \\
+\hline
+Développement & Conception, codage, tests et déploiement des applications (développeurs full-stack, architectes logiciels, chefs de projet techniques) \\
+\hline
+Marketing & Élaboration des stratégies marketing, gestion des campagnes publicitaires, analyse des données et reporting \\
+\hline
+SEO & Audits techniques, optimisations rédactionnelles, suivi des positions sur les moteurs de recherche \\
+\hline
+Création de contenu & Production de contenus rédactionnels et visuels (rédacteurs web, graphistes, vidéastes) \\
+\hline
+\end{tabular}
+\caption{Structure et rôles des équipes de We Are Tech}
+\end{table}
+
+Cette organisation permet à la société de mobiliser rapidement les compétences requises pour chaque projet, tout en assurant un suivi personnalisé et une réactivité maximale. C'est dans ce cadre professionnel stimulant que le projet Maison3D Immobilier a été initié et mené à bien.
+
+\section{Étude de l'existant}
+
+\subsection{Analyse des solutions actuelles}
+
+Afin de positionner la proposition de valeur du projet, il est nécessaire d'examiner les pratiques et les outils actuellement utilisés dans le secteur immobilier.
+
+\subsubsection{Gestion manuelle par tableurs et documents papier}
+
+De nombreuses agences immobilières, notamment les petites structures, gèrent encore leurs biens et leurs portefeuilles clients au moyen de tableurs Excel ou de dossiers papier. Cette approche présente plusieurs limitations majeures : absence de centralisation des données, risques de doublons et d'incohérences, difficultés de partage de l'information entre membres de l'agence, absence de traçabilité des actions, et impossibilité de diffuser les biens en ligne de manière structurée et attrayante.
+
+\subsubsection{Logiciels de gestion immobilière propriétaires}
+
+Certaines agences ont fait l'acquisition de logiciels de gestion spécialisés. Bien que plus structurés, ces outils souffrent généralement de coûts d'acquisition et de maintenance élevés, d'une absence d'interface publique pour les acheteurs, de mises à jour rares, et d'un manque de fonctionnalités collaboratives entre agences ou avec des partenaires externes.
+
+\subsubsection{Plateformes d'annonces immobilières en ligne}
+
+Des portails généralistes — tels que Tayara ou des plateformes internationales similaires — sont utilisés par certains professionnels pour publier leurs annonces. Cependant, ces plateformes ne proposent pas d'outils de gestion interne, imposent des frais de publication, offrent une visibilité limitée et ne différencient pas les professionnels des particuliers, ce qui nuit à l'image de marque des agences.
+
+\subsection{Étude concurrentielle}
+
+À l'échelle internationale, des solutions comme \textit{Property Finder} ou \textit{Mubawab} proposent des portails d'annonces. En Tunisie, peu de solutions intègrent à la fois la gestion d'agence, le réseau d'affiliation et la visualisation 3D au sein d'une même plateforme. La majorité des acteurs du marché se concentrent exclusivement sur la publication d'annonces, laissant de côté les besoins métier des professionnels.
+
+\subsection{Critique de l'existant}
+
+L'analyse des solutions disponibles révèle plusieurs lacunes structurelles que la plateforme Maison3D Immobilier ambitionne de combler :
+
+\begin{itemize}
+    \item Absence de solution unifiée couvrant l'ensemble des besoins des acteurs immobiliers (agences, commerciaux, affiliés, acheteurs) ;
+    \item Manque d'outils de collaboration inter-agences et de partage contrôlé des biens ;
+    \item Absence de module d'affiliation intégré, limitant l'extension des réseaux de vente ;
+    \item Rareté des fonctionnalités de visualisation immersive des biens sur le marché tunisien ;
+    \item Modèles économiques peu adaptés aux petites agences (coûts fixes élevés ou commissions importantes).
+\end{itemize}
+
+Le tableau suivant synthétise la comparaison entre les solutions existantes et la plateforme proposée.
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{|p{3.2cm}|p{2cm}|p{2.2cm}|p{2.2cm}|p{2.8cm}|}
+\hline
+\textbf{Fonctionnalité} & \textbf{Excel / Papier} & \textbf{Logiciel propriétaire} & \textbf{Portail générique} & \textbf{Maison3D Immobilier} \\
+\hline
+Gestion interne des biens & Partielle & Oui & Non & Oui \\
+\hline
+Vitrine publique en ligne & Non & Rare & Oui & Oui \\
+\hline
+Architecture multi-agences & Non & Limitée & Non & Oui (rôles granulaires) \\
+\hline
+Partage de biens inter-agences & Non & Non & Non & Oui \\
+\hline
+Réseau d'affiliation & Non & Non & Non & Oui \\
+\hline
+Visualisation 3D & Non & Non & Rare & Oui \\
+\hline
+Tableaux de bord analytiques & Non & Partiel & Non & Oui (par rôle) \\
+\hline
+Modèle économique & Licence & Abonnement & Commission & SaaS Freemium \\
+\hline
+\end{tabular}
+\caption{Comparaison des solutions existantes avec Maison3D Immobilier}
+\end{table}
+
+\section{Méthodologie de développement}
+
+\subsection{Présentation de la méthodologie Agile}
+
+La complexité croissante des projets logiciels et la nécessité de s'adapter rapidement aux évolutions des besoins métier ont conduit, à partir des années 2000, à l'émergence des méthodes agiles. Ces dernières se positionnent en opposition aux approches traditionnelles de type cycle en cascade, souvent critiquées pour leur rigidité et leur incapacité à intégrer les changements en cours de développement. Le manifeste agile, publié en 2001 par un groupe de dix-sept experts du génie logiciel, énonce quatre valeurs fondamentales qui constituent le socle de cette philosophie : les individus et leurs interactions priment sur les processus et les outils ; des logiciels opérationnels priment sur une documentation exhaustive ; la collaboration avec les clients prime sur la négociation contractuelle ; l'adaptation au changement prime sur le suivi d'un plan préétabli.
+
+Les méthodes agiles se caractérisent par des cycles de développement courts, une livraison incrémentale de fonctionnalités à valeur ajoutée, une collaboration étroite avec les parties prenantes, ainsi qu'une capacité d'adaptation aux changements de spécifications. Ces principes sont particulièrement adaptés au projet Maison3D Immobilier, dont les exigences détaillées se précisent progressivement au fil de l'avancement.
+
+\subsection{Méthodologie Scrum}
+
+Scrum est un cadre de travail agile parmi les plus répandus dans l'industrie du logiciel. Développé par Ken Schwaber et Jeff Sutherland, Scrum propose une structure organisationnelle légère mais rigoureuse, fondée sur des rôles clairement définis, des événements cadencés et des artefacts de pilotage transparents. L'unité de base de Scrum est le \textit{sprint}, une itération de durée fixe — généralement comprise entre une et quatre semaines — au terme de laquelle l'équipe de développement produit un incrément de produit potentiellement livrable.
+
+Pour ce projet, la durée des sprints a été fixée à deux semaines, ce qui constitue un équilibre entre la nécessité de progresser significativement à chaque itération et celle de recevoir des retours suffisamment fréquents pour ajuster le cap.
+
+\subsubsection{Les rôles Scrum}
+
+La méthodologie Scrum définit trois rôles principaux aux responsabilités distinctes et complémentaires :
+
+\begin{itemize}
+    \item \textbf{Le Product Owner} : représentant des parties prenantes, il est le garant de la vision du produit et de sa valeur ajoutée. Il est responsable de la gestion et de la priorisation du \textit{Product Backlog}. Dans notre projet, le Product Owner était incarné par l'encadrant professionnel de We Are Tech.
+    \item \textbf{Le Scrum Master} : facilitateur et garant du respect des principes agiles, il aide l'équipe à surmonter les obstacles, anime les cérémonies Scrum et protège l'équipe des perturbations extérieures.
+    \item \textbf{L'équipe de développement} : constituée de professionnels aux compétences complémentaires, elle est responsable de la transformation des éléments du \textit{Sprint Backlog} en un incrément de produit fonctionnel. Pour Maison3D Immobilier, l'équipe de développement était composée de l'auteur de ce rapport.
+\end{itemize}
+
+\subsubsection{Les artefacts Scrum}
+
+Scrum s'appuie sur trois artefacts principaux qui assurent la transparence, l'inspection et l'adaptation du projet :
+
+\begin{itemize}
+    \item \textbf{Le Product Backlog} : liste ordonnée et évolutive de l'ensemble des fonctionnalités à apporter au produit. Chaque élément y est décrit sous forme d'\textit{user story}.
+    \item \textbf{Le Sprint Backlog} : sous-ensemble du Product Backlog sélectionné pour un sprint donné, détaillant les tâches techniques nécessaires.
+    \item \textbf{L'incrément} : somme de tous les éléments complétés au cours d'un sprint et des sprints précédents, potentiellement livrable.
+\end{itemize}
+
+\subsection{Modélisation UML}
+
+UML (Unified Modeling Language) est un langage de modélisation visuelle normalisé par l'OMG (Object Management Group) depuis 1997. Il permet de représenter les différents aspects d'un système logiciel selon des points de vue complémentaires.
+
+\subsubsection{Sélection des diagrammes UML adaptés aux processus agiles}
+
+Plusieurs diagrammes UML ont été produits pour faciliter la compréhension du périmètre fonctionnel et des interactions entre composants :
+
+\begin{itemize}
+    \item \textbf{Diagramme de cas d'utilisation} : identifie les acteurs du système et leurs interactions avec les fonctionnalités. Il a servi de support à la définition des user stories.
+    \item \textbf{Diagramme de classes} : représente la structure statique du système — entités métier, attributs, méthodes et relations. Il a guidé l'implémentation du modèle de données.
+    \item \textbf{Diagramme de séquence} : décrit l'enchaînement temporel des messages échangés entre objets pour réaliser un scénario spécifique (soumission d'offre, acceptation de partage, etc.).
+    \item \textbf{Diagramme d'activités} : modélise les flux de travail transverses, notamment le processus de validation des affiliés et le cycle de vie des offres.
+    \item \textbf{Diagramme d'états} : représente les états possibles d'un objet (\texttt{OffreVente}, \texttt{PropertyShareRequest}) et les transitions entre ces états.
+\end{itemize}
+
+\section{Problématique}
+
+Le marché immobilier tunisien souffre d'une fragmentation des outils numériques disponibles et d'une absence de plateforme intégrée capable de répondre simultanément aux besoins des agences, des commerciaux, des affiliés externes et des acheteurs.
+
+Les solutions actuelles sont soit trop rudimentaires, soit trop coûteuses et fermées, soit trop limitées fonctionnellement. Cette situation engendre une perte d'efficacité opérationnelle, un manque de visibilité pour les biens immobiliers, des difficultés de collaboration entre acteurs, et une expérience utilisateur dégradée.
+
+La question centrale qui structure ce projet est dès lors la suivante : \textit{comment concevoir une plateforme unifiée, évolutive et adaptée au contexte du marché tunisien, intégrant la gestion multi-agences, le partage contrôlé des biens, un réseau d'affiliation performant et une expérience immersive via la visualisation 3D, tout en demeurant financièrement accessible ?}
+
+\section{Spécifications des besoins}
+
+\subsection{Identification des acteurs}
+
+Le système implique six types d'acteurs principaux dont les rôles et périmètres d'action sont clairement délimités :
+
+\begin{itemize}
+    \item \textbf{Super Administrateur} : contrôle global de la plateforme, gestion des administrateurs d'agences, partage des biens, validation des affiliés ;
+    \item \textbf{Administrateur d'agence} : gestion des biens de l'agence, traitement des requêtes de partage, gestion des employés ;
+    \item \textbf{Responsable commercial / Commercial} : consultation et gestion des biens de l'agence, suivi des clients ;
+    \item \textbf{Affilié} : consultation des biens éligibles, soumission d'offres de vente, suivi des commissions ;
+    \item \textbf{Client public} : inscription, consultation des biens, envoi de demandes d'intérêt ;
+    \item \textbf{Visiteur} : navigation libre sur le portail public.
+\end{itemize}
+
+\subsection{Besoins fonctionnels}
+
+\subsubsection{Module de gestion des biens}
+\begin{itemize}
+    \item Opérations CRUD complètes avec gestion des attributs (prix, surface, localisation, images, vidéos, modèle 3D) ;
+    \item Contrôle d'accès basé sur le type de propriété ;
+    \item Filtrage automatique selon le rôle et l'agence.
+\end{itemize}
+
+\subsubsection{Module d'affiliation}
+\begin{itemize}
+    \item Inscription d'affiliés avec validation par le Super Administrateur ;
+    \item Attribution de zones géographiques avec taux de commission personnalisé ;
+    \item Consultation des biens éligibles ;
+    \item Soumission d'offres de vente ;
+    \item Calcul automatique des commissions et classement mensuel.
+\end{itemize}
+
+\subsection{Besoins non fonctionnels}
+
+\subsubsection{Sécurité}
+Authentification par JWT, chiffrement BCrypt, isolation stricte des données entre agences.
+
+\subsubsection{Performance}
+Temps de réponse < 2 secondes, pagination systématique, mise en cache.
+
+\subsubsection{Évolutivité et maintenabilité}
+Architecture modulaire, documentation, tests unitaires, principes SOLID.
+
+\section*{Conclusion}
+\addcontentsline{toc}{section}{Conclusion}
+
+Ce premier chapitre a permis de poser les fondements analytiques et méthodologiques du projet Maison3D Immobilier. Après avoir présenté l'organisme d'accueil We Are Tech et la méthodologie agile Scrum retenue, nous avons conduit une étude critique des solutions existantes, mettant en évidence leurs limites structurelles. La problématique a été formalisée, et les spécifications fonctionnelles et non fonctionnelles ont été détaillées. Ces éléments constituent le socle sur lequel s'appuiera la conception technique présentée dans le chapitre suivant.
+
+\end{document}

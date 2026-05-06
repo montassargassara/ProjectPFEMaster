@@ -16,6 +16,8 @@ import {
   SaleOfferDTO,
   RegionSelection,
   SuggestedZoneDTO,
+  AddZoneRequest,
+  ZonePaymentRequestDTO,
 } from '../../models/affiliate.model';
 
 @Injectable({ providedIn: 'root' })
@@ -81,6 +83,10 @@ export class AffiliateService {
     return this.http.post<AffiliateProfileDTO>(`${this.adminBase}`, req);
   }
 
+  registerAffiliate(req: CreateAffiliateRequest): Observable<AffiliateProfileDTO> {
+    return this.http.post<AffiliateProfileDTO>(`${this.affiliateBase}/register`, req);
+  }
+
   // ─── Affiliate User: Profile & Properties ────────────────────────────────
 
   getMyProfile(): Observable<AffiliateProfileDTO> {
@@ -105,6 +111,45 @@ export class AffiliateService {
 
   getSuggestedZones(): Observable<SuggestedZoneDTO[]> {
     return this.http.get<SuggestedZoneDTO[]>(`${this.affiliateBase}/suggested-zones`);
+  }
+
+  addZone(req: AddZoneRequest): Observable<AffiliateRegionDTO> {
+    return this.http.post<AffiliateRegionDTO>(`${this.affiliateBase}/add-zone`, req);
+  }
+
+  removeZone(regionId: number): Observable<void> {
+    return this.http.delete<void>(`${this.affiliateBase}/remove-zone/${regionId}`);
+  }
+
+  // ─── Zone Payment Requests ────────────────────────────────────────────────
+
+  submitZonePaymentRequest(country: string, city: string, isPremium: boolean, proof: File): Observable<ZonePaymentRequestDTO> {
+    const fd = new FormData();
+    fd.append('country', country);
+    fd.append('city', city);
+    fd.append('isPremium', isPremium ? 'true' : 'false');
+    fd.append('proof', proof, proof.name);
+    return this.http.post<ZonePaymentRequestDTO>(`${apiBaseUrl}/api/zone-payments`, fd);
+  }
+
+  getMyZonePaymentRequests(): Observable<ZonePaymentRequestDTO[]> {
+    return this.http.get<ZonePaymentRequestDTO[]>(`${apiBaseUrl}/api/zone-payments/my-requests`);
+  }
+
+  getAllZonePayments(): Observable<ZonePaymentRequestDTO[]> {
+    return this.http.get<ZonePaymentRequestDTO[]>(`${apiBaseUrl}/api/admin/zone-payments`);
+  }
+
+  getPendingZonePayments(): Observable<ZonePaymentRequestDTO[]> {
+    return this.http.get<ZonePaymentRequestDTO[]>(`${apiBaseUrl}/api/admin/zone-payments/pending`);
+  }
+
+  approveZonePayment(id: number): Observable<ZonePaymentRequestDTO> {
+    return this.http.put<ZonePaymentRequestDTO>(`${apiBaseUrl}/api/admin/zone-payments/${id}/approve`, {});
+  }
+
+  rejectZonePayment(id: number, reason: string): Observable<ZonePaymentRequestDTO> {
+    return this.http.put<ZonePaymentRequestDTO>(`${apiBaseUrl}/api/admin/zone-payments/${id}/reject`, { reason });
   }
 
   // ─── Sale Offers ──────────────────────────────────────────────────────────

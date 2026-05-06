@@ -151,7 +151,6 @@ public class ClientManagementService {
                 region.setCountry(country);
                 region.setCity(city);
                 region.setRegionDescription(country);
-                region.setCommissionPercentage(request.getTauxCommission() != null ? request.getTauxCommission() : 5.0);
                 region.setIsActive(true);
                 affiliateRegionRepository.save(region);
                 log.info("AffiliateRegion créée: {} / {} pour l'affilié ID {}", country, city, savedUser.getId());
@@ -485,10 +484,6 @@ private ClientInfo createEmptyClientInfo(User user) {
                 region.setCity(trimmedCity);
                 region.setRegionName(trimmedCity.toLowerCase());
                 region.setRegionDescription(trimmedCountry);
-                if (region.getCommissionPercentage() == null) {
-                    region.setCommissionPercentage(
-                        clientInfo.getTauxCommission() != null ? clientInfo.getTauxCommission() : 5.0);
-                }
                 region.setIsActive(true);
                 affiliateRegionRepository.save(region);
                 log.info("AffiliateRegion mise à jour: {} / {} pour l'affilié ID {}", trimmedCountry, trimmedCity, user.getId());

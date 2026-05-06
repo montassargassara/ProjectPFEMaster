@@ -159,6 +159,8 @@
 	</section>
 
 	<section class="activity-grid">
+
+		<!-- Derniers biens ajoutés -->
 		<article class="panel">
 			<div class="panel-header">
 				<div>
@@ -179,6 +181,8 @@
 				</div>
 			</div>
 		</article>
+
+		<!-- Dernières ventes -->
 		<article class="panel">
 			<div class="panel-header">
 				<div>
@@ -196,99 +200,185 @@
 				</div>
 			</div>
 		</article>
+
+		<!-- Nouveaux clients -->
 		<article class="panel">
-		<div class="panel-header">
-			<div>
-			<h4>Nouveaux clients</h4>
-			<p>Derniers clients visibles</p>
+			<div class="panel-header">
+				<div>
+					<h4>Nouveaux clients</h4>
+					<p>Derniers clients visibles</p>
+				</div>
 			</div>
-		</div>
-		<div class="list" *ngIf="recentClients.length; else emptyClients">
-			<div class="list-row" *ngFor="let client of recentClients">
-			<div class="list-main">
-				<p class="title">{{ client.prenom }} {{ client.nom }}</p>
-				<p class="meta">{{ client.email }} · {{ formatDate(client.createdAt) }}</p>
+			<div class="list" *ngIf="recentClients.length; else emptyClients">
+				<div class="list-row" *ngFor="let client of recentClients">
+					<div class="list-main">
+						<p class="title">{{ client.prenom }} {{ client.nom }}</p>
+						<p class="meta">{{ client.email }} · {{ formatDate(client.createdAt) }}</p>
+					</div>
+					<span class="pill" [ngClass]="getVisibilityBadgeClass(client.visibilityType)">
+						{{ getVisibilityLabel(client.visibilityType) }}
+					</span>
+				</div>
 			</div>
-			<span class="pill" [ngClass]="getVisibilityBadgeClass(client.visibilityType)">
-				{{ getVisibilityLabel(client.visibilityType) }}
-			</span>
-			</div>
-		</div>
 		</article>
 
+		<!-- Nouveaux affiliés -->
 		<article class="panel" *ngIf="recentAffiliates.length">
-		<div class="panel-header">
-			<div>
-			<h4>Nouveaux affiliés</h4>
-			<p>Derniers affiliés visibles</p>
-			</div>
-		</div>
-		<div class="list">
-			<div class="list-row" *ngFor="let affiliate of recentAffiliates">
-			<div class="list-main">
-				<p class="title">{{ affiliate.prenom }} {{ affiliate.nom }}</p>
-				<p class="meta">{{ affiliate.email }} · {{ formatDate(affiliate.createdAt) }}</p>
-			</div>
-			<span class="pill pill-highlight">Affilié</span>
-			</div>
-		</div>
-		</article>
-		<article class="panel">
 			<div class="panel-header">
 				<div>
-					<h4>Validations en attente</h4>
-					<p>Biens a valider ou en cours</p>
+					<h4>Nouveaux affilies</h4>
+					<p>Derniers affilies visibles</p>
 				</div>
 			</div>
-			<div class="list" *ngIf="snapshot.pendingValidations.length; else emptyPending">
-				<div class="list-row" *ngFor="let property of snapshot.pendingValidations; trackBy: trackById">
+			<div class="list">
+				<div class="list-row" *ngFor="let affiliate of recentAffiliates">
 					<div class="list-main">
-						<p class="title">{{ formatPropertyTitle(property) }}</p>
-						<p class="meta">{{ property.city || '—' }} · {{ formatDate(property.createdAt) }}</p>
+						<p class="title">{{ affiliate.prenom }} {{ affiliate.nom }}</p>
+						<p class="meta">{{ affiliate.email }} · {{ formatDate(affiliate.createdAt) }}</p>
 					</div>
-					<span class="pill pill-pending">{{ getStatusLabel(property.statut) }}</span>
+					<span class="pill pill-highlight">Affilie</span>
 				</div>
 			</div>
 		</article>
-		<article class="panel quick-panel">
+
+		<!-- Messages non lus -->
+		<article class="panel msg-panel">
 			<div class="panel-header">
 				<div>
-					<h4>Operations rapides</h4>
-					<p>Flux de travail prioritaire</p>
+					<h4>Messages non lus</h4>
+					<p>Boite de reception interne</p>
+				</div>
+				<a routerLink="/admin/messages" class="link">Ouvrir</a>
+			</div>
+			<div class="msg-list" *ngIf="unreadMessages.length; else emptyMessages">
+				<div class="msg-item" *ngFor="let msg of unreadMessages" [class.unread]="!msg.read">
+					<a class="msg-avatar" [routerLink]="['/admin/messages']">
+						{{ msg.senderName ? msg.senderName.charAt(0).toUpperCase() : '?' }}
+					</a>
+					<div class="msg-body">
+						<div class="msg-meta">
+							<span class="msg-sender">{{ msg.senderName }}</span>
+							<span class="msg-role">{{ formatRoleName(msg.senderRole) }}</span>
+							<span class="msg-time">{{ formatDate(msg.createdAt) }}</span>
+						</div>
+						<p class="msg-content">{{ msg.content }}</p>
+					</div>
+					<button class="msg-read-btn" *ngIf="!msg.read" (click)="markMessageRead(msg.id)" title="Marquer comme lu">
+						<i class="fas fa-check"></i>
+					</button>
 				</div>
 			</div>
-			<div class="quick-list">
-				<div class="quick-item">
-					<div>
-						<h5>Messages non lus</h5>
-						<p>Boite de reception a traiter</p>
-					</div>
-					<span class="pill pill-highlight">Support</span>
-				</div>
-				<div class="quick-item">
-					<div>
-						<h5>Contrats a renouveler</h5>
-						<p>Verifier les mandats a echeance</p>
-					</div>
-					<span class="pill pill-pending">Alerte</span>
-				</div>
-				<div class="quick-item">
-					<div>
-						<h5>Taches urgentes</h5>
-						<p>Suivi des visites planifiees</p>
-					</div>
-					<span class="pill pill-available">Priorite</span>
-				</div>
-				<div class="quick-item">
-					<div>
-						<h5>Validations rapides</h5>
-						<p>Verifier les nouveaux biens soumis</p>
-					</div>
-					<span class="pill pill-sold">Action</span>
-				</div>
-			</div>
+			<ng-template #emptyMessages>
+				<div class="empty">Aucun message non lu.</div>
+			</ng-template>
 		</article>
+
+		<!-- Contrats à renouveler -->
+		<article class="panel renewal-panel">
+			<div class="panel-header">
+				<div>
+					<h4>Contrats a renouveler</h4>
+					<p>Locations dont le bail est expire</p>
+				</div>
+				<a routerLink="/admin/properties" class="link">Gerer</a>
+			</div>
+			<div class="list" *ngIf="expiredRentals.length; else emptyRenewals">
+				<div class="list-row renewal-row" *ngFor="let r of expiredRentals">
+					<div class="renewal-icon"><i class="fas fa-calendar-times"></i></div>
+					<div class="list-main">
+						<p class="title">{{ r.titre }}</p>
+						<p class="meta">
+							{{ r.city || r.country || '—' }} ·
+							Expiré le {{ formatDate(r.rentalEndDate) }}
+						</p>
+					</div>
+					<span class="pill pill-pending">Expiré</span>
+				</div>
+			</div>
+			<ng-template #emptyRenewals>
+				<div class="empty">Aucun contrat expiré.</div>
+			</ng-template>
+		</article>
+
+		<!-- Validations rapides -->
+		<article class="panel validation-panel">
+			<div class="panel-header">
+				<div>
+					<h4>Validations rapides</h4>
+					<p *ngIf="currentUserRole === 'SUPER_ADMIN'">Biens recents des agences</p>
+					<p *ngIf="currentUserRole !== 'SUPER_ADMIN'">Biens recents visibles</p>
+				</div>
+				<a routerLink="/admin/properties" class="link">Voir tout</a>
+			</div>
+			<div class="validation-list" *ngIf="validationItems.length; else emptyValidations">
+				<div class="validation-row" *ngFor="let item of validationItems">
+					<div class="val-info">
+						<p class="title">{{ item.titre }}</p>
+						<p class="meta">
+							{{ item.city || '—' }} ·
+							<span [ngClass]="getValidationClass(item)">{{ getValidationLabel(item) }}</span>
+						</p>
+					</div>
+					<div class="val-actions">
+						<span class="pill" [ngClass]="getStatusPillClass(item.statut)">{{ getStatusLabel(item.statut) }}</span>
+						<!-- SUPER_ADMIN: send message to agency admin -->
+						<button
+							*ngIf="currentUserRole === 'SUPER_ADMIN' && item.agencyAdminId"
+							class="val-btn val-btn-msg"
+							(click)="openSendMsg(item.agencyAdminId || 0, item.agencyAdminName || 'Agence')"
+							title="Envoyer un message a l'agence">
+							<i class="fas fa-envelope"></i>
+						</button>
+						<!-- ADMIN: link to property details/edit for AGENCY_OWNED only -->
+						<a
+							*ngIf="currentUserRole === 'ADMIN' && item.ownerType !== 'SUPER_ADMIN_OWNED'"
+							[routerLink]="['/admin/properties', item.id]"
+							class="val-btn val-btn-edit"
+							title="Voir / Modifier">
+							<i class="fas fa-pencil-alt"></i>
+						</a>
+						<!-- ADMIN: view-only for SUPER_ADMIN_OWNED shared properties -->
+						<a
+							*ngIf="currentUserRole === 'ADMIN' && item.ownerType === 'SUPER_ADMIN_OWNED'"
+							[routerLink]="['/admin/properties', item.id]"
+							class="val-btn val-btn-view"
+							title="Consulter">
+							<i class="fas fa-eye"></i>
+						</a>
+					</div>
+				</div>
+			</div>
+			<ng-template #emptyValidations>
+				<div class="empty">Aucun bien a valider.</div>
+			</ng-template>
+		</article>
+
 	</section>
+
+	<!-- Send Message Modal -->
+	<div class="modal-backdrop" *ngIf="showSendMsgModal" (click)="closeSendMsg()"></div>
+	<div class="send-msg-modal" *ngIf="showSendMsgModal">
+		<div class="send-msg-header">
+			<h4>Envoyer un message</h4>
+			<button class="close-btn" (click)="closeSendMsg()"><i class="fas fa-times"></i></button>
+		</div>
+		<p class="send-msg-to">A : <strong>{{ sendMsgReceiverName }}</strong></p>
+		<textarea
+			class="send-msg-textarea"
+			placeholder="Votre message..."
+			[(ngModel)]="sendMsgContent"
+			rows="4"
+			maxlength="2000">
+		</textarea>
+		<p class="send-msg-error" *ngIf="sendMsgError">{{ sendMsgError }}</p>
+		<div class="send-msg-footer">
+			<button class="ghost-btn" (click)="closeSendMsg()">Annuler</button>
+			<button class="primary-btn" (click)="submitSendMsg()" [disabled]="sendMsgLoading || !sendMsgContent.trim()">
+				<i class="fas fa-paper-plane"></i>
+				{{ sendMsgLoading ? 'Envoi...' : 'Envoyer' }}
+			</button>
+		</div>
+	</div>
 
 	<ng-template #emptyRecent>
 		<div class="empty">Aucun bien recent.</div>
@@ -297,13 +387,7 @@
 		<div class="empty">Aucune vente recente.</div>
 	</ng-template>
 	<ng-template #emptyClients>
-	<div class="empty">Aucun client récent visible.</div>
-	</ng-template>
-	<ng-template #emptyAffiliates>
-		<div class="empty">Aucun affilie recent.</div>
-	</ng-template>
-	<ng-template #emptyPending>
-		<div class="empty">Aucune validation en attente.</div>
+		<div class="empty">Aucun client recent visible.</div>
 	</ng-template>
 </section>
 

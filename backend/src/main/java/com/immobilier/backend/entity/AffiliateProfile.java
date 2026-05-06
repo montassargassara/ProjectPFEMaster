@@ -54,14 +54,6 @@ public class AffiliateProfile {
     @Column(name = "rejection_reason", length = 500)
     private String rejectionReason;
 
-    // Active bonus from previous month's ranking (0.0 when none)
-    @Column(name = "bonus_percentage")
-    private Double bonusPercentage = 0.0;
-
-    // When the current bonus expires (end of the bonus month)
-    @Column(name = "bonus_expires_at")
-    private LocalDateTime bonusExpiresAt;
-
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
@@ -72,12 +64,6 @@ public class AffiliateProfile {
 
     @PrePersist
     protected void onCreate() {
-        if (status == null)         status         = AffiliateStatus.PENDING;
-        if (bonusPercentage == null) bonusPercentage = 0.0;
-    }
-
-    public boolean hasActiveBonus() {
-        return bonusPercentage != null && bonusPercentage > 0
-            && bonusExpiresAt != null && LocalDateTime.now().isBefore(bonusExpiresAt);
+        if (status == null) status = AffiliateStatus.PENDING;
     }
 }

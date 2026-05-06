@@ -8,6 +8,7 @@ import { PropertiesAdmin } from './admin/properties-admin/properties-admin';
 import { PropertyEdit } from './admin/property-edit/property-edit';
 import { AgentsAdmin } from './admin/agents-admin/agents-admin';
 import { Statistics } from './admin/statistics/statistics';
+import { TransactionsLocation } from './admin/transactions-location/transactions-location';
 import { Settings } from './admin/settings/settings';
 import { ClientManagementComponent } from './admin/client-management/client-management.component';
 import { ShareRequestsComponent } from './admin/share-requests/share-requests';
@@ -21,8 +22,15 @@ import { AffiliatePropertiesComponent } from './admin/affiliate-properties/affil
 import { AffiliateOffersComponent } from './admin/affiliate-offers/affiliate-offers';
 import { AffiliateEarningsComponent } from './admin/affiliate-earnings/affiliate-earnings';
 import { AffiliateIncomingOffersComponent } from './admin/affiliate-incoming-offers/affiliate-incoming-offers';
+import { AgencyApplicationsComponent } from './admin/agency-applications/agency-applications.component';
+import { ZonePaymentRequestsComponent } from './admin/zone-payment-requests/zone-payment-requests';
+import { MessagesComponent } from './admin/messages/messages.component';
+import { AgencyAffiliatesComponent } from './admin/agency-affiliates/agency-affiliates.component';
 
 import { PublicLayoutComponent } from './public/layout/public-layout.component';
+import { RegisterChoiceComponent } from './public/pages/register/register-choice.component';
+import { RegisterAgencyComponent } from './public/pages/register/register-agency.component';
+import { RegisterAffiliateComponent } from './public/pages/register/register-affiliate.component';
 import { PublicHomeComponent } from './public/pages/home/home.component';
 import { PublicListingComponent } from './public/pages/listing/listing.component';
 import { PublicPropertyDetailComponent } from './public/pages/property-detail/property-detail.component';
@@ -46,6 +54,11 @@ export const routes: Routes = [
       { path: 'compte/login', component: PublicLoginComponent },
       { path: 'compte/register', component: PublicRegisterComponent },
       { path: 'compte/dashboard', component: PublicDashboardComponent, canActivate: [clientAuthGuard] },
+
+      // Self-registration pages (agency + affiliate)
+      { path: 'register', component: RegisterChoiceComponent },
+      { path: 'register/agence', component: RegisterAgencyComponent },
+      { path: 'register/affilie', component: RegisterAffiliateComponent },
     ],
   },
 
@@ -70,14 +83,17 @@ export const routes: Routes = [
       { path: 'customers', component: ClientManagementComponent },
       { path: 'agents', component: AgentsAdmin },
       { path: 'statistics', component: Statistics },
+      { path: 'transactions-location', component: TransactionsLocation },
       { path: 'settings', component: Settings },
       { path: 'share-requests', component: ShareRequestsComponent },
       { path: 'incoming-share-requests', component: IncomingShareRequestsComponent },
-      // Super Admin — Affiliate management
+      // Super Admin — Agency + Affiliate management
+      { path: 'agency-applications', component: AgencyApplicationsComponent },
       { path: 'affiliate-applications', component: AffiliateApplicationsComponent },
       { path: 'affiliate-accounts', component: AffiliateAccountsComponent },
       { path: 'affiliate-ranking', component: AffiliateRankingComponent },
       { path: 'affiliate-commissions', component: AffiliateCommissionsComponent },
+      { path: 'zone-payment-requests', component: ZonePaymentRequestsComponent },
       // Affiliate User — personal workspace
       { path: 'affiliate-dashboard', component: AffiliateDashboardComponent },
       { path: 'affiliate-properties', component: AffiliatePropertiesComponent },
@@ -85,6 +101,10 @@ export const routes: Routes = [
       { path: 'affiliate-earnings', component: AffiliateEarningsComponent },
       // Agency Admin — incoming offers from affiliates
       { path: 'affiliate-incoming-offers', component: AffiliateIncomingOffersComponent },
+      // Agency Admin — dedicated affiliate client management page
+      { path: 'agency-affiliates', component: AgencyAffiliatesComponent },
+      // Internal messaging
+      { path: 'messages', component: MessagesComponent },
     ]
   },
 

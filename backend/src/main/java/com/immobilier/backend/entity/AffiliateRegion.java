@@ -37,11 +37,20 @@ public class AffiliateRegion {
     @Column(length = 255)
     private String regionDescription;
 
-    @Column(name = "commission_percentage")
-    private Double commissionPercentage;
-
     @Column(name = "is_active")
     private Boolean isActive = true;
+
+    /** Whether this zone required a payment (false for the first free zone). */
+    @Column(name = "is_paid")
+    private Boolean isPaid = false;
+
+    /** Amount paid in TND (50 or 100). Null for the free zone. */
+    @Column(name = "price_paid")
+    private Double pricePaid;
+
+    /** Premium zones command 100 TND vs. 50 TND for standard paid zones. */
+    @Column(name = "is_premium")
+    private Boolean isPremium = false;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
@@ -54,7 +63,9 @@ public class AffiliateRegion {
     @PrePersist
     @PreUpdate
     protected void onSave() {
-        if (isActive == null) isActive = true;
+        if (isActive == null)  isActive  = true;
+        if (isPaid == null)    isPaid    = false;
+        if (isPremium == null) isPremium = false;
 
         // Backward-compat: if country/city not provided but regionName follows
         // the legacy "Country,City" format, split it. Otherwise treat regionName

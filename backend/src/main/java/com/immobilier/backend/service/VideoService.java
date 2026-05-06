@@ -195,16 +195,16 @@ public class VideoService {
         dto.setDescription(video.getDescription());
         dto.setIsPrimary(video.getIsPrimary());
         dto.setSortOrder(video.getSortOrder());
-        dto.setUrl("/api/public/videos/" + video.getId());
-        dto.setThumbnailUrl("/api/public/videos/" + video.getId() + "/thumbnail");
+        dto.setUrl("/api/videos/public/" + video.getId());
+        dto.setThumbnailUrl("/api/videos/public/" + video.getId() + "/thumbnail");
         dto.setCreatedAt(video.getCreatedAt());
         return dto;
     }
 
     private void applyVideoUrls(VideoDTO video) {
         if (video != null) {
-            video.setUrl("/api/public/videos/" + video.getId());
-            video.setThumbnailUrl("/api/public/videos/" + video.getId() + "/thumbnail");
+            video.setUrl("/api/videos/public/" + video.getId());
+            video.setThumbnailUrl("/api/videos/public/" + video.getId() + "/thumbnail");
         }
     }
 }

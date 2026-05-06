@@ -64,6 +64,13 @@ public class NotificationService {
                 return "MONTHLY_BONUS";
             case PROPERTY_INTEREST_RECEIVED:
                 return "PROPERTY_INTEREST";
+            case PROPERTY_PENDING_VALIDATION:
+            case PROPERTY_VALIDATED:
+            case PROPERTY_REJECTED:
+            case PROPERTY_MODIFIED:
+            case COMMISSION_REQUIRED:
+            case PROPERTY_SOLD_BY_AGENCY:
+                return "PROPERTY";
             default:
                 return null;
         }

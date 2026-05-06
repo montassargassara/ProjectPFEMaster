@@ -139,22 +139,6 @@ public class SuperAdminAffiliateController {
         return ResponseEntity.ok(monthlyBonusService.calculateAndSaveMonthlyBonuses(m, y));
     }
 
-    /**
-     * Apply saved bonuses to affiliate profiles for the given month/year.
-     * Defaults to current month if no params supplied.
-     */
-    @PostMapping("/bonuses/apply")
-    public ResponseEntity<Void> applyBonuses(
-            @RequestParam(required = false) Integer month,
-            @RequestParam(required = false) Integer year) {
-        LocalDate now = LocalDate.now();
-        int m = month != null ? month : now.getMonthValue();
-        int y = year  != null ? year  : now.getYear();
-        log.info("Super Admin {} applying bonuses for {}/{}", currentUserId(), m, y);
-        monthlyBonusService.applyBonusesForMonth(m, y);
-        return ResponseEntity.ok().build();
-    }
-
     @GetMapping("/bonuses")
     public ResponseEntity<List<MonthlyBonusDTO>> getBonuses(
             @RequestParam(required = false) Integer month,
@@ -168,6 +152,12 @@ public class SuperAdminAffiliateController {
     @GetMapping("/{affiliateId}/bonuses")
     public ResponseEntity<List<MonthlyBonusDTO>> getAffiliateBonusHistory(@PathVariable Long affiliateId) {
         return ResponseEntity.ok(monthlyBonusService.getBonusHistoryForAffiliate(affiliateId));
+    }
+
+    @PutMapping("/bonuses/{bonusId}/pay")
+    public ResponseEntity<MonthlyBonusDTO> markRewardPaid(@PathVariable Long bonusId) {
+        log.info("Super Admin {} marking reward {} as paid", currentUserId(), bonusId);
+        return ResponseEntity.ok(monthlyBonusService.markRewardPaid(bonusId));
     }
 
     // ── Transactions / payouts ────────────────────────────────────────────────

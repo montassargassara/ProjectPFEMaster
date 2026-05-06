@@ -2,7 +2,7 @@
   <div class="page-header">
     <div class="page-header-left">
       <h2><i class="fas fa-trophy"></i> Classement Mensuel Affiliés</h2>
-      <p class="page-subtitle">Les meilleurs affiliés reçoivent un bonus de commission le mois suivant</p>
+      <p class="page-subtitle">Les meilleurs affiliés reçoivent une récompense mensuelle fixe</p>
     </div>
     <div class="page-header-right">
       <button class="btn btn-outline" (click)="load()">
@@ -11,116 +11,143 @@
     </div>
   </div>
 
-  <!-- Bonus info banner -->
+  <!-- Reward info banner -->
   <div class="alert alert-info" style="cursor:default;">
-    <i class="fas fa-info-circle"></i>
+    <i class="fas fa-coins"></i>
     <span>
-      <strong>Bonus automatiques :</strong>
-      Rang 1 = +2% &nbsp;|&nbsp; Rang 2 = +1.5% &nbsp;|&nbsp; Rang 3 = +1%
-      (appliqués comme bonus sur le taux de commission le mois suivant)
+      <strong>Récompenses mensuelles :</strong>
+      &nbsp;🥇 1er → <strong>2 000 TND</strong>
+      &nbsp;|&nbsp; 🥈 2ème → <strong>1 500 TND</strong>
+      &nbsp;|&nbsp; 🥉 3ème → <strong>1 000 TND</strong>
+      &nbsp;— versées par le Super Admin chaque mois
     </span>
   </div>
 
-  <div class="alert alert-danger" *ngIf="errorMessage">
-    <i class="fas fa-exclamation-circle"></i> {{ errorMessage }}
-  </div>
+  @if (errorMessage) {
+    <div class="alert alert-danger">
+      <i class="fas fa-exclamation-circle"></i> {{ errorMessage }}
+    </div>
+  }
 
-  <div class="loading-state" *ngIf="loading">
-    <i class="fas fa-spinner fa-spin"></i><span>Chargement du classement…</span>
-  </div>
+  @if (loading) {
+    <div class="loading-state">
+      <i class="fas fa-spinner fa-spin"></i><span>Chargement du classement…</span>
+    </div>
+  }
 
-  <div class="empty-state" *ngIf="!loading && ranking.length === 0">
-    <i class="fas fa-trophy fa-3x"></i>
-    <h3>Aucune donnée de classement</h3>
-    <p>Le classement se calcule sur les commissions générées ce mois-ci.</p>
-  </div>
+  @if (!loading && ranking.length === 0) {
+    <div class="empty-state">
+      <i class="fas fa-trophy fa-3x"></i>
+      <h3>Aucune donnée de classement</h3>
+      <p>Le classement se calcule sur les commissions générées ce mois-ci.</p>
+    </div>
+  }
 
   <!-- Top 3 podium -->
-  <div class="podium-section" *ngIf="!loading && ranking.length >= 3">
-    <div class="podium">
-      <!-- Rank 2 -->
-      <div class="podium-card rank-2-card" *ngIf="ranking[1]">
-        <div class="podium-medal rank-2">2</div>
-        <div class="podium-avatar">{{ ranking[1].affiliateName.charAt(0).toUpperCase() }}</div>
-        <div class="podium-name">{{ ranking[1].affiliateName }}</div>
-        <div class="podium-revenue">{{ formatCommission(ranking[1].totalRevenue) }}</div>
-        <div class="podium-bonus bonus-badge"><i class="fas fa-star"></i> +1.5%</div>
-        <div class="podium-bar bar-2"></div>
-      </div>
-      <!-- Rank 1 -->
-      <div class="podium-card rank-1-card" *ngIf="ranking[0]">
-        <div class="podium-crown"><i class="fas fa-crown text-warning"></i></div>
-        <div class="podium-medal rank-1">1</div>
-        <div class="podium-avatar">{{ ranking[0].affiliateName.charAt(0).toUpperCase() }}</div>
-        <div class="podium-name">{{ ranking[0].affiliateName }}</div>
-        <div class="podium-revenue">{{ formatCommission(ranking[0].totalRevenue) }}</div>
-        <div class="podium-bonus bonus-badge"><i class="fas fa-star"></i> +2%</div>
-        <div class="podium-bar bar-1"></div>
-      </div>
-      <!-- Rank 3 -->
-      <div class="podium-card rank-3-card" *ngIf="ranking[2]">
-        <div class="podium-medal rank-3">3</div>
-        <div class="podium-avatar">{{ ranking[2].affiliateName.charAt(0).toUpperCase() }}</div>
-        <div class="podium-name">{{ ranking[2].affiliateName }}</div>
-        <div class="podium-revenue">{{ formatCommission(ranking[2].totalRevenue) }}</div>
-        <div class="podium-bonus bonus-badge"><i class="fas fa-star"></i> +1%</div>
-        <div class="podium-bar bar-3"></div>
+  @if (!loading && ranking.length >= 3) {
+    <div class="podium-section">
+      <div class="podium">
+        <!-- Rank 2 -->
+        @if (ranking[1]) {
+          <div class="podium-card rank-2-card">
+            <div class="podium-medal rank-2">2</div>
+            <div class="podium-avatar">{{ ranking[1].affiliateName.charAt(0).toUpperCase() }}</div>
+            <div class="podium-name">{{ ranking[1].affiliateName }}</div>
+            <div class="podium-revenue">{{ formatCommission(ranking[1].totalRevenue) }}</div>
+            <div class="podium-bonus bonus-badge reward-badge"><i class="fas fa-coins"></i> 1 500 TND</div>
+            <div class="podium-bar bar-2"></div>
+          </div>
+        }
+        <!-- Rank 1 -->
+        @if (ranking[0]) {
+          <div class="podium-card rank-1-card">
+            <div class="podium-crown"><i class="fas fa-crown text-warning"></i></div>
+            <div class="podium-medal rank-1">1</div>
+            <div class="podium-avatar">{{ ranking[0].affiliateName.charAt(0).toUpperCase() }}</div>
+            <div class="podium-name">{{ ranking[0].affiliateName }}</div>
+            <div class="podium-revenue">{{ formatCommission(ranking[0].totalRevenue) }}</div>
+            <div class="podium-bonus bonus-badge reward-badge"><i class="fas fa-coins"></i> 2 000 TND</div>
+            <div class="podium-bar bar-1"></div>
+          </div>
+        }
+        <!-- Rank 3 -->
+        @if (ranking[2]) {
+          <div class="podium-card rank-3-card">
+            <div class="podium-medal rank-3">3</div>
+            <div class="podium-avatar">{{ ranking[2].affiliateName.charAt(0).toUpperCase() }}</div>
+            <div class="podium-name">{{ ranking[2].affiliateName }}</div>
+            <div class="podium-revenue">{{ formatCommission(ranking[2].totalRevenue) }}</div>
+            <div class="podium-bonus bonus-badge reward-badge"><i class="fas fa-coins"></i> 1 000 TND</div>
+            <div class="podium-bar bar-3"></div>
+          </div>
+        }
       </div>
     </div>
-  </div>
+  }
 
   <!-- Full ranking table -->
-  <div class="table-card" *ngIf="!loading && ranking.length > 0">
-    <div class="table-header">
-      <h3><i class="fas fa-list-ol"></i> Classement complet</h3>
+  @if (!loading && ranking.length > 0) {
+    <div class="table-card">
+      <div class="table-header">
+        <h3><i class="fas fa-list-ol"></i> Classement complet</h3>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Rang</th>
+            <th>Affilié</th>
+            <th>Zones</th>
+            <th>Offres acceptées</th>
+            <th>Commissions totales</th>
+            <th>Récompense mensuelle</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (a of ranking; track a.affiliateId; let i = $index) {
+            <tr [class.podium-row]="i < 3">
+              <td>
+                <span class="rank-medal" [ngClass]="getRankClass(i + 1)">{{ i + 1 }}</span>
+              </td>
+              <td>
+                <div style="display:flex;align-items:center;gap:0.5rem;">
+                  <div class="avatar-circle" style="width:32px;height:32px;font-size:0.8rem;">
+                    {{ a.affiliateName.charAt(0).toUpperCase() }}
+                  </div>
+                  <div>
+                    <div style="font-weight:600;font-size:0.875rem;">{{ a.affiliateName }}</div>
+                    <div style="font-size:0.775rem;color:var(--text-muted);">&nbsp;</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <div class="regions-tags">
+                  @for (r of a.regions; track r.id) {
+                    <span class="region-tag">{{ r.regionName }}</span>
+                  }
+                  @if (!a.regions?.length) {
+                    <span class="text-muted" style="font-size:0.8rem;">—</span>
+                  }
+                </div>
+              </td>
+              <td style="font-weight:600;">{{ a.totalOffersAccepted }}</td>
+              <td style="font-weight:700;color:var(--primary);">{{ formatCommission(a.totalRevenue) }}</td>
+              <td>
+                @if (i < 3) {
+                  <span class="bonus-badge reward-badge">
+                    <i class="fas fa-coins"></i> {{ getRewardForRank(i + 1) }}
+                  </span>
+                } @else {
+                  <span class="text-muted" style="font-size:0.8rem;">—</span>
+                }
+              </td>
+              <td>
+                <span class="status-badge status-active">Actif</span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
     </div>
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Rang</th>
-          <th>Affilié</th>
-          <th>Zones</th>
-          <th>Offres acceptées</th>
-          <th>Commissions totales</th>
-          <th>Bonus prochain mois</th>
-          <th>Statut</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr *ngFor="let a of ranking; let i = index" [class.podium-row]="i < 3">
-          <td>
-            <span class="rank-medal" [ngClass]="getRankClass(i + 1)">{{ i + 1 }}</span>
-          </td>
-          <td>
-            <div style="display:flex;align-items:center;gap:0.5rem;">
-              <div class="avatar-circle" style="width:32px;height:32px;font-size:0.8rem;">
-                {{ a.affiliateName.charAt(0).toUpperCase() }}
-              </div>
-              <div>
-                <div style="font-weight:600;font-size:0.875rem;">{{ a.affiliateName }}</div>
-                <div style="font-size:0.775rem;color:var(--text-muted);">&nbsp;</div>
-              </div>
-            </div>
-          </td>
-          <td>
-            <div class="regions-tags">
-              <span class="region-tag" *ngFor="let r of a.regions">{{ r.regionName }}</span>
-              <span *ngIf="!a.regions?.length" class="text-muted" style="font-size:0.8rem;">—</span>
-            </div>
-          </td>
-          <td style="font-weight:600;">{{ a.totalOffersAccepted }}</td>
-          <td style="font-weight:700;color:var(--primary);">{{ formatCommission(a.totalRevenue) }}</td>
-          <td>
-            <span class="bonus-badge" *ngIf="i < 3">
-              <i class="fas fa-star"></i> {{ getBonusForRank(i + 1) }}
-            </span>
-            <span *ngIf="i >= 3" class="text-muted" style="font-size:0.8rem;">—</span>
-          </td>
-          <td>
-            <span class="status-badge status-active">Actif</span>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+  }
 </div>

@@ -6,6 +6,7 @@ import com.immobilier.backend.dto.PropertyShareRequestDTO;
 import com.immobilier.backend.dto.ShareRequestResponseDTO;
 import com.immobilier.backend.entity.*;
 import com.immobilier.backend.enums.NotificationType;
+import com.immobilier.backend.enums.PropertyValidationStatus;
 import com.immobilier.backend.enums.RoleType;
 import com.immobilier.backend.enums.ShareRequestStatus;
 import com.immobilier.backend.repository.*;
@@ -41,6 +42,11 @@ public class PropertyShareRequestService {
 
         if (!"SUPER_ADMIN_OWNED".equals(property.getOwnerType())) {
             throw new RuntimeException("Seules les propriétés Super Admin peuvent être partagées via ce workflow");
+        }
+        // A property must be APPROVED before it can be shared.
+        if (property.getValidationStatus() != null
+                && property.getValidationStatus() != PropertyValidationStatus.APPROVED) {
+            throw new RuntimeException("Seules les propriétés approuvées peuvent être partagées avec une agence");
         }
 
         List<PropertyShareRequestDTO> results = new ArrayList<>();

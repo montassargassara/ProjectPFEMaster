@@ -9,13 +9,12 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 /**
- * Persists the bonus awarded to top-3 affiliates at end of each ranking month.
+ * Persists the fixed monetary reward awarded to top-3 affiliates each ranking month.
  *
- * rankingMonth/Year = the month whose leaderboard produced this bonus.
- * bonusMonth/Year   = the NEXT month when the bonus is actually applied.
+ * Rank 1 → 2 000 TND   Rank 2 → 1 500 TND   Rank 3 → 1 000 TND
  *
- * Default bonus rates (configurable via application.properties):
- *   Rank 1 → +2%   Rank 2 → +1.5%   Rank 3 → +1%
+ * Rewards are one-time — they do NOT affect commissionPercentage on future sales.
+ * Super Admin marks them as paid separately.
  */
 @Entity
 @Table(name = "monthly_bonuses",
@@ -24,9 +23,9 @@ import java.time.LocalDateTime;
         columnNames = {"affiliate_id", "ranking_month", "ranking_year"}
     ),
     indexes = {
-        @Index(name = "idx_bonus_affiliate",     columnList = "affiliate_id"),
+        @Index(name = "idx_bonus_affiliate",      columnList = "affiliate_id"),
         @Index(name = "idx_bonus_ranking_period", columnList = "ranking_month, ranking_year"),
-        @Index(name = "idx_bonus_applied",        columnList = "is_applied")
+        @Index(name = "idx_bonus_is_paid",        columnList = "is_paid")
     }
 )
 @Data
@@ -53,20 +52,13 @@ public class MonthlyBonus {
     @Column(nullable = false)
     private Integer rank;
 
-    // Extra commission % added to base property commission
-    @Column(name = "bonus_percentage", nullable = false)
-    private Double bonusPercentage;
+    // Fixed TND reward for this rank (2000 / 1500 / 1000)
+    @Column(name = "reward_amount", nullable = false)
+    private Double rewardAmount;
 
-    // Month in which the bonus is applied (ranking month + 1)
-    @Column(name = "bonus_month", nullable = false)
-    private Integer bonusMonth;
-
-    @Column(name = "bonus_year", nullable = false)
-    private Integer bonusYear;
-
-    // True once AffiliateProfile.bonusPercentage has been written for this record
-    @Column(name = "is_applied", nullable = false)
-    private Boolean isApplied = false;
+    // True once Super Admin marks the reward as paid
+    @Column(name = "is_paid", nullable = false)
+    private Boolean isPaid = false;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

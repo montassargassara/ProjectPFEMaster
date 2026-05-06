@@ -22,6 +22,7 @@ public class UpdatePropertyRequest implements PropertyStatusValidatable {
     private Double longitude;
     private Boolean isActive;
     private Boolean isAffiliateEligible;
+    private Integer rentalDurationMonths;
 
     private MediaUpdateMode mediaUpdateMode = MediaUpdateMode.REPLACE;
     private java.util.List<PropertyMediaDTO> medias;

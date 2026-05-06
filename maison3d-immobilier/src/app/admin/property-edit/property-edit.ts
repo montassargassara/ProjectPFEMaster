@@ -1,6 +1,6 @@
 import { Component, OnInit, ChangeDetectorRef, AfterViewInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ReactiveFormsModule, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
+import { ReactiveFormsModule, FormsModule, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { RouterModule, ActivatedRoute, Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import * as L from 'leaflet';
@@ -28,12 +28,13 @@ interface PropertyPayload {
   commissionPercentage: number | null;
   commissionType: string;
   isAffiliateEligible: boolean;
+  rentalDurationMonths?: number | null;
 }
 
 @Component({
   selector: 'app-property-edit',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterModule],
   templateUrl: './property-edit.html',
   styleUrl: './property-edit.scss',
 })
@@ -123,8 +124,35 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
   selectedAdminIds = new Set<number>();
   sharingLoading = false;
   shareSaved = false;
-  // ──────────────────────────────────────────────────────────────────────────
- 
+
+  // ─── Validation workflow state ────────────────────────────────────────────
+  validationStatus: string | null = null;
+  commissionLocked = false;
+  priceLocked = false;
+  rejectionReason: string | null = null;
+  createdById: number | null = null;
+
+  // ─── Sale approval state (NOUVEAU) ─────────────────────────────────────────
+  pendingSaleApproval: 'PENDING' | 'APPROVED' | 'REJECTED' | null = null;
+  pendingSaleStatut: string | null = null;
+  pendingSaleRejectionReason: string | null = null;
+  pendingSaleApproverRole: 'ADMIN' | 'SUPER_ADMIN' | null = null;
+  approvingSale = false;
+
+  // ─── Status lock state ────────────────────────────────────────────────────
+  isStatusLocked = false;      // true for both VENDU (permanent) and LOUE (until end date)
+  isFinalized = false;         // true ONLY for VENDU — blocks ALL edits permanently
+  statusLockReason: string | null = null;
+  rentalEndDate: string | null = null;   // ISO date from backend DTO
+
+  // ─── Status confirmation modal ────────────────────────────────────────────
+  statusConfirmModalOpen = false;
+  pendingStatusValue: string | null = null;   // the status the user wants to switch to
+  prevStatusValue: string | null = null;      // to revert dropdown if user cancels
+  // LOUE modal inputs
+  loueMonths: number | null = null;
+  loueEndDate: string | null = null;          // ISO date string (yyyy-MM-dd)
+  
   constructor(
     private fb: FormBuilder,
     private route: ActivatedRoute,
@@ -137,12 +165,88 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     private propertiesService: PropertiesAdminService
   ) {}
 
+  get currentRole(): string {
+    return (this.authService.getCurrentUser()?.role || '').toUpperCase();
+  }
+
   get isSuperAdmin(): boolean {
-    return this.authService.getCurrentUser()?.role?.toUpperCase() === 'SUPER_ADMIN';
+    return this.currentRole === 'SUPER_ADMIN';
+  }
+
+  get isAdminRole(): boolean {
+    return this.currentRole === 'ADMIN';
+  }
+
+  get isResponsable(): boolean {
+    return this.currentRole === 'RESPONSABLE_COMMERCIAL';
+  }
+
+  get isCommercial(): boolean {
+    return this.currentRole === 'COMMERCIAL';
+  }
+
+  /** Only ADMIN/SUPER_ADMIN can edit commission. Locked once set. */
+  get canEditCommission(): boolean {
+    if (!(this.isAdminRole || this.isSuperAdmin)) return false;
+    return true;
+  }
+
+  /** COMMERCIAL never edits price; others blocked once priceLocked. */
+  get canEditPrice(): boolean {
+    if (this.isCommercial) return false;
+    if (this.priceLocked && !(this.isAdminRole || this.isSuperAdmin)) return false;
+    return true;
+  }
+
+  /** Approval buttons appear for upstream validators when the property is pending. */
+  get canApprove(): boolean {
+    if (!this.isEditMode) return false;
+    if (this.validationStatus === 'PENDING_RESPONSABLE') {
+      return this.isResponsable || this.isAdminRole || this.isSuperAdmin;
+    }
+    if (this.validationStatus === 'PENDING_ADMIN' || this.validationStatus === 'REJECTED') {
+      return this.isAdminRole || this.isSuperAdmin;
+    }
+    return false;
+  }
+
+  /** Nouveau getter pour l'approbation de vente */
+  get canApproveSale(): boolean {
+    if (this.pendingSaleApproval !== 'PENDING') return false;
+    if (this.currentRole === 'SUPER_ADMIN') return true;
+    if (this.currentRole === 'ADMIN' && this.pendingSaleApproverRole === 'ADMIN') return true;
+    return false;
   }
 
   get isSuperAdminOwned(): boolean {
     return this.currentOwnerType === 'SUPER_ADMIN_OWNED';
+  }
+
+  /**
+   * True when the current user cannot mutate this property at all — entire form is disabled.
+   * Covers three cases:
+   *   1. SUPER_ADMIN viewing an AGENCY_OWNED property
+   *   2. ADMIN viewing a SUPER_ADMIN_OWNED property
+   *   3. RESPONSABLE_COMMERCIAL viewing a SUPER_ADMIN_OWNED property
+   */
+  get isReadOnly(): boolean {
+    if (!this.isEditMode) return false;
+    if (this.isSuperAdmin && this.currentOwnerType === 'AGENCY_OWNED') return true;
+    if ((this.isAdminRole || this.isResponsable) && this.currentOwnerType === 'SUPER_ADMIN_OWNED') return true;
+    return false;
+  }
+
+  /** @deprecated Use isReadOnly instead */
+  get isReadOnlyForSuperAdmin(): boolean {
+    return this.isReadOnly;
+  }
+
+  get readOnlyBannerMessage(): string {
+    if (!this.isReadOnly) return '';
+    if (this.isSuperAdmin) return 'Lecture seule — vous ne pouvez pas modifier ce bien (appartient à une agence).';
+    if (this.isAdminRole) return 'Lecture seule — ce bien appartient au Super Admin. Vous pouvez le consulter et le vendre.';
+    if (this.isResponsable) return 'Lecture seule — ce bien appartient au Super Admin. Vous pouvez uniquement le consulter.';
+    return 'Lecture seule.';
   }
  
   ngOnInit(): void {
@@ -212,6 +316,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       commissionPercentage: [null],
       commissionType: ['PERCENTAGE'],
       isAffiliateEligible: [false],
+      rentalDurationMonths: [null, [Validators.min(1)]],
     });
  
     // ✅ Utiliser markForCheck() au lieu de detectChanges()
@@ -243,7 +348,126 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
  
     this.form.get('categorie')?.setValue('VENTE');
 
+    // Intercept status changes that require confirmation (VENDU or LOUE)
+    this.form.get('statut')?.valueChanges.subscribe((newStatus: string) => {
+      if (!this.isEditMode) return;
+      if (newStatus === 'VENDU' || newStatus === 'LOUE') {
+        // Revert immediately; we'll apply only after confirmation
+        const current = this.prevStatusValue ?? 'DISPONIBLE';
+        this.form.get('statut')?.setValue(current, { emitEvent: false });
+        this.openStatusConfirmModal(newStatus, current);
+      } else {
+        this.prevStatusValue = newStatus;
+      }
+    });
+
     this.setupLocationSync();
+    this.applyRoleBasedFieldLocks();
+  }
+
+  /**
+   * Disable price + commission controls based on role and lock state. The backend
+   * is authoritative — these toggles are pure UX.
+   */
+  private applyRoleBasedFieldLocks(): void {
+    // Read-only scenarios → freeze the entire form (SUPER_ADMIN on agency, ADMIN/RESPONSABLE on super-admin-owned)
+    if (this.isReadOnly) {
+      this.form?.disable({ emitEvent: false });
+      return;
+    }
+    const priceCtrls = ['prixVente', 'prixLocation'];
+    const commissionCtrls = ['commissionPercentage', 'commissionType', 'isAffiliateEligible'];
+    priceCtrls.forEach(name => {
+      const ctrl = this.form?.get(name);
+      if (!ctrl) return;
+      this.canEditPrice ? ctrl.enable({ emitEvent: false }) : ctrl.disable({ emitEvent: false });
+    });
+    commissionCtrls.forEach(name => {
+      const ctrl = this.form?.get(name);
+      if (!ctrl) return;
+      this.canEditCommission ? ctrl.enable({ emitEvent: false }) : ctrl.disable({ emitEvent: false });
+    });
+  }
+
+  // ─── Workflow actions (validate/reject) ───────────────────────────────────
+  approveProperty(): void {
+    if (!this.propertyId) return;
+    this.http.put<any>(`${this.apiUrl}/${this.propertyId}/validate`, {}).subscribe({
+      next: updated => {
+        this.successMessage = 'Bien validé.';
+        this.validationStatus = updated.validationStatus;
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.errorMessage = err?.error?.error || 'Validation impossible.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+
+  rejectProperty(): void {
+    if (!this.propertyId) return;
+    const reason = window.prompt('Raison du refus (obligatoire) :') || '';
+    if (!reason.trim()) return;
+    this.http.put<any>(`${this.apiUrl}/${this.propertyId}/reject`, { reason }).subscribe({
+      next: updated => {
+        this.successMessage = 'Bien refusé.';
+        this.validationStatus = updated.validationStatus;
+        this.rejectionReason = updated.rejectionReason;
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.errorMessage = err?.error?.error || 'Refus impossible.';
+        this.cdr.markForCheck();
+      },
+    });
+  }
+ 
+  // ─── Sale approval actions (NOUVEAU) ────────────────────────────────────────
+  
+  approveSale(): void {
+    if (!this.propertyId) return;
+    this.approvingSale = true;
+    this.http.put<any>(`${this.apiUrl}/${this.propertyId}/approve-sale`, {}).subscribe({
+      next: updated => {
+        this.successMessage = 'Vente approuvée avec succès.';
+        this.pendingSaleApproval = updated.pendingSaleApproval;
+        this.pendingSaleStatut = updated.pendingSaleStatut;
+        if (updated.statut === this.pendingSaleStatut) {
+          // Le statut a été appliqué
+          this.form.patchValue({ statut: updated.statut });
+        }
+        this.approvingSale = false;
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.errorMessage = err?.error?.error || 'Impossible d\'approuver la vente.';
+        this.approvingSale = false;
+        this.cdr.markForCheck();
+      }
+    });
+  }
+
+  rejectSale(): void {
+    if (!this.propertyId) return;
+    const reason = window.prompt('Raison du refus (obligatoire) :') || '';
+    if (!reason.trim()) return;
+    
+    this.approvingSale = true;
+    this.http.put<any>(`${this.apiUrl}/${this.propertyId}/reject-sale`, { reason }).subscribe({
+      next: updated => {
+        this.successMessage = 'Demande de vente refusée.';
+        this.pendingSaleApproval = updated.pendingSaleApproval;
+        this.pendingSaleRejectionReason = updated.pendingSaleRejectionReason;
+        this.approvingSale = false;
+        this.cdr.markForCheck();
+      },
+      error: err => {
+        this.errorMessage = err?.error?.error || 'Impossible de refuser la vente.';
+        this.approvingSale = false;
+        this.cdr.markForCheck();
+      }
+    });
   }
  
   private applyProperty(property: any): void {
@@ -256,9 +480,29 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
 
     // Capture ownership so the Partage section can be conditionally shown
     this.currentOwnerType = property.ownerType ?? null;
+    this.validationStatus = property.validationStatus ?? null;
+    this.commissionLocked = !!property.commissionLocked;
+    this.priceLocked = !!property.priceLocked;
+    this.rejectionReason = property.rejectionReason ?? null;
+    this.createdById = property.createdById ?? null;
+    
+    // NOUVEAU: Récupération des champs d'approbation de vente
+    this.pendingSaleApproval = property.pendingSaleApproval ?? null;
+    this.pendingSaleStatut = property.pendingSaleStatut ?? null;
+    this.pendingSaleRejectionReason = property.pendingSaleRejectionReason ?? null;
+    this.pendingSaleApproverRole = property.pendingSaleApproverRole ?? null;
+
+    // Status lock (VENDU / LOUE en cours / EN_ATTENTE affilié)
+    this.isStatusLocked = !!property.isStatusLocked;
+    this.isFinalized = !!property.isFinalized;   // permanent VENDU lock
+    this.statusLockReason = property.statusLockReason ?? null;
+    this.rentalEndDate = property.rentalEndDate ?? null;
+    this.prevStatusValue = property.statut ?? 'DISPONIBLE';
+
     if (this.isSuperAdmin && property.ownerType === 'SUPER_ADMIN_OWNED' && this.propertyId) {
       this.loadSharingInfo(this.propertyId);
     }
+    this.applyRoleBasedFieldLocks();
     
     this.form.patchValue({
       titre: property.titre,
@@ -278,7 +522,16 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       commissionPercentage: property.commissionPercentage,
       commissionType: property.commissionType || 'PERCENTAGE',
       isAffiliateEligible: property.isAffiliateEligible ?? false,
+      rentalDurationMonths: property.rentalDurationMonths ?? null,
     });
+
+    // VENDU (finalized): lock the entire form — no edits possible at all
+    if (this.isFinalized) {
+      this.form.disable({ emitEvent: false });
+    } else if (this.isStatusLocked) {
+      // LOUE active rental / EN_ATTENTE affiliate: only lock the status dropdown
+      this.form.get('statut')?.disable({ emitEvent: false });
+    }
 
     if (property.mainImageUrl) {
       this.mainImagePreview = this.resolveMediaUrl(property.mainImageUrl);
@@ -534,6 +787,18 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
   }
  
   async onSubmit(): Promise<void> {
+    // ✅ NOUVEAU: Vérifier si une demande de vente est en attente
+    if (this.pendingSaleApproval === 'PENDING') {
+      this.errorMessage = 'Une demande de vente est en attente d\'approbation. Veuillez attendre la réponse avant de modifier le bien.';
+      return;
+    }
+
+    // VENDU (finalized): entire form is disabled — block all saves permanently
+    if (this.isFinalized) {
+      this.errorMessage = 'Ce bien est définitivement vendu. Aucune modification n\'est possible.';
+      return;
+    }
+
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       const errFields = ['titre', 'description', 'type', 'statut'];
@@ -551,12 +816,14 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     this.errorMessage = '';
     this.cdr.markForCheck();
  
-    const v = this.form.value;
+    // Use getRawValue() to include disabled controls (e.g. statut locked for LOUE)
+    const v = this.form.getRawValue();
     const isVente = v.categorie === 'VENTE';
     const payload: PropertyPayload = {
       titre: v.titre,
       description: v.description,
       type: v.type,
+      // When statut is locked (LOUE), send the existing value — backend will enforce no change
       statut: v.statut,
       prixVente: isVente ? v.prixVente : null,
       prixLocation: isVente ? null : v.prixLocation,
@@ -571,6 +838,8 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       commissionPercentage: isVente ? v.commissionPercentage : null,
       commissionType: isVente ? v.commissionType : 'PERCENTAGE',
       isAffiliateEligible: isVente ? (v.isAffiliateEligible ?? false) : false,
+      // Rental duration only relevant for LOCATION + LOUE status
+      rentalDurationMonths: !isVente ? (v.rentalDurationMonths ?? null) : null,
     };
  
     try {
@@ -715,10 +984,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private normalizePublicMediaPath(rawUrl: string): string {
-    return rawUrl
-      .replace('/api/public/images/', '/api/images/public/')
-      .replace('/api/public/videos/', '/api/videos/public/')
-      .replace('/api/public/models/', '/api/models/public/');
+    return rawUrl;
   }
  
   // ─── Sharing (Super Admin only) ─────────────────────────────────────────────
@@ -775,6 +1041,73 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
 
   cancel(): void {
     this.router.navigate(['/admin/properties']);
+  }
+
+  // ─── Status confirmation modal ────────────────────────────────────────────
+
+  openStatusConfirmModal(targetStatus: string, currentStatus: string): void {
+    this.pendingStatusValue = targetStatus;
+    this.prevStatusValue = currentStatus;
+    this.loueMonths = null;
+    this.loueEndDate = null;
+    this.statusConfirmModalOpen = true;
+    this.cdr.markForCheck();
+  }
+
+  cancelStatusConfirm(): void {
+    this.statusConfirmModalOpen = false;
+    this.pendingStatusValue = null;
+    // Dropdown already reverted in the valueChanges handler
+    this.cdr.markForCheck();
+  }
+
+  confirmStatusChange(): void {
+    if (!this.pendingStatusValue) return;
+
+    if (this.pendingStatusValue === 'LOUE') {
+      if (!this.loueMonths && !this.loueEndDate) {
+        return; // validation shown in template
+      }
+      // Compute months from date if chosen by date
+      if (this.loueEndDate && !this.loueMonths) {
+        const months = this.monthsBetween(new Date(), new Date(this.loueEndDate));
+        this.form.patchValue({ rentalDurationMonths: Math.max(1, months) }, { emitEvent: false });
+      } else if (this.loueMonths) {
+        this.form.patchValue({ rentalDurationMonths: this.loueMonths }, { emitEvent: false });
+      }
+    }
+
+    // Apply the status without triggering the guard again
+    this.prevStatusValue = this.pendingStatusValue;
+    this.form.get('statut')?.setValue(this.pendingStatusValue, { emitEvent: false });
+    this.statusConfirmModalOpen = false;
+    this.pendingStatusValue = null;
+    this.cdr.markForCheck();
+  }
+
+  get loueConfirmEnabled(): boolean {
+    if (this.pendingStatusValue !== 'LOUE') return true;
+    return !!(this.loueMonths || this.loueEndDate);
+  }
+
+  /** Compute end-date preview for LOUE confirmation */
+  get loueEndDatePreview(): string {
+    if (this.loueEndDate) return this.loueEndDate;
+    if (this.loueMonths) {
+      const d = new Date();
+      d.setMonth(d.getMonth() + this.loueMonths);
+      return d.toISOString().slice(0, 10);
+    }
+    return '';
+  }
+
+  get today(): string {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  private monthsBetween(start: Date, end: Date): number {
+    return (end.getFullYear() - start.getFullYear()) * 12
+         + (end.getMonth() - start.getMonth());
   }
 
   get availableStatusOptions(): Array<{ value: string; label: string }> {
@@ -1032,4 +1365,7 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     if (!this.map) return;
     this.setMarkerPosition(lat, lng, false);
   }
+
+  
+
 }

@@ -50,6 +50,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/models/public/**").permitAll()
                 // Affiliate public registration (creates PENDING account; login blocked until approved)
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/affiliate/register").permitAll()
+                // Agency public self-registration (creates PENDING account; login blocked until approved)
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/register/agency").permitAll()
 
                 // ── Public client auth (register/login open; me requires JWT) ────────
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/api/client/auth/register").permitAll()
@@ -60,6 +62,11 @@ public class SecurityConfig {
                 // ── Super Admin only ─────────────────────────────────────────────────
                 .requestMatchers("/api/super-admin/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/api/admin/affiliates/**").hasRole("SUPER_ADMIN")
+                .requestMatchers("/api/admin/zone-payments/**").hasRole("SUPER_ADMIN")
+
+                // ── Zone payment proof images ────────────────────────────────────────
+                // SUPER_ADMIN and ADMIN see all proofs; AFFILIATE access controlled in controller
+                .requestMatchers("/api/zone-payments/proof/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "AFFILIATE")
 
                 // ── Affiliate routes ─────────────────────────────────────────────────
                 // Ranking is shared across all roles — must be listed BEFORE the wildcard AFFILIATE rule
@@ -68,6 +75,12 @@ public class SecurityConfig {
 
                 // ── Notifications (any authenticated user accesses their own notifications) ──
                 .requestMatchers("/api/notifications/**").authenticated()
+
+                // ── Internal messaging (all non-affiliate/non-client roles) ─────────────
+                .requestMatchers("/api/messages/**").authenticated()
+
+                // ── User profile (any authenticated user manages their own account) ─────
+                .requestMatchers("/api/profile/**").authenticated()
 
                 // ── Sale offers (mixed roles — method-level @PreAuthorize handles per endpoint) ──
                 .requestMatchers("/api/sale-offers/**").authenticated()

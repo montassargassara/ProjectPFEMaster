@@ -37,6 +37,30 @@ export interface PropertyListItem {
   agencyAdminId?: number;
   agencyAdminName?: string;
   sharedWithAgencyIds?: number[];
+
+  // Validation workflow
+  validationStatus?: 'PENDING_RESPONSABLE' | 'PENDING_ADMIN' | 'APPROVED' | 'REJECTED' | null;
+  ownerRole?: string;
+  createdById?: number;
+  createdByName?: string;
+  commissionLocked?: boolean;
+  priceLocked?: boolean;
+  rejectionReason?: string;
+
+  // Rental lock fields
+  rentalDurationMonths?: number;
+  rentalEndDate?: string;
+  isFinalized?: boolean;
+  isStatusLocked?: boolean;
+  statusLockReason?: string;
+
+  // Pending sale approval workflow
+  pendingSaleApproval?: 'PENDING' | 'APPROVED' | 'REJECTED' | null;
+  pendingSaleStatut?: string;
+  pendingSaleRejectionReason?: string;
+  pendingSaleRequestedById?: number;
+  pendingSaleRequestedByName?: string;
+  pendingSaleApproverRole?: 'ADMIN' | 'SUPER_ADMIN' | null; // who must approve next
 }
 
 export interface AgencyAdminItem {
@@ -49,6 +73,7 @@ export interface AgencyAdminItem {
 export interface UpdateStatusRequest {
   statut: string;
   propertyId?: number;
+  rentalDurationMonths?: number;
 }
 
 export interface SharePropertyRequest {
@@ -66,8 +91,18 @@ export class PropertiesAdminService {
     return this.http.get<PropertyListItem[]>(`${apiBaseUrl}/api/properties/list`);
   }
 
-  updatePropertyStatus(id: number, status: string): Observable<PropertyListItem> {
-    const request: UpdateStatusRequest = { statut: status, propertyId: id };
+  /** Returns all VENDU (sold/finalized) properties visible to the current user. */
+  getSoldProperties(): Observable<PropertyListItem[]> {
+    return this.http.get<PropertyListItem[]>(`${apiBaseUrl}/api/properties/sold`);
+  }
+
+  /** Returns all LOUE (actively rented) properties visible to the current user. */
+  getRentedProperties(): Observable<PropertyListItem[]> {
+    return this.http.get<PropertyListItem[]>(`${apiBaseUrl}/api/properties/rented`);
+  }
+
+  updatePropertyStatus(id: number, status: string, rentalDurationMonths?: number): Observable<PropertyListItem> {
+    const request: UpdateStatusRequest = { statut: status, propertyId: id, rentalDurationMonths };
     return this.http.patch<PropertyListItem>(`${apiBaseUrl}/api/properties/${id}/status`, request);
   }
 
@@ -99,5 +134,15 @@ export class PropertiesAdminService {
   /** Revokes sharing for a single agency admin. */
   revokeSharing(propertyId: number, adminId: number): Observable<void> {
     return this.http.delete<void>(`${apiBaseUrl}/api/properties/${propertyId}/sharing/${adminId}`);
+  }
+
+  // ─── Pending sale approval (ADMIN / SUPER_ADMIN) ──────────────────────────
+
+  approvePendingSale(propertyId: number): Observable<PropertyListItem> {
+    return this.http.put<PropertyListItem>(`${apiBaseUrl}/api/properties/${propertyId}/approve-sale`, {});
+  }
+
+  rejectPendingSale(propertyId: number, reason: string): Observable<PropertyListItem> {
+    return this.http.put<PropertyListItem>(`${apiBaseUrl}/api/properties/${propertyId}/reject-sale`, { reason });
   }
 }

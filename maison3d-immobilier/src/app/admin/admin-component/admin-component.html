@@ -50,8 +50,23 @@
 
           <li routerLinkActive="active">
             <a routerLink="/admin/statistics">
-              <i class="fas fa-chart-bar"></i>
-              <span *ngIf="!isSidebarCollapsed">Transactions & Ventes</span>
+              <i class="fas fa-gavel"></i>
+              <span *ngIf="!isSidebarCollapsed">Transactions &amp; Ventes</span>
+            </a>
+          </li>
+
+          <li routerLinkActive="active">
+            <a routerLink="/admin/transactions-location">
+              <i class="fas fa-key"></i>
+              <span *ngIf="!isSidebarCollapsed">Transactions &amp; Location</span>
+            </a>
+          </li>
+
+          <li routerLinkActive="active">
+            <a routerLink="/admin/messages">
+              <i class="fas fa-envelope"></i>
+              <span *ngIf="!isSidebarCollapsed">Messagerie</span>
+              <span class="msg-badge" *ngIf="unreadMessageCount > 0" [class.msg-badge-pulse]="unreadMessageCount > 0">{{ unreadMessageCount }}</span>
             </a>
           </li>
 
@@ -72,15 +87,34 @@
             </a>
           </li>
 
-          <!-- ── Affiliate Section (Super Admin only) ── -->
+          <!-- Agency Admin: gestion des clients affiliés -->
+          <li routerLinkActive="active" *ngIf="currentUser?.role === 'ADMIN'">
+            <a routerLink="/admin/agency-affiliates">
+              <i class="fas fa-handshake"></i>
+              <span *ngIf="!isSidebarCollapsed">Clients affiliés</span>
+            </a>
+          </li>
+
+          <!-- ── Registrations Section (Super Admin only) ── -->
           <li class="menu-divider" *ngIf="currentUser?.role === 'SUPER_ADMIN' && !isSidebarCollapsed">
-            <small>Gestion Affiliés</small>
+            <small>Candidatures</small>
+          </li>
+          <li routerLinkActive="active" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
+            <a routerLink="/admin/agency-applications">
+              <i class="fas fa-building"></i>
+              <span *ngIf="!isSidebarCollapsed">Candidatures Agences</span>
+            </a>
           </li>
           <li routerLinkActive="active" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
             <a routerLink="/admin/affiliate-applications">
               <i class="fas fa-user-clock"></i>
-              <span *ngIf="!isSidebarCollapsed">Candidatures</span>
+              <span *ngIf="!isSidebarCollapsed">Candidatures Affiliés</span>
             </a>
+          </li>
+
+          <!-- ── Affiliate Section (Super Admin only) ── -->
+          <li class="menu-divider" *ngIf="currentUser?.role === 'SUPER_ADMIN' && !isSidebarCollapsed">
+            <small>Gestion Affiliés</small>
           </li>
           <li routerLinkActive="active" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
             <a routerLink="/admin/affiliate-accounts">
@@ -98,6 +132,12 @@
             <a routerLink="/admin/affiliate-commissions">
               <i class="fas fa-coins"></i>
               <span *ngIf="!isSidebarCollapsed">Commissions</span>
+            </a>
+          </li>
+          <li routerLinkActive="active" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
+            <a routerLink="/admin/zone-payment-requests">
+              <i class="fas fa-file-invoice-dollar"></i>
+              <span *ngIf="!isSidebarCollapsed">Paiements zones</span>
             </a>
           </li>
 
@@ -184,7 +224,8 @@
     <div class="sidebar-footer" *ngIf="currentUser && !isSidebarCollapsed">
       <div class="user-profile">
         <div class="user-avatar">
-          <div class="avatar-initials" [style.background-color]="getAvatarColor()">
+          <img *ngIf="getAvatarUrl()" [src]="getAvatarUrl()" alt="Avatar" class="avatar-img-sidebar" />
+          <div *ngIf="!getAvatarUrl()" class="avatar-initials" [style.background-color]="getAvatarColor()">
             {{ getUserInitials() }}
           </div>
         </div>
@@ -204,7 +245,8 @@
 
     <div class="sidebar-footer-collapsed" *ngIf="currentUser && isSidebarCollapsed">
       <div class="user-profile-collapsed">
-        <div class="user-avatar-collapsed" [style.background-color]="getAvatarColor()" title="{{ currentUser.name }}">
+        <img *ngIf="getAvatarUrl()" [src]="getAvatarUrl()" alt="Avatar" class="user-avatar-collapsed avatar-img-sidebar" title="{{ currentUser.name }}" />
+        <div *ngIf="!getAvatarUrl()" class="user-avatar-collapsed" [style.background-color]="getAvatarColor()" title="{{ currentUser.name }}">
           {{ getUserInitials() }}
         </div>
         <button class="logout-btn-collapsed" (click)="logout()" title="Déconnexion">
@@ -231,7 +273,8 @@
         </button>
 
         <div class="user-info-header" *ngIf="currentUser">
-          <div class="header-avatar" [style.background-color]="getAvatarColor()">
+          <img *ngIf="getAvatarUrl()" [src]="getAvatarUrl()" alt="Avatar" class="header-avatar avatar-img-sidebar" />
+          <div *ngIf="!getAvatarUrl()" class="header-avatar" [style.background-color]="getAvatarColor()">
             {{ getUserInitials() }}
           </div>
           <div class="header-user-details">
@@ -278,6 +321,9 @@
             </div>
             <div class="notification-footer" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
               <a routerLink="/admin/share-requests" (click)="notifPanelOpen = false">Voir les demandes envoyées</a>
+            </div>
+            <div class="notification-footer" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
+              <a routerLink="/admin/agency-applications" (click)="notifPanelOpen = false">Voir les candidatures agences</a>
             </div>
             <div class="notification-footer" *ngIf="currentUser?.role === 'SUPER_ADMIN'">
               <a routerLink="/admin/affiliate-applications" (click)="notifPanelOpen = false">Voir les candidatures affiliés</a>

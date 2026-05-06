@@ -21,8 +21,8 @@ public interface AffiliateRegionRepository extends JpaRepository<AffiliateRegion
     @Query("SELECT ar FROM AffiliateRegion ar WHERE ar.regionName = :regionName AND ar.isActive = true")
     List<AffiliateRegion> findActiveByRegionName(@Param("regionName") String regionName);
     
-    @Query("SELECT ar.regionName, AVG(ar.commissionPercentage) FROM AffiliateRegion ar WHERE ar.isActive = true GROUP BY ar.regionName")
-    List<Object[]> getAverageCommissionByRegion();
+    @Query("SELECT ar.regionName, COUNT(ar) FROM AffiliateRegion ar WHERE ar.isActive = true GROUP BY ar.regionName")
+    List<Object[]> getActiveZoneCountByRegion();
     
     @Query("SELECT ar FROM AffiliateRegion ar WHERE ar.affiliate = :affiliate ORDER BY ar.createdAt DESC")
     List<AffiliateRegion> findByAffiliateOrderByCreatedAtDesc(@Param("affiliate") User affiliate);

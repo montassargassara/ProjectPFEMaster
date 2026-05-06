@@ -46,6 +46,12 @@ public class PropertyVisibilityService {
 
     /**
      * Returns the full list of properties visible to the given user.
+     *
+     * Role scope:
+     *   SUPER_ADMIN → everything
+     *   ADMIN / RESPONSABLE_COMMERCIAL → all properties in their agency
+     *                                   (own + accepted shares, including pending validations)
+     *   COMMERCIAL → only properties they personally created (regardless of validation state)
      */
     public List<Property> getVisibleProperties(User currentUser) {
         if (currentUser.getRole() == RoleType.SUPER_ADMIN) {
@@ -58,6 +64,8 @@ public class PropertyVisibilityService {
             return List.of();
         }
 
+        // COMMERCIAL sees all agency properties (same as ADMIN/RESPONSABLE).
+        // Edit restrictions are enforced per-operation in PropertyService, not at the list level.
         return propertyRepository.findVisiblePropertiesForAgency(agencyAdminOpt.get().getId());
     }
 

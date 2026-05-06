@@ -29,7 +29,4 @@ public interface AffiliateProfileRepository extends JpaRepository<AffiliateProfi
 
     @Query("SELECT COUNT(ap) FROM AffiliateProfile ap WHERE ap.status = :status")
     long countByStatus(@Param("status") AffiliateStatus status);
-
-    @Query("SELECT ap FROM AffiliateProfile ap WHERE ap.bonusPercentage > 0 AND ap.bonusExpiresAt > CURRENT_TIMESTAMP")
-    List<AffiliateProfile> findProfilesWithActiveBonus();
 }

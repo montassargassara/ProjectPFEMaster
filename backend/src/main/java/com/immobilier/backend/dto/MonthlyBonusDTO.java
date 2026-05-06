@@ -12,9 +12,7 @@ public class MonthlyBonusDTO {
     private Integer rankingMonth;
     private Integer rankingYear;
     private Integer rank;
-    private Double bonusPercentage;
-    private Integer bonusMonth;
-    private Integer bonusYear;
-    private Boolean isApplied;
+    private Double rewardAmount;
+    private Boolean isPaid;
     private LocalDateTime createdAt;
 }

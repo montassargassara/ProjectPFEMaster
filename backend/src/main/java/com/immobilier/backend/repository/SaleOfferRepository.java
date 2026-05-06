@@ -48,4 +48,13 @@ public interface SaleOfferRepository extends JpaRepository<SaleOffer, Long> {
     /** All accepted or completed offers — used to compute per-zone demand scores. */
     @Query("SELECT o FROM SaleOffer o WHERE o.status IN ('ACCEPTED', 'COMPLETED')")
     List<SaleOffer> findAcceptedOrCompletedOffers();
+
+    // ── Agency-scoped affiliate queries ───────────────────────────────────────
+
+    @Query("SELECT DISTINCT o.affiliate FROM SaleOffer o WHERE o.property.agencyAdmin.id = :agencyAdminId")
+    List<User> findDistinctAffiliatesForAgency(@Param("agencyAdminId") Long agencyAdminId);
+
+    @Query("SELECT COUNT(o) FROM SaleOffer o WHERE o.affiliate.id = :affiliateId AND o.property.agencyAdmin.id = :agencyAdminId")
+    long countOffersForAffiliateAndAgency(@Param("affiliateId") Long affiliateId,
+                                          @Param("agencyAdminId") Long agencyAdminId);
 }

@@ -17,4 +17,10 @@ public class SuggestedZoneDTO {
     private int demandScore;
     /** Composite opportunity score used for server-side ranking (not always sent to frontend). */
     private double opportunityScore;
+    /** City part of the zone (for add-zone requests). */
+    private String city;
+    /** Price in TND to unlock this zone (0 = free first zone). */
+    private double price;
+    /** True when demandScore qualifies the zone as premium (100 TND). */
+    private boolean isPremium;
 }

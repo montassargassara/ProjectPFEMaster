@@ -32,6 +32,8 @@ export interface AdminUser {
   isActive: boolean;
   permissions: string[];
   token?: string;
+  telephone?: string;
+  avatarUrl?: string;
 }
 
 @Injectable({
@@ -152,6 +154,25 @@ export class AdminAuthService {
 
   getCurrentUser(): AdminUser | null {
     return this.currentUserSubject.value;
+  }
+
+  /**
+   * Patches the in-memory user and persists to localStorage.
+   * Called by SettingsComponent after a successful profile / avatar update.
+   */
+  updateCurrentUser(patch: Partial<AdminUser>): void {
+    const current = this.currentUserSubject.value;
+    if (!current) return;
+    const updated: AdminUser = {
+      ...current,
+      ...patch,
+      name: patch.prenom && patch.nom
+        ? `${patch.prenom} ${patch.nom}`
+        : (patch.prenom ? `${patch.prenom} ${current.nom}` :
+           patch.nom   ? `${current.prenom} ${patch.nom}` : current.name),
+    };
+    localStorage.setItem('adminUser', JSON.stringify(updated));
+    this.currentUserSubject.next(updated);
   }
 
   isTokenExpired(): boolean {

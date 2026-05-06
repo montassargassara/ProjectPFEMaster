@@ -56,10 +56,10 @@ export class AffiliateRankingComponent implements OnInit {
     return 'fa-hashtag';
   }
 
-  getBonusForRank(rank: number): string {
-    if (rank === 1) return '+2%';
-    if (rank === 2) return '+1.5%';
-    if (rank === 3) return '+1%';
+  getRewardForRank(rank: number): string {
+    if (rank === 1) return '2 000 TND';
+    if (rank === 2) return '1 500 TND';
+    if (rank === 3) return '1 000 TND';
     return '—';
   }
 

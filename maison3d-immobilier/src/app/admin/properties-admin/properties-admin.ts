@@ -39,6 +39,7 @@ export class PropertiesAdmin implements OnInit {
   statusFilter = '';
   cityFilter = '';
   categoryFilter = '';
+  validationFilter = ''; // ALL | PENDING_RESPONSABLE | PENDING_ADMIN | APPROVED | REJECTED
   minPrice?: number;
   maxPrice?: number;
 
@@ -63,6 +64,15 @@ export class PropertiesAdmin implements OnInit {
   commissionValue: number = 0;
   shareMessage: string = '';
   shareError: string = '';
+
+  // VENDU properties are hidden from the active list by default; user can toggle
+  showFinalized = false;
+
+  // ─── Status change modals ──────────────────────────────────────────────────
+  venduConfirmOpen = false;
+  loueModalOpen = false;
+  pendingStatusItem: PropertyListItem | null = null;
+  loueMonths: number | null = null;
   // ──────────────────────────────────────────────────────────────────────────
 
   constructor(
@@ -80,8 +90,24 @@ export class PropertiesAdmin implements OnInit {
     return this.authService.getCurrentUser()?.role?.toUpperCase() ?? '';
   }
 
+  get currentUserId(): number | undefined {
+    return this.authService.getCurrentUser()?.id;
+  }
+
   get isSuperAdmin(): boolean {
     return this.currentUserRole === 'SUPER_ADMIN';
+  }
+
+  get isAdmin(): boolean {
+    return this.currentUserRole === 'ADMIN';
+  }
+
+  get isCommercial(): boolean {
+    return this.currentUserRole === 'COMMERCIAL';
+  }
+
+  get canApproveSales(): boolean {
+    return this.isSuperAdmin || this.isAdmin;
   }
 
   loadProperties(): void {
@@ -166,6 +192,173 @@ export class PropertiesAdmin implements OnInit {
 
   canShare(property: PropertyListItem): boolean {
     return this.isSuperAdmin && property.ownerType === 'SUPER_ADMIN_OWNED';
+  }
+
+  /**
+   * Whether the current user can edit/modify/delete this property.
+   * Mirrors backend enforcement in PropertyService:
+   *  - SUPER_ADMIN: cannot mutate AGENCY_OWNED properties
+   *  - ADMIN: cannot mutate SUPER_ADMIN_OWNED properties
+   *  - COMMERCIAL: can only mutate properties they personally created
+   */
+  canEditProperty(property: PropertyListItem): boolean {
+    if (!this.authService.getCurrentUser()) return false;
+
+    if (this.isSuperAdmin) {
+      const isAgencyOwned = property.ownerType === 'AGENCY_OWNED'
+        || property.ownerRole === 'ADMIN'
+        || property.ownerRole === 'RESPONSABLE_COMMERCIAL'
+        || property.ownerRole === 'COMMERCIAL';
+      if (isAgencyOwned) return false;
+    }
+
+    if (this.isAdmin && property.ownerType === 'SUPER_ADMIN_OWNED') {
+      return false;
+    }
+
+    if (this.currentUserRole === 'RESPONSABLE_COMMERCIAL' && property.ownerType === 'SUPER_ADMIN_OWNED') {
+      return false;
+    }
+
+    if (this.isCommercial && property.createdById !== this.currentUserId) {
+      return false;
+    }
+
+    return true;
+  }
+
+  noEditTooltip(property: PropertyListItem): string {
+    if (this.isSuperAdmin && property.ownerType === 'AGENCY_OWNED') {
+      return 'Vous ne pouvez pas modifier ce bien (appartient à une agence)';
+    }
+    if ((this.isAdmin || this.currentUserRole === 'RESPONSABLE_COMMERCIAL') && property.ownerType === 'SUPER_ADMIN_OWNED') {
+      return 'Ce bien appartient au Super Admin — lecture seule';
+    }
+    if (this.isCommercial && property.createdById !== this.currentUserId) {
+      return 'Vous ne pouvez modifier que vos propres biens';
+    }
+    return '';
+  }
+
+  /**
+   * Whether the current user can initiate a status change on this property.
+   * Every visible property allows a status-change request; cross-ownership ones
+   * are routed through the approval workflow instead of being applied directly.
+   *
+   * COMMERCIAL and RESPONSABLE_COMMERCIAL can request status changes on ALL
+   * properties returned by the API (visibility is enforced server-side).
+   */
+  canChangeStatus(property: PropertyListItem): boolean {
+    if (this.canEditProperty(property)) return true;
+    // SUPER_ADMIN on AGENCY_OWNED — routes to that agency's ADMIN for approval
+    if (this.isSuperAdmin && property.ownerType === 'AGENCY_OWNED') return true;
+    // ADMIN on SUPER_ADMIN_OWNED — routes to SUPER_ADMIN for approval
+    if (this.isAdmin && property.ownerType === 'SUPER_ADMIN_OWNED') return true;
+    // COMMERCIAL / RESPONSABLE — all status changes go through ADMIN approval
+    // regardless of ownerType or who created the property
+    if (this.currentUserRole === 'COMMERCIAL' || this.currentUserRole === 'RESPONSABLE_COMMERCIAL') return true;
+    return false;
+  }
+
+  /**
+   * Whether any status change on this property will trigger the approval workflow.
+   * When true, the dropdown shows a warning before the user submits.
+   */
+  statusChangeNeedsApproval(property: PropertyListItem): boolean {
+    if (this.isSuperAdmin && property.ownerType === 'AGENCY_OWNED') return true;
+    if (this.isAdmin && property.ownerType === 'SUPER_ADMIN_OWNED') return true;
+    if (this.currentUserRole === 'COMMERCIAL' || this.currentUserRole === 'RESPONSABLE_COMMERCIAL') return true;
+    return false;
+  }
+
+  approvalChainLabel(property: PropertyListItem): string {
+    if (this.isSuperAdmin && property.ownerType === 'AGENCY_OWNED') {
+      return "L'Admin de l'agence doit valider avant application.";
+    }
+    if (this.isAdmin && property.ownerType === 'SUPER_ADMIN_OWNED') {
+      return 'Le Super Admin doit valider avant application.';
+    }
+    // RESPONSABLE / COMMERCIAL: chain depends on the property owner
+    if (this.currentUserRole === 'RESPONSABLE_COMMERCIAL' || this.currentUserRole === 'COMMERCIAL') {
+      if (property.ownerType === 'SUPER_ADMIN_OWNED') {
+        return "L'Admin de votre agence, puis le Super Admin, doivent valider.";
+      }
+      return "L'Admin de votre agence doit valider avant application.";
+    }
+    return '';
+  }
+
+  // ─── Pending sale approval ────────────────────────────────────────────────
+
+  hasPendingSale(property: PropertyListItem): boolean {
+    return property.pendingSaleApproval === 'PENDING';
+  }
+
+  canApproveSaleFor(property: PropertyListItem): boolean {
+    if (!this.canApproveSales) return false;
+    if (!this.hasPendingSale(property)) return false;
+    // The backend sets pendingSaleApproverRole to indicate exactly who should approve next.
+    if (this.isSuperAdmin) return property.pendingSaleApproverRole === 'SUPER_ADMIN';
+    if (this.isAdmin) return property.pendingSaleApproverRole === 'ADMIN';
+    return false;
+  }
+
+  approveSale(property: PropertyListItem): void {
+    this.propertiesService.approvePendingSale(property.id).subscribe({
+      next: updated => {
+        Object.assign(property, updated);
+        this.applyFilters();
+        this.cdr.detectChanges();
+      },
+      error: err => {
+        this.errorMessage = err?.error?.error || 'Impossible d\'approuver la vente.';
+        this.cdr.detectChanges();
+        setTimeout(() => { this.errorMessage = ''; this.cdr.detectChanges(); }, 4000);
+      },
+    });
+  }
+
+  rejectSale(property: PropertyListItem): void {
+    const reason = prompt('Raison du refus (optionnelle):') ?? '';
+    this.propertiesService.rejectPendingSale(property.id, reason).subscribe({
+      next: updated => {
+        Object.assign(property, updated);
+        this.applyFilters();
+        this.cdr.detectChanges();
+      },
+      error: err => {
+        this.errorMessage = err?.error?.error || 'Impossible de refuser la vente.';
+        this.cdr.detectChanges();
+        setTimeout(() => { this.errorMessage = ''; this.cdr.detectChanges(); }, 4000);
+      },
+    });
+  }
+
+  getPendingSaleLabel(property: PropertyListItem): string {
+    if (!property.pendingSaleApproval) return '';
+    const requester = property.pendingSaleRequestedByName ?? 'Inconnu';
+    const target = property.pendingSaleStatut ?? '?';
+    switch (property.pendingSaleApproval) {
+      case 'PENDING': {
+        const waitingFor = property.pendingSaleApproverRole === 'SUPER_ADMIN'
+          ? 'Super Admin' : 'Admin';
+        return `Vente "${target}" demandée par ${requester} — en attente de ${waitingFor}`;
+      }
+      case 'APPROVED':
+        return `Vente approuvée (${target})`;
+      case 'REJECTED':
+        return `Vente refusée${property.pendingSaleRejectionReason ? ': ' + property.pendingSaleRejectionReason : ''}`;
+      default: return '';
+    }
+  }
+
+  getPendingSaleClass(property: PropertyListItem): string {
+    switch (property.pendingSaleApproval) {
+      case 'PENDING':  return 'badge-pending-sale';
+      case 'APPROVED': return 'badge-sale-approved';
+      case 'REJECTED': return 'badge-sale-rejected';
+      default: return '';
+    }
   }
 
   // ─── Share modal ──────────────────────────────────────────────────────────
@@ -289,9 +482,18 @@ export class PropertiesAdmin implements OnInit {
 
   // ─── Filters & pagination ─────────────────────────────────────────────────
 
+  get finalizedCount(): number {
+    return this.properties.filter(p => p.statut === 'VENDU' || (p as any).isFinalized).length;
+  }
+
   applyFilters(): void {
     const term = this.searchTerm.trim().toLowerCase();
     let filtered = [...this.properties];
+
+    // Hide finalized (VENDU) properties from the active management list unless toggled on
+    if (!this.showFinalized) {
+      filtered = filtered.filter(p => p.statut !== 'VENDU' && !(p as any).isFinalized);
+    }
 
     if (term) {
       filtered = filtered.filter(item => {
@@ -320,6 +522,10 @@ export class PropertiesAdmin implements OnInit {
     if (this.categoryFilter) {
       filtered = filtered.filter(item => this.getCategory(item) === this.categoryFilter);
     }
+    if (this.validationFilter) {
+      filtered = filtered.filter(item =>
+        (item.validationStatus || 'APPROVED') === this.validationFilter);
+    }
     if (this.minPrice !== undefined && this.minPrice !== null) {
       filtered = filtered.filter(item => this.getPrice(item) >= this.minPrice!);
     }
@@ -339,6 +545,7 @@ export class PropertiesAdmin implements OnInit {
     this.statusFilter = '';
     this.cityFilter = '';
     this.categoryFilter = '';
+    this.validationFilter = '';
     this.minPrice = undefined;
     this.maxPrice = undefined;
     this.applyFilters();
@@ -384,7 +591,7 @@ export class PropertiesAdmin implements OnInit {
       const rawUrl = item.mainImageUrl.startsWith('http')
         ? item.mainImageUrl
         : `${apiBaseUrl}${item.mainImageUrl}`;
-      return rawUrl.replace('/api/public/images/', '/api/images/public/');
+      return rawUrl;
     }
     return null;
   }
@@ -416,11 +623,34 @@ export class PropertiesAdmin implements OnInit {
     }
   }
 
-  updateStatus(item: PropertyListItem, status: string): void {
-    if (status === item.statut) return;
+  // ── Status lock helpers ────────────────────────────────────────────────────
+
+  isPropertyLocked(property: PropertyListItem): boolean {
+    if (property.isFinalized) return true;
+    if (property.statut === 'VENDU') return true;
+    if (property.isStatusLocked) return true;
+    return false;
+  }
+
+  get loueEndDatePreview(): string | null {
+    if (!this.loueMonths || this.loueMonths < 1) return null;
+    const end = new Date();
+    end.setMonth(end.getMonth() + this.loueMonths);
+    return end.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
+  }
+
+  get loueConfirmEnabled(): boolean {
+    return !!(this.loueMonths && this.loueMonths >= 1);
+  }
+
+  // ── Status change flow ─────────────────────────────────────────────────────
+
+  updateStatus(item: PropertyListItem, newStatus: string): void {
+    if (newStatus === item.statut) return;
+    if (this.isPropertyLocked(item)) return;
 
     const category = this.getPropertyCategory(item);
-    if (!isStatusAllowedForCategory(status, category)) {
+    if (!isStatusAllowedForCategory(newStatus, category)) {
       this.errorMessage = category === 'VENTE'
         ? 'Une propriété en vente ne peut pas avoir le statut "Loué"'
         : 'Une propriété en location ne peut pas avoir le statut "Vendu"';
@@ -429,13 +659,66 @@ export class PropertiesAdmin implements OnInit {
       return;
     }
 
-    const oldStatus = item.statut;
-    item.statut = status;
-    this.cdr.detectChanges();
+    // Intercept terminal statuses — show confirmation modals before API call
+    if (newStatus === 'VENDU') {
+      this.pendingStatusItem = item;
+      this.venduConfirmOpen = true;
+      this.cdr.detectChanges();
+      return;
+    }
+    if (newStatus === 'LOUE') {
+      this.pendingStatusItem = item;
+      this.loueMonths = null;
+      this.loueModalOpen = true;
+      this.cdr.detectChanges();
+      return;
+    }
 
-    this.propertiesService.updatePropertyStatus(item.id, status).subscribe({
+    this.applyStatusUpdate(item, newStatus);
+  }
+
+  confirmVendu(): void {
+    if (!this.pendingStatusItem) return;
+    const item = this.pendingStatusItem;
+    this.venduConfirmOpen = false;
+    this.pendingStatusItem = null;
+    this.applyStatusUpdate(item, 'VENDU');
+  }
+
+  confirmLoue(): void {
+    if (!this.pendingStatusItem || !this.loueConfirmEnabled) return;
+    const item = this.pendingStatusItem;
+    const months = this.loueMonths!;
+    this.loueModalOpen = false;
+    this.pendingStatusItem = null;
+    this.loueMonths = null;
+    this.applyStatusUpdate(item, 'LOUE', months);
+  }
+
+  cancelStatusChange(): void {
+    this.venduConfirmOpen = false;
+    this.loueModalOpen = false;
+    this.pendingStatusItem = null;
+    this.loueMonths = null;
+    this.cdr.detectChanges();
+  }
+
+  private applyStatusUpdate(item: PropertyListItem, status: string, rentalDurationMonths?: number): void {
+    const oldStatus = item.statut;
+    this.propertiesService.updatePropertyStatus(item.id, status, rentalDurationMonths).subscribe({
       next: updated => {
-        item.statut = updated.statut;
+        item.statut                        = updated.statut;
+        item.isFinalized                   = updated.isFinalized;
+        item.isStatusLocked                = updated.isStatusLocked;
+        item.statusLockReason              = updated.statusLockReason;
+        item.rentalEndDate                 = updated.rentalEndDate;
+        item.rentalDurationMonths          = updated.rentalDurationMonths;
+        item.pendingSaleApproval           = updated.pendingSaleApproval;
+        item.pendingSaleStatut             = updated.pendingSaleStatut;
+        item.pendingSaleRejectionReason    = updated.pendingSaleRejectionReason;
+        item.pendingSaleRequestedById      = updated.pendingSaleRequestedById;
+        item.pendingSaleRequestedByName    = updated.pendingSaleRequestedByName;
+        item.pendingSaleApproverRole       = updated.pendingSaleApproverRole;
         this.applyFilters();
         this.cdr.detectChanges();
       },
@@ -444,15 +727,10 @@ export class PropertiesAdmin implements OnInit {
         this.errorMessage =
           error.error?.error ||
           error.error?.message ||
-          'Impossible de modifier le statut. Vérifiez que le statut est compatible avec la catégorie.';
+          'Impossible de modifier le statut.';
         this.applyFilters();
         this.cdr.detectChanges();
-        setTimeout(() => {
-          if (this.errorMessage) {
-            this.errorMessage = '';
-            this.cdr.detectChanges();
-          }
-        }, 4000);
+        setTimeout(() => { this.errorMessage = ''; this.cdr.detectChanges(); }, 4000);
       },
     });
   }
@@ -486,6 +764,31 @@ export class PropertiesAdmin implements OnInit {
 
   get availableTypes(): string[] {
     return Array.from(new Set(this.properties.map(item => item.type).filter(Boolean))).sort();
+  }
+
+  getValidationLabel(status?: string | null): string {
+    switch (status) {
+      case 'PENDING_RESPONSABLE': return 'En attente Responsable';
+      case 'PENDING_ADMIN':       return 'En attente Admin';
+      case 'APPROVED':            return 'Approuvé';
+      case 'REJECTED':            return 'Refusé';
+      default:                    return 'Approuvé';
+    }
+  }
+
+  getValidationClass(status?: string | null): string {
+    switch (status) {
+      case 'PENDING_RESPONSABLE':
+      case 'PENDING_ADMIN':       return 'badge-pending';
+      case 'REJECTED':            return 'badge-rejected';
+      case 'APPROVED':
+      default:                    return 'badge-approved';
+    }
+  }
+
+  get pendingCount(): number {
+    return this.properties.filter(p =>
+      p.validationStatus === 'PENDING_RESPONSABLE' || p.validationStatus === 'PENDING_ADMIN').length;
   }
 
   get availableCities(): string[] {

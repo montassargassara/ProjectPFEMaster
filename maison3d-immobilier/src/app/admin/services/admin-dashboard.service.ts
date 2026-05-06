@@ -26,7 +26,7 @@ export interface AdminStatsResponse {
   clientCount?: number;
 }
 
-export interface PropertyListItem {
+export interface DashboardPropertyItem {
   id: number;
   titre: string;
   description?: string;
@@ -79,17 +79,87 @@ export interface DashboardSnapshot {
   monthlyRevenue: number[];
   propertyTypes: Array<{ type: string; count: number }>;
   statusCounts: Array<{ status: string; count: number }>;
-  recentProperties: PropertyListItem[];
-  recentSales: PropertyListItem[];
+  recentProperties: DashboardPropertyItem[];
+  recentSales: DashboardPropertyItem[];
   recentClients: DashboardUser[];
   recentAffiliates: DashboardUser[];
-  pendingValidations: PropertyListItem[];
+  pendingValidations: DashboardPropertyItem[];
   isSuperAdmin: boolean;
 }
 
 export interface ClientCountResponse {
   count: number;
   role: string;
+}
+
+export interface DashboardValidationItem {
+  id: number;
+  titre: string;
+  type: string;
+  statut: string;
+  ownerType?: string;
+  agencyAdminId?: number;
+  agencyAdminName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  ownerRole?: string;
+  createdById?: number;
+  createdByName?: string;
+  mainImageUrl?: string;
+  hasMainImage?: boolean;
+  city?: string;
+  country?: string;
+}
+
+export interface ExpiredRentalItem {
+  id: number;
+  titre: string;
+  type: string;
+  statut: string;
+  prixLocation?: number;
+  city?: string;
+  country?: string;
+  rentalEndDate?: string;
+  agencyAdminName?: string;
+  mainImageUrl?: string;
+  hasMainImage?: boolean;
+}
+
+export interface AgencyAffiliateStats {
+  totalAffiliates: number;
+  totalSalesViaAffiliation: number;
+  totalCommissionsGlobal: number;
+  totalCommissionsPaid: number;
+  totalCommissionsPending: number;
+  totalClientsApportes: number;
+}
+
+export interface AgencyAffiliateItem {
+  affiliateId: number;
+  prenom: string;
+  nom: string;
+  email: string;
+  telephone?: string;
+  status: string;
+  clientsApportes: number;
+  biensVendus: number;
+  totalCommissions: number;
+}
+
+export interface AgencyCommissionItem {
+  transactionId: number;
+  affiliatePrenom: string;
+  affiliateNom: string;
+  propertyTitre: string;
+  propertyAdresse: string;
+  propertyCity?: string;
+  propertyPrice: number;
+  commissionPercentage: number;
+  commissionAmount: number;
+  transactionType: string;
+  transactionDate: string;
+  isPaid: boolean;
+  clientEmail: string;
 }
 
 export interface RecentClient {
@@ -122,11 +192,11 @@ export class AdminDashboardService {
       : of(null);
 
     const properties$ = this.http
-      .get<PropertyListItem[]>(`${apiBaseUrl}/api/properties/list`)
+      .get<DashboardPropertyItem[]>(`${apiBaseUrl}/api/properties/list`)
       .pipe(catchError(() => of([])));
 
     const recent$ = this.http
-      .get<PropertyListItem[]>(`${apiBaseUrl}/api/properties/recent-light`, {
+      .get<DashboardPropertyItem[]>(`${apiBaseUrl}/api/properties/recent-light`, {
         params: { limit: '6' },
       })
       .pipe(catchError(() => of([])));
@@ -227,7 +297,7 @@ export class AdminDashboardService {
     return dateB - dateA;
   }
 
-  private countByStatus(properties: PropertyListItem[]): Array<{ status: string; count: number }> {
+  private countByStatus(properties: DashboardPropertyItem[]): Array<{ status: string; count: number }> {
     const counts = new Map<string, number>();
 
     for (const property of properties) {
@@ -238,7 +308,7 @@ export class AdminDashboardService {
     return Array.from(counts.entries()).map(([status, count]) => ({ status, count }));
   }
 
-  private countByType(properties: PropertyListItem[]): Array<{ type: string; count: number }> {
+  private countByType(properties: DashboardPropertyItem[]): Array<{ type: string; count: number }> {
     const counts = new Map<string, number>();
 
     for (const property of properties) {
@@ -249,7 +319,7 @@ export class AdminDashboardService {
     return Array.from(counts.entries()).map(([type, count]) => ({ type, count }));
   }
 
-  private calculateRevenueTotals(properties: PropertyListItem[]): {
+  private calculateRevenueTotals(properties: DashboardPropertyItem[]): {
     total: number;
     last30Days: number;
     last365Days: number;
@@ -292,7 +362,7 @@ export class AdminDashboardService {
     };
   }
 
-  private calculateMonthlySeries(properties: PropertyListItem[]): {
+  private calculateMonthlySeries(properties: DashboardPropertyItem[]): {
     monthlySales: number[];
     monthlyRentals: number[];
     monthlyRevenue: number[];
@@ -325,7 +395,7 @@ export class AdminDashboardService {
     return { monthlySales, monthlyRentals, monthlyRevenue };
   }
 
-  private getPropertyDate(property: PropertyListItem): Date | null {
+  private getPropertyDate(property: DashboardPropertyItem): Date | null {
     const raw = property.updatedAt || property.createdAt;
     if (!raw) return null;
     const date = new Date(raw);
@@ -346,10 +416,40 @@ export class AdminDashboardService {
    * Récupère les clients récents visibles
    */
   getRecentClients(limit: number = 6): Observable<RecentClient[]> {
-    // ✅ URL CORRECTE avec /api/dashboard/
     return this.http.get<RecentClient[]>(`${apiBaseUrl}/api/dashboard/recent-clients`, {
       params: { limit: limit.toString() }
     });
   }
 
+  /**
+   * Récupère les biens LOUÉ dont le contrat est expiré
+   */
+  getExpiredRentals(): Observable<ExpiredRentalItem[]> {
+    return this.http.get<ExpiredRentalItem[]>(`${apiBaseUrl}/api/properties/expired-rentals`);
+  }
+
+  /**
+   * Récupère les validations récentes filtrées par rôle
+   */
+  getDashboardValidations(limit: number = 6): Observable<DashboardValidationItem[]> {
+    return this.http.get<DashboardValidationItem[]>(`${apiBaseUrl}/api/dashboard/validations`, {
+      params: { limit: limit.toString() }
+    });
+  }
+
+  // ── Agency Affiliate Management (ADMIN only) ─────────────────────────────
+
+  getAgencyAffiliateStats(): Observable<AgencyAffiliateStats> {
+    return this.http.get<AgencyAffiliateStats>(`${apiBaseUrl}/api/dashboard/agency-affiliate-stats`);
+  }
+
+  getAgencyAffiliates(): Observable<AgencyAffiliateItem[]> {
+    return this.http.get<AgencyAffiliateItem[]>(`${apiBaseUrl}/api/dashboard/agency-affiliates`);
+  }
+
+  getAgencyAffiliateCommissions(limit: number = 20): Observable<AgencyCommissionItem[]> {
+    return this.http.get<AgencyCommissionItem[]>(`${apiBaseUrl}/api/dashboard/agency-affiliate-commissions`, {
+      params: { limit: limit.toString() }
+    });
+  }
 }

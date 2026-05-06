@@ -234,6 +234,36 @@
     }
   }
   
+  .register-cta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    font-size: 14px;
+    color: #718096;
+
+    .register-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: #3498db;
+      font-weight: 600;
+      text-decoration: none;
+      padding: 4px 10px;
+      border-radius: 6px;
+      transition: background .2s, color .2s;
+
+      i { font-size: 13px; }
+
+      &:hover {
+        background: rgba(52, 152, 219, .1);
+        color: #2980b9;
+        text-decoration: underline;
+      }
+    }
+  }
+
   .security-info {
     display: flex;
     align-items: center;

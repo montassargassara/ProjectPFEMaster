@@ -104,7 +104,8 @@ Standard Spring Boot layered architecture:
 
 ```
 controller/   → REST endpoints (Auth, Dashboard, PropertyShareRequest, Notification,
-                AffiliateController, SuperAdminAffiliateController, SaleOfferController, etc.)
+                AffiliateController, SuperAdminAffiliateController, SaleOfferController,
+                ZonePaymentController, SuperAdminZonePaymentController, etc.)
 service/      → Business logic
 repository/   → Spring Data JPA repositories
 entity/       → JPA domain models
@@ -141,13 +142,15 @@ admin/
   affiliate-accounts/           → Super Admin: manage all affiliate accounts
   affiliate-ranking/            → Ranking leaderboard (shared: SUPER_ADMIN + AFFILIATE)
   affiliate-commissions/        → Super Admin: all commissions & payout management
-  affiliate-dashboard/          → Affiliate: personal KPI dashboard
+  affiliate-dashboard/          → Affiliate: personal KPI dashboard + zone expansion widget
   affiliate-properties/         → Affiliate: eligible properties in assigned zones
   affiliate-offers/             → Affiliate: submit and track sale offers
-  affiliate-earnings/           → Affiliate: commission history
+  affiliate-earnings/           → Affiliate: commission transaction history
   affiliate-incoming-offers/    → Agency Admin: incoming sale offers from affiliates
+  agency-applications/          → Super Admin: review PENDING agency self-registrations
+  zone-payment-requests/        → Super Admin: review zone payment proofs (approve/reject)
   services/                     → HTTP wrappers (properties, share-request, notification,
-                                  auth, affiliate, …)
+                                  auth, affiliate, agency-registration, …)
   guards/                       → Route guards (auth protection + role isolation)
 public/                         → Public visitor portal — fully isolated from admin shell
   layout/                       → Public header + footer + outlet
@@ -155,6 +158,7 @@ public/                         → Public visitor portal — fully isolated fro
   pages/listing/                → /biens/vente and /biens/location (mode via route data)
   pages/property-detail/        → /biens/:id with gallery, video, <model-viewer> 3D, similar
   pages/account/                → /compte/login, /compte/register, /compte/dashboard
+  pages/register/               → /register (choice), /register/agence, /register/affilie
   components/                   → Public property card, filter bar, interest modal
   services/                     → ClientAuthService (own token store), InterestRequestService,
                                   PublicPortalService, clientAuthGuard
@@ -320,27 +324,96 @@ Affiliates go through an approval workflow before gaining access:
 ## Affiliate Registration Flow
 
 ### Self-registration (public portal)
-1. Affiliate submits registration via `POST /api/affiliate/register` (public endpoint).
-2. Backend creates a `User` (role=`AFFILIATE`, `isActive=false`) and an `AffiliateProfile` (status=`PENDING`).
-3. Super Admin reviews in **Candidatures** page → approve or reject with reason.
-4. On approval: `AffiliateProfile.status` → `ACTIVE`, `User.isActive` → `true`.
-5. Affiliate receives an in-app notification and can now log in.
+1. Affiliate fills `/register/affilie` form (name, email, password, zone selector — country+city dropdowns from `/api/properties/public/countries` + `/api/properties/public/cities`).
+2. Frontend POSTs to `POST /api/affiliate/register` (public endpoint).
+3. Backend creates a `User` (role=`AFFILIATE`, `isActive=false`) and an `AffiliateProfile` (status=`PENDING`). Saves one `AffiliateRegion` row from the submitted zone.
+4. Super Admin receives an `AFFILIATE_REGISTRATION` notification and reviews in **Candidatures Affiliés** page → approve or reject with reason.
+5. On approval: `AffiliateProfile.status` → `ACTIVE`, `User.isActive` → `true`. A `ClientInfo` row is auto-created so the affiliate appears in Gestion des clients.
+6. Affiliate receives an `AFFILIATE_APPROVED` notification and can now log in.
 
 ### Admin-created affiliate (via Client Management)
 When Super Admin creates a user with role `AFFILIATE` through the client-management UI, `ClientManagementService.createClient()` automatically:
 - Creates the `User` with `isActive=true`
 - Creates an `AffiliateProfile` with `status=ACTIVE` (skips the PENDING review step)
-- Creates an `AffiliateRegion` populated with **both** the joined `ClientInfo.zoneRecherchee` (`"Country, City"` legacy field) **and** the explicit `country` + `city` columns + lowercase `regionName = city`. The configured commission rate (or `5.0` default) is stored on the region.
+- Creates an `AffiliateRegion` populated with **both** the joined `ClientInfo.zoneRecherchee` (`"Country, City"` legacy field) **and** the explicit `country` + `city` columns + lowercase `regionName = city`.
 
 This is the fast-path for trusted affiliates who don't need manual approval.
+
+---
+
+# AGENCY SELF-REGISTRATION MODULE
+
+## Purpose
+
+Agencies (ADMIN role) can register themselves via a public form instead of waiting for a Super Admin to create their account manually. The flow mirrors the affiliate approval workflow — accounts start PENDING and are blocked until Super Admin approves.
+
+## Agency Registration Flow
+
+1. Visitor fills `/register/agence` form (responsable info, agency name, email, password, telephone optional, description optional).
+2. Frontend POSTs to `POST /api/register/agency` (public endpoint — `permitAll` in SecurityConfig).
+3. Backend (`AgencyRegistrationService.register()`):
+   - Validates email uniqueness.
+   - Creates `User` (role=`ADMIN`, `isActive=false`) with `telephone=null` when field is blank (avoids unique-constraint violation on `users.telephone`).
+   - Creates an `AgencyRegistrationApplication` row (status=`PENDING`).
+4. Super Admin receives an `AGENCY_REGISTRATION` notification and reviews in **Candidatures Agences** page (`/admin/agency-applications`).
+5. On **approve**: `User.isActive=true`, application status → `APPROVED`, `user.parent` set to the approving Super Admin (places the agency in the hierarchy tree). Sends `AGENCY_APPROVED` notification.
+6. On **reject** (with reason): application status → `REJECTED`, `User.isActive` stays `false`. Sends `AGENCY_REJECTED` notification.
+7. Approved agency can now log in and manages their own properties, agents, and clients.
+
+## Agency Registration Backend API
+
+- `POST /api/register/agency` — public self-registration
+- `GET  /api/register/agency/pending` — Super Admin: list PENDING applications
+- `GET  /api/register/agency/all` — Super Admin: list all applications
+- `PUT  /api/register/agency/{id}/approve` — Super Admin approves
+- `PUT  /api/register/agency/{id}/reject` — Super Admin rejects with reason
+
+All management endpoints require `ROLE_SUPER_ADMIN`.
+
+## Agency Registration Frontend Routes
+
+| Route                        | Component                       | Auth        |
+|------------------------------|---------------------------------|-------------|
+| `/register`                  | `RegisterChoiceComponent`       | Public      |
+| `/register/agence`           | `RegisterAgencyComponent`       | Public      |
+| `/register/affilie`          | `RegisterAffiliateComponent`    | Public      |
+| `/admin/agency-applications` | `AgencyApplicationsComponent`   | SUPER_ADMIN |
+
+The `/register` choice page links to both `/register/agence` and `/register/affilie`. The admin login page has a "Pas encore de compte ? → Créer un compte" CTA linking to `/register`.
+
+## Key Backend Entity
+
+- `AgencyRegistrationApplication` — tracks the agency self-registration lifecycle. Links 1:1 to the `User` created at submission time. Fields: `status` (PENDING/APPROVED/REJECTED), `agencyName`, `description`, `rejectionReason`, `reviewedBy`, `reviewedAt`.
+- On approval: `AgencyRegistrationService.approve()` sets `user.parent = approver` via injected `SecurityUtils` so the agency appears under the Super Admin in the hierarchy tree.
+
+## Registration Form Rules
+
+- **`telephone` optional on both forms.** The `users.telephone` column has `@Column(unique = true)`. Sending `""` (empty string) causes a unique constraint violation when two users register without a phone number. Both `AgencyRegistrationService` and `AffiliateService` guard: `user.setTelephone((tel != null && !tel.isBlank()) ? tel : null)`.
+- Frontend components omit the field entirely when blank: `telephone: this.form.telephone || undefined`.
+- `experienceLevel` and `notes` are likewise sent as `undefined` (not `""`) when blank.
+
+---
+
+# CLIENT AFFILIATE MODULE (continued)
 
 ### Editing an affiliate (via Client Management → Modifier client)
 The Modifier client modal mirrors the Add Affiliate form for `role = AFFILIATE`:
 - Common fields: `nom`, `prenom`, read-only `email`, `telephone`, `Compte actif` toggle.
 - Affiliate-only zone editor: **Pays** dropdown + **Ville** dropdown sourced from `/api/properties/public/countries` and `/api/properties/public/cities` (only countries/cities where properties exist). The legacy `Budget estimé` and free-text `Zone recherchée` fields are hidden for affiliates.
 - The form pre-loads existing zone by parsing `client.zoneRecherchee` (`"Country, City"`) and populating both dropdowns.
-- On save, `ClientManagementService.updateClient()` rebuilds `clientInfo.zoneRecherchee`, then updates (or creates) the affiliate's active `AffiliateRegion` row with the new `country`, `city`, lowercase `regionName`, preserving the commission rate.
+- On save, `ClientManagementService.updateClient()` rebuilds `clientInfo.zoneRecherchee`, then updates (or creates) the affiliate's active `AffiliateRegion` row with the new `country`, `city`, lowercase `regionName`.
 - For non-affiliate clients, the modal keeps the legacy budget + free-text zone fields unchanged.
+
+## Affiliate Commission Model
+
+**Commission is stored ONLY on properties, never on zones.**
+
+- `Property.commissionPercentage` — the commission rate an affiliate earns when they close a sale on that property.
+- `AffiliateRegion` — geographic filter only. It has no `commissionPercentage` field. Zones determine which properties an affiliate can see and offer on; they do not set the payout rate.
+- `SaleOffer` — snapshots `commissionPercentage` and `commissionAmount` at acceptance time from the property.
+- `AffiliateTransaction` — records the final commission paid.
+
+This was refactored from an earlier design where each zone carried its own commission rate. Any code that sets `commissionPercentage` on an `AffiliateRegion` or `RegionSelection` is wrong.
 
 ## Affiliate Property Access Rules
 
@@ -361,6 +434,46 @@ Backend enforcement: `AffiliateService.getEligiblePropertiesForAffiliate()` part
 
 Comparisons are trimmed and lowercase to avoid case/whitespace mismatches.
 
+## Zone Monetization System
+
+Affiliates manage their geographic zones with the following rules:
+
+| Rule                  | Value                                                      |
+|-----------------------|------------------------------------------------------------|
+| First zone            | Free (no payment required)                                 |
+| Standard additional zone | 50 TND (manual wire transfer + proof upload)          |
+| Premium additional zone  | 100 TND (zones with `demandScore >= 3`)               |
+| Maximum zones         | 3 active zones per affiliate                               |
+
+### Zone Types
+
+- **Free** — First zone; affiliate can add it instantly via `POST /api/affiliate/add-zone` with `paymentConfirmed=true`.
+- **Standard** — Paid zone (50 TND); affiliate submits a `ZonePaymentRequest` with wire transfer proof image.
+- **Premium** — High-demand paid zone (100 TND); same workflow as standard.
+
+### Zone Addition Flow
+
+1. Affiliate views the **Zones d'expansion suggérées** widget on their dashboard.
+2. For a free zone: multi-step modal → upload step → instant activation via `addZone()`.
+3. For a paid zone: multi-step modal → **Step 1** (RIB/bank details + amount) → **Step 2** (upload wire transfer proof) → **Step 3** (confirmation: pending admin validation).
+4. Backend creates a `ZonePaymentRequest` (status=`PENDING`), stores the proof image under `uploads/payments/`, notifies Super Admins via `ZONE_PAYMENT_SUBMITTED`.
+5. Super Admin reviews in **Paiements zones** page → **Approve** (activates the zone, notifies affiliate via `ZONE_PAYMENT_APPROVED`) or **Reject** (sends reason, notifies affiliate via `ZONE_PAYMENT_REJECTED`).
+6. On approval: `ZonePaymentService.activateZone()` creates an `AffiliateRegion` with `isPaid=true`, `pricePaid=amount`, `isPremium` from the request.
+
+### Zone Removal
+
+Affiliate can remove any of their zones via the dashboard zone tags (remove button → confirmation modal). Backend: `DELETE /api/affiliate/remove-zone/{regionId}`.
+
+### Suggested Expansion Zones
+
+`GET /api/affiliate/suggested-zones` returns top 5 zones outside the affiliate's current scope:
+- Groups all affiliate-eligible properties by `(country, city)`
+- Excludes the affiliate's current zones
+- Computes `propertyCount`, `averageCommission` (from properties), `averagePrice`, `demandScore` (count of accepted/completed offers in zone)
+- Opportunity score: `propertyCount × avgCommission + demandScore × 10`
+- Each zone is priced: `demandScore >= 3` → premium (100 TND), else standard (50 TND); first zone if affiliate has 0 zones → free
+- Endpoint returns `[]` and logs on internal error — **never propagates a 500 to the dashboard**
+
 ## Affiliate Sale Offer Workflow
 
 Affiliates do **not** finalize sales — they submit sale offer proposals:
@@ -373,14 +486,6 @@ Affiliates do **not** finalize sales — they submit sale offer proposals:
 6. **On COMPLETED**: the property's `statut` is flipped to its terminal state (`VENDU` for VENTE, `LOUE` for LOCATION) so it disappears from agency property management and never resurfaces in any listing. An `AffiliateTransaction` record is created. Super Admin can later mark the commission paid.
 
 Sale Offer Statuses: `PENDING → ACCEPTED / REJECTED → COMPLETED / CANCELLED`
-
-## Suggested Expansion Zones
-
-The affiliate dashboard exposes a **Zones d'expansion suggérées** widget driven by `GET /api/affiliate/suggested-zones`:
-
-- Server side: `AffiliateService.getSuggestedZones()` groups all affiliate-eligible properties by `(country, city)`, excludes the affiliate's current zones, computes per-zone `propertyCount`, `averageCommission`, `averagePrice`, and a `demandScore` (count of accepted/completed sale offers in that zone).
-- Opportunity score: `propertyCount × avgCommission + demandScore × 10`. Top 5 are returned.
-- The endpoint is wrapped in a try/catch that returns `[]` and logs the error — it must **never** propagate a 500 to the dashboard.
 
 ## Affiliate Ranking System
 
@@ -400,30 +505,30 @@ Monthly leaderboard based on accepted sales and commissions earned:
 
 ## Affiliate Workspace (Frontend)
 
-The affiliate interface operates as an isolated mini-portal within the admin shell:
-
-| Route                         | Component                    | Purpose                         |
-|-------------------------------|------------------------------|---------------------------------|
-| `/admin/affiliate-dashboard`  | `AffiliateDashboardComponent`| KPIs, recent offers, quick actions |
-| `/admin/affiliate-properties` | `AffiliatePropertiesComponent` | Browse eligible properties     |
-| `/admin/affiliate-offers`     | `AffiliateOffersComponent`   | Submit and track sale offers    |
-| `/admin/affiliate-earnings`   | `AffiliateEarningsComponent` | Commission transaction history  |
-| `/admin/affiliate-ranking`    | `AffiliateRankingComponent`  | Monthly leaderboard (all roles) |
+| Route                         | Component                      | Purpose                            |
+|-------------------------------|--------------------------------|------------------------------------|
+| `/admin/affiliate-dashboard`  | `AffiliateDashboardComponent`  | KPIs, zones, expansion suggestions |
+| `/admin/affiliate-properties` | `AffiliatePropertiesComponent` | Browse eligible properties         |
+| `/admin/affiliate-offers`     | `AffiliateOffersComponent`     | Submit and track sale offers       |
+| `/admin/affiliate-earnings`   | `AffiliateEarningsComponent`   | Commission transaction history     |
+| `/admin/affiliate-ranking`    | `AffiliateRankingComponent`    | Monthly leaderboard (all roles)    |
 
 ## Super Admin Affiliate Management (Frontend)
 
-| Route                          | Component                      | Purpose                          |
-|--------------------------------|--------------------------------|----------------------------------|
-| `/admin/affiliate-applications`| `AffiliateApplicationsComponent` | Review PENDING registrations   |
-| `/admin/affiliate-accounts`    | `AffiliateAccountsComponent`   | Manage all affiliate accounts    |
-| `/admin/affiliate-ranking`     | `AffiliateRankingComponent`    | Full ranking with stats          |
-| `/admin/affiliate-commissions` | `AffiliateCommissionsComponent`| All transactions, mark paid      |
+| Route                           | Component                        | Purpose                                    |
+|---------------------------------|----------------------------------|--------------------------------------------|
+| `/admin/affiliate-applications` | `AffiliateApplicationsComponent` | Review PENDING affiliate registrations     |
+| `/admin/affiliate-accounts`     | `AffiliateAccountsComponent`     | Manage all affiliate accounts              |
+| `/admin/affiliate-ranking`      | `AffiliateRankingComponent`      | Full ranking with stats                    |
+| `/admin/affiliate-commissions`  | `AffiliateCommissionsComponent`  | All transactions, mark paid                |
+| `/admin/agency-applications`    | `AgencyApplicationsComponent`    | Review PENDING agency self-registrations   |
+| `/admin/zone-payment-requests`  | `ZonePaymentRequestsComponent`   | Review zone payment proofs, approve/reject |
 
 ## Agency Admin + Super Admin Affiliate View
 
-| Route                             | Component                        | Purpose                              |
-|-----------------------------------|----------------------------------|--------------------------------------|
-| `/admin/affiliate-incoming-offers`| `AffiliateIncomingOffersComponent`| Accept/reject sale offers from affiliates (ADMIN loads via `GET /api/sale-offers/incoming`; SUPER_ADMIN loads via `GET /api/sale-offers`) |
+| Route                              | Component                         | Purpose                                                                                                                          |
+|------------------------------------|-----------------------------------|----------------------------------------------------------------------------------------------------------------------------------|
+| `/admin/affiliate-incoming-offers` | `AffiliateIncomingOffersComponent`| Accept/reject sale offers from affiliates (ADMIN loads via `GET /api/sale-offers/incoming`; SUPER_ADMIN loads via `GET /api/sale-offers`) |
 
 ## Affiliate Backend API
 
@@ -437,7 +542,22 @@ The affiliate interface operates as an isolated mini-portal within the admin she
 - `GET  /api/affiliate/my-ranking` — own ranking position (AFFILIATE only)
 - `GET  /api/affiliate/transactions` — own commission history (AFFILIATE only)
 - `GET  /api/affiliate/regions` — own assigned zones (AFFILIATE only)
-- `GET  /api/affiliate/suggested-zones` — top 5 expansion zones outside the affiliate's current scope (AFFILIATE only; returns `[]` on internal error, never 500)
+- `GET  /api/affiliate/suggested-zones` — top 5 expansion zones (AFFILIATE only; returns `[]` on internal error, never 500)
+- `POST /api/affiliate/add-zone` — add a zone (free first zone with `paymentConfirmed=true`; paid zones require prior approved `ZonePaymentRequest`)
+- `DELETE /api/affiliate/remove-zone/{regionId}` — remove an active zone
+
+### Zone Payment (`/api/zone-payments/**`)
+
+- `POST /api/zone-payments` — multipart; affiliate submits proof image for a paid zone (`ROLE_AFFILIATE`)
+- `GET  /api/zone-payments/my-requests` — affiliate's own payment requests (`ROLE_AFFILIATE`)
+- `GET  /api/zone-payments/proof/{filename}` — serve proof image (`ROLE_SUPER_ADMIN`)
+
+### Super Admin Zone Payment Management (`/api/admin/zone-payments/**` — `ROLE_SUPER_ADMIN`)
+
+- `GET /api/admin/zone-payments` — all payment requests
+- `GET /api/admin/zone-payments/pending` — only PENDING requests
+- `PUT /api/admin/zone-payments/{id}/approve` — approve: activates zone, notifies affiliate
+- `PUT /api/admin/zone-payments/{id}/reject` — reject with reason, notifies affiliate
 
 ### Sale Offers (`/api/sale-offers/**` — authenticated, method-level `@PreAuthorize`)
 
@@ -467,7 +587,8 @@ The affiliate interface operates as an isolated mini-portal within the admin she
 ## Key Backend Entities
 
 - `AffiliateProfile` — tracks status, bonus, approval metadata; linked 1:1 to `User`
-- `AffiliateRegion` — affiliate's assigned geographic zone with commission rate. Stores explicit `country` + `city` columns (preferred — used by strict zone-key matching) plus a legacy `regionName` (lowercase) that an `@PrePersist`/`@PreUpdate` parser will derive from a `"Country, City"` string when the explicit columns are missing. `regionDescription` stores the country for display.
+- `AffiliateRegion` — affiliate's assigned geographic zone. Stores `country`, `city`, lowercase `regionName`, `isPaid` (boolean), `pricePaid` (Double), `isPremium` (boolean). **No `commissionPercentage` field** — commission lives only on properties. `@PrePersist` defaults `isActive=true`, `isPaid=false`, `isPremium=false`.
+- `ZonePaymentRequest` — manual payment proof record. Fields: `affiliate` (User), `country`, `city`, `zoneName`, `amount`, `isPremium`, `proofImagePath` (filename under `uploads/payments/`), `status` (PENDING/APPROVED/REJECTED), `rejectionReason`, `reviewedBy`, `reviewedAt`, `createdAt`. On approval, `ZonePaymentService.activateZone()` creates the `AffiliateRegion` row. Proof images are served at `GET /api/zone-payments/proof/{filename}` (SUPER_ADMIN only).
 - `Property` — has `isReservedByAffiliate` flag (set true on offer ACCEPTED, kept true after COMPLETED). For `LOCATION` category the entity's `@PrePersist` force-resets `commissionPercentage = 0`, `commissionType = "PERCENTAGE"`, `basePriceForCommission = null`, `isAffiliateEligible = false`, `isReservedByAffiliate = false` — so rentals can never enter the affiliate workflow even via direct API calls.
 - `SaleOffer` — sale proposal submitted by affiliate; links affiliate, property, and buyer info. On ACCEPTED, snapshots commission % + amount and triggers sibling auto-rejection.
 - `AffiliateTransaction` — completed commission record; tracks paid/unpaid state
@@ -491,6 +612,11 @@ The affiliate interface operates as an isolated mini-portal within the admin she
 | `propertyPrice`        | `propertyPrice`        |
 | `paymentDate`          | `paymentDate`          |
 
+`AffiliateRegionDTO` has `isPaid`, `pricePaid`, `isPremium` — **no `commissionPercentage`**.
+`SuggestedZoneDTO` has `price: number`, `isPremium: boolean`, `city?: string` in addition to the demand/stats fields.
+`AddZoneRequest` has `country`, `city`, `paymentConfirmed?` — **no `commissionPercentage`**.
+`ZonePaymentRequestDTO` has `id`, `affiliateId/Name/Email`, `country`, `city`, `zoneName`, `amount`, `isPremium`, `proofImageUrl`, `status` (PENDING/APPROVED/REJECTED), `rejectionReason`, `reviewedByName`, `reviewedAt`, `createdAt`.
+
 ---
 
 # PUBLIC CLIENT PORTAL
@@ -505,15 +631,15 @@ side is the backend property data and the JWT signing secret.
 
 ## Frontend Routes (`maison3d-immobilier/src/app/public/`)
 
-| Route                | Component                          | Auth                              |
-|----------------------|------------------------------------|-----------------------------------|
-| `/`                  | `PublicHomeComponent`              | Public                            |
-| `/biens/vente`       | `PublicListingComponent` (mode=VENTE)    | Public                      |
-| `/biens/location`    | `PublicListingComponent` (mode=LOCATION) | Public                      |
-| `/biens/:id`         | `PublicPropertyDetailComponent`    | Public                            |
-| `/compte/login`      | `PublicLoginComponent`             | Public                            |
-| `/compte/register`   | `PublicRegisterComponent`          | Public                            |
-| `/compte/dashboard`  | `PublicDashboardComponent`         | `clientAuthGuard` (CLIENT_PUBLIC) |
+| Route                | Component                                | Auth                              |
+|----------------------|------------------------------------------|-----------------------------------|
+| `/`                  | `PublicHomeComponent`                    | Public                            |
+| `/biens/vente`       | `PublicListingComponent` (mode=VENTE)    | Public                            |
+| `/biens/location`    | `PublicListingComponent` (mode=LOCATION) | Public                            |
+| `/biens/:id`         | `PublicPropertyDetailComponent`          | Public                            |
+| `/compte/login`      | `PublicLoginComponent`                   | Public                            |
+| `/compte/register`   | `PublicRegisterComponent`                | Public                            |
+| `/compte/dashboard`  | `PublicDashboardComponent`               | `clientAuthGuard` (CLIENT_PUBLIC) |
 
 All public routes are nested under `PublicLayoutComponent` — its own header
 (brand + nav + login/avatar) and footer, fully separate from the admin shell.
@@ -656,6 +782,8 @@ Spring Security enforces role checks at every API endpoint:
 - `GET /api/affiliate/ranking` → `authenticated()` — listed **before** the wildcard rule so all roles can reach the ranking page
 - `/api/affiliate/**` → `hasRole('AFFILIATE')` (security config wildcard — evaluated after the ranking exception above)
 - `/api/admin/affiliates/**` → `hasRole('SUPER_ADMIN')` (class-level `@PreAuthorize`)
+- `/api/admin/zone-payments/**` → `hasRole('SUPER_ADMIN')`
+- `/api/zone-payments/proof/**` → `hasRole('SUPER_ADMIN')` — proof images secured; use blob fetch (not `<img src>`) since browser img tags never send JWT headers
 - `/api/sale-offers/**` → authenticated + method-level `@PreAuthorize` per operation
 - `/api/notifications/**` → `authenticated()` — must be listed explicitly so all roles (including AFFILIATE) can fetch their own notifications and unread count without 403
 
@@ -663,10 +791,10 @@ Frontend role checks are UX only. Backend is always the authoritative security l
 
 ## Default Route by Role
 
-| Role                                           | Post-login redirect           |
-|------------------------------------------------|-------------------------------|
-| SUPER_ADMIN, ADMIN, RESPONSABLE_COMMERCIAL, COMMERCIAL | `/admin/dashboard`  |
-| AFFILIATE                                      | `/admin/affiliate-dashboard`  |
+| Role                                                   | Post-login redirect           |
+|--------------------------------------------------------|-------------------------------|
+| SUPER_ADMIN, ADMIN, RESPONSABLE_COMMERCIAL, COMMERCIAL | `/admin/dashboard`            |
+| AFFILIATE                                              | `/admin/affiliate-dashboard`  |
 
 ---
 
@@ -678,22 +806,30 @@ Users receive in-app notifications for all key lifecycle events relevant to thei
 
 ## Notification Types
 
-| Type                       | Recipient    | Trigger                                          |
-|----------------------------|--------------|--------------------------------------------------|
-| `SHARE_REQUEST_RECEIVED`   | Agency Admin | Super Admin sends a share request                |
-| `SHARE_REQUEST_ACCEPTED`   | Super Admin  | Agency accepts the request                       |
-| `SHARE_REQUEST_REJECTED`   | Super Admin  | Agency rejects the request                       |
-| `SHARE_REQUEST_CANCELLED`  | Agency Admin | Super Admin cancels a PENDING request            |
-| `AFFILIATE_REGISTRATION`   | Super Admin  | New affiliate registration submitted             |
-| `AFFILIATE_APPROVED`       | Affiliate    | Super Admin approves the affiliate account       |
-| `AFFILIATE_REJECTED`       | Affiliate    | Super Admin rejects the affiliate account        |
-| `AFFILIATE_SUSPENDED`      | Affiliate    | Super Admin suspends the affiliate account       |
-| `SALE_OFFER_RECEIVED`      | Agency Admin **or** Super Admin | Affiliate submits a sale offer; Agency Admin receives it for AGENCY_OWNED properties, Super Admin receives it for SUPER_ADMIN_OWNED properties |
-| `SALE_OFFER_ACCEPTED`      | Affiliate    | Agency admin accepts the sale offer              |
-| `SALE_OFFER_REJECTED`      | Affiliate    | Agency admin rejects the sale offer              |
-| `SALE_OFFER_COMPLETED`     | Affiliate    | Sale offer marked as completed                   |
-| `MONTHLY_BONUS_AWARDED`    | Affiliate    | Affiliate receives a ranking bonus               |
-| `PROPERTY_INTEREST_RECEIVED` | Agency Admin **or** Super Admin | Public client clicks "Intéressé par ce bien"; routed to the property's `agencyAdmin` for AGENCY_OWNED, or the first Super Admin for SUPER_ADMIN_OWNED |
+| Type                         | Recipient                       | Trigger                                                                                                         |
+|------------------------------|---------------------------------|-----------------------------------------------------------------------------------------------------------------|
+| `SHARE_REQUEST_RECEIVED`     | Agency Admin                    | Super Admin sends a share request                                                                               |
+| `SHARE_REQUEST_ACCEPTED`     | Super Admin                     | Agency accepts the request                                                                                      |
+| `SHARE_REQUEST_REJECTED`     | Super Admin                     | Agency rejects the request                                                                                      |
+| `SHARE_REQUEST_CANCELLED`    | Agency Admin                    | Super Admin cancels a PENDING request                                                                           |
+| `AFFILIATE_REGISTRATION`     | Super Admin                     | New affiliate registration submitted                                                                            |
+| `AFFILIATE_APPROVED`         | Affiliate                       | Super Admin approves the affiliate account                                                                      |
+| `AFFILIATE_REJECTED`         | Affiliate                       | Super Admin rejects the affiliate account                                                                       |
+| `AFFILIATE_SUSPENDED`        | Affiliate                       | Super Admin suspends the affiliate account                                                                      |
+| `SALE_OFFER_RECEIVED`        | Agency Admin **or** Super Admin | Affiliate submits a sale offer; Agency Admin for AGENCY_OWNED, Super Admin for SUPER_ADMIN_OWNED                |
+| `SALE_OFFER_ACCEPTED`        | Affiliate                       | Agency admin accepts the sale offer                                                                             |
+| `SALE_OFFER_REJECTED`        | Affiliate                       | Agency admin rejects the sale offer                                                                             |
+| `SALE_OFFER_COMPLETED`       | Affiliate                       | Sale offer marked as completed                                                                                  |
+| `MONTHLY_BONUS_AWARDED`      | Affiliate                       | Affiliate receives a ranking bonus                                                                              |
+| `PROPERTY_INTEREST_RECEIVED` | Agency Admin **or** Super Admin | Public client clicks "Intéressé par ce bien"                                                                    |
+| `AGENCY_REGISTRATION`        | Super Admin                     | New agency self-registration submitted                                                                          |
+| `AGENCY_APPROVED`            | Agency Admin                    | Super Admin approves the agency account                                                                         |
+| `AGENCY_REJECTED`            | Agency Admin                    | Super Admin rejects the agency account                                                                          |
+| `ZONE_PAYMENT_SUBMITTED`     | Super Admin                     | Affiliate uploads a wire transfer proof to unlock a paid zone                                                   |
+| `ZONE_PAYMENT_APPROVED`      | Affiliate                       | Super Admin approves the zone payment — zone is now active                                                      |
+| `ZONE_PAYMENT_REJECTED`      | Affiliate                       | Super Admin rejects the zone payment with a reason                                                              |
+
+`NotificationType` is a Java enum stored as `VARCHAR(50)` in MySQL — **not** a MySQL ENUM column. If migrating an older schema: `ALTER TABLE notifications MODIFY COLUMN type VARCHAR(50) NOT NULL;`
 
 ## Implementation
 
@@ -708,6 +844,10 @@ Users receive in-app notifications for all key lifecycle events relevant to thei
   - `SALE_OFFER_RECEIVED` + ADMIN **or SUPER_ADMIN** → `/admin/affiliate-incoming-offers`
   - `SALE_OFFER_ACCEPTED/REJECTED/COMPLETED` + AFFILIATE → `/admin/affiliate-offers`
   - `MONTHLY_BONUS_AWARDED` + AFFILIATE → `/admin/affiliate-dashboard`
+  - `AGENCY_REGISTRATION` + SUPER_ADMIN → `/admin/agency-applications`
+  - `AGENCY_APPROVED/REJECTED` + ADMIN → `/admin/dashboard`
+  - `ZONE_PAYMENT_SUBMITTED` + SUPER_ADMIN → `/admin/zone-payment-requests`
+  - `ZONE_PAYMENT_APPROVED/REJECTED` + AFFILIATE → `/admin/affiliate-dashboard`
 
 ## Notification API
 
@@ -803,12 +943,36 @@ client token and redirects to `/compte/login?redirect=…` on 401/403 from
 `/api/client/**` (excluding the login/register endpoints, which surface
 their own form errors).
 
+## Secured Images (Never use `<img src>` for JWT-protected endpoints)
+
+**`<img src="…">` never sends an `Authorization` header** — the browser makes a plain unauthenticated request, so any endpoint secured with `hasRole(…)` will return 403.
+
+For any image that requires authentication (e.g. zone payment proofs at `/api/zone-payments/proof/{filename}`):
+
+1. Fetch via `HttpClient` with `{ responseType: 'blob' }` — the JWT interceptor attaches the token automatically.
+2. Convert the blob to an object URL: `URL.createObjectURL(blob)`.
+3. Sanitize: `DomSanitizer.bypassSecurityTrustUrl(objectUrl)`.
+4. Bind to `[src]` (not `src`): `<img [src]="safeUrl" />`.
+5. Revoke object URLs in `ngOnDestroy` to prevent memory leaks.
+
+Cache blob URLs in a `Map<id, SafeUrl>` keyed by record ID so each image is fetched only once per component lifecycle. The `ZonePaymentRequestsComponent` implements this pattern as the reference implementation.
+
+Do **not** make proof endpoints `permitAll` — that would expose sensitive financial documents to anyone who guesses the UUID filename.
+
+## Self-Registration (Agency + Affiliate)
+
+- **Always store `null`, never `""`, for an optional unique column.** `users.telephone` is `@Column(unique = true)`. Inserting an empty string when a second user leaves the phone blank causes a duplicate-key error. Both `AgencyRegistrationService` and `AffiliateService` guard: `user.setTelephone((tel != null && !tel.isBlank()) ? tel : null)`. Frontend form `submit()` methods must send `telephone: this.form.telephone || undefined` so the field is omitted from JSON rather than sent as `""`.
+- **Set `user.parent` on agency approval.** `AgencyRegistrationService.approve()` calls `agencyUser.setParent(approver)` before saving, placing the agency in the Super Admin's hierarchy tree. Without this the agency is invisible in the hierarchy view.
+- **Auto-create `ClientInfo` on affiliate approval.** `AffiliateService.approveAffiliate()` creates a `ClientInfo` row (if one doesn't already exist for that user) so the affiliate appears in Gestion des clients. Guard with `clientInfoRepository.findByUserId(id).isPresent()` to keep it idempotent.
+- **Public registration components must use `finalize()` + `ChangeDetectorRef.markForCheck()`.** Both `RegisterAgencyComponent` and `RegisterAffiliateComponent` wrap the HTTP call in `finalize(() => { this.loading = false; this.cdr.markForCheck(); })` so the spinner always stops even if zone.js doesn't trigger a detection cycle after the callback.
+- **Never include `provideClientHydration(withEventReplay())` in `app.config.ts` for a pure CSR app.** This SSR feature captures and replays DOM events during the Angular init phase, causing click events on registration buttons to fire twice — the first fires while `loading=true` (spinner already set), the second fires the actual HTTP call. Remove it if present.
+
 ## Affiliate Module
 
 - **Never expose admin spaces to affiliate users.** `AdminAuthGuard` must reject all non-affiliate routes for `ROLE_AFFILIATE`.
 - **Never expose unrelated deals to affiliate users.** All sale offer queries must filter by the authenticated affiliate's ID.
 - **Always filter by role + zone + permission.** Eligible property lists are computed server-side by crossing the affiliate's active regions with property region data.
-- **Preserve Super Admin full control.** Super Admin can see all affiliates, all offers, all transactions, and manage the full ranking and bonus lifecycle.
+- **Preserve Super Admin full control.** Super Admin can see all affiliates, all offers, all transactions, and manage the full ranking, bonus, and zone payment lifecycles.
 - **Keep affiliate UI simple and separate.** No shared components between the affiliate workspace and the internal admin interface — they are isolated via `ng-container` role guards in the sidebar.
 - **Never throw 500 for missing affiliate profile.** `getMyProfile` returns a default PENDING DTO from the `User` entity when no `AffiliateProfile` row exists. `getEligibleProperties` returns an empty list when the affiliate is not ACTIVE.
 - **Use `/api/affiliate/ranking` for the ranking page** — not `/api/admin/affiliates/ranking`. SecurityConfig has a specific `authenticated()` exception for this path before the `hasRole('AFFILIATE')` wildcard, making it reachable by all roles.
@@ -818,6 +982,9 @@ their own form errors).
 - **Block new submissions on reserved properties.** `SaleOfferService.submitOffer` throws if `property.isReservedByAffiliate` is true. Defense-in-depth, even though the eligible-properties query already excludes reserved rows.
 - **Mark the property SOLD/RENTED on offer COMPLETED.** `SaleOfferService.completeOffer` sets `property.statut = "VENDU"` for VENTE properties (or `"LOUE"` for rentals) and keeps `isReservedByAffiliate = true`. The property then disappears from agency property management and never resurfaces in any listing — do not rely on the reservation flag alone.
 - **Never throw 500 from `getSuggestedZones`.** Wrap the entire computation in a try/catch that logs the error and returns `[]`. Affiliate dashboard widgets must degrade silently when data is missing — they must never break the dashboard load.
+- **Commission lives on properties, not zones.** `AffiliateRegion` has no `commissionPercentage` field. Never set commission on a zone — it belongs on `Property.commissionPercentage`. Any `RegionSelection` or `AddZoneRequest` DTO must not include `commissionPercentage`.
+- **Zone payment proofs use blob fetch, not `<img src>`.** The `/api/zone-payments/proof/**` endpoint requires `ROLE_SUPER_ADMIN`. Always fetch via `HttpClient` blob and bind to `[src]` via `DomSanitizer.bypassSecurityTrustUrl()`. See the Secured Images rule above.
+- **`isPremium` in FormData must be a boolean string, never `"undefined"`.** Use `isPremium ? 'true' : 'false'` (not `String(isPremium)`) when appending to `FormData`. Spring rejects `"undefined"` with a 400. Always pass `zone.isPremium ?? false` at the call site.
 - **The Modifier client modal is role-aware.** For `AFFILIATE` clients it must show country/city dropdowns sourced from `/api/properties/public/countries` + `/api/properties/public/cities` and persist the change through `UpdateClientRequest.country` + `city`, which `ClientManagementService.updateClient()` uses to rebuild `clientInfo.zoneRecherchee` and update the affiliate's `AffiliateRegion`. Normal clients keep the legacy free-text Budget + Zone fields.
 
 ---
@@ -827,14 +994,15 @@ their own form errors).
 1. Property multi-tenant security (ownership isolation, visibility enforcement)
 2. Sharing approval workflow (request → notify → accept/reject → activate)
 3. Affiliate module completion (profile, offers, ranking, earnings, zone filtering)
-4. Role visibility isolation (AFFILIATE workspace, route guard, sidebar, API guard)
-5. Commission engine (agency per-share negotiation + affiliate zone-based rates)
-6. Dashboard financial accuracy (commission-only revenue for shared properties)
-7. Public client portal (browsing, CLIENT_PUBLIC accounts, Intéressé workflow,
+4. Zone monetization system (free first zone, paid additional zones, payment proof workflow)
+5. Role visibility isolation (AFFILIATE workspace, route guard, sidebar, API guard)
+6. Commission engine (agency per-share negotiation + affiliate property-based rates)
+7. Dashboard financial accuracy (commission-only revenue for shared properties)
+8. Public client portal (browsing, CLIENT_PUBLIC accounts, Intéressé workflow,
    per-agency lead auto-creation, in-page 3D viewer)
-8. Mobile responsive UI
-9. 3D premium module
-10. Reviews + favorites for public clients (Phase 3 — pending)
+9. Mobile responsive UI
+10. 3D premium module
+11. Reviews + favorites for public clients (Phase 3 — pending)
 
 ---
 
@@ -854,5 +1022,9 @@ their own form errors).
 # CONFIGURATION
 
 All backend configuration is in `backend/src/main/resources/application.properties`. No `.env` files are used. There is no Docker setup — both services run directly.
+
+Key `application.properties` values relevant to the zone payment system:
+- `file.upload.payments-dir` — directory for proof images (default: `uploads/payments`)
+- `app.base-url` — used to build absolute proof image URLs in DTOs (default: `http://localhost:8080`)
 
 Prettier is configured for the frontend (100-char line width).

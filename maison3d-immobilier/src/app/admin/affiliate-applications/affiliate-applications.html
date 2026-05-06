@@ -59,8 +59,7 @@
           <div class="regions-label"><i class="fas fa-map-marker-alt"></i> Zones demandées:</div>
           <div class="regions-tags">
             <span class="region-tag" *ngFor="let r of app.regions">
-              {{ r.regionName }}
-              <span class="commission-tag">{{ r.commissionPercentage }}%</span>
+              {{ r.city ?? r.regionName }}
             </span>
           </div>
         </div>
@@ -98,13 +97,13 @@
       <div class="detail-row" *ngIf="selectedAffiliate.experienceLevel"><label>Expérience</label><span>{{ selectedAffiliate.experienceLevel }}</span></div>
       <div class="detail-row"><label>Date candidature</label><span>{{ formatDate(selectedAffiliate.createdAt) }}</span></div>
       <div class="detail-section" *ngIf="selectedAffiliate.regions?.length">
-        <label>Zones & commissions</label>
+        <label>Zones</label>
         <table class="regions-table">
-          <thead><tr><th>Zone</th><th>Commission</th><th>Description</th></tr></thead>
+          <thead><tr><th>Zone</th><th>Pays</th><th>Description</th></tr></thead>
           <tbody>
             <tr *ngFor="let r of selectedAffiliate.regions">
-              <td>{{ r.regionName }}</td>
-              <td>{{ r.commissionPercentage }}%</td>
+              <td>{{ r.city ?? r.regionName }}</td>
+              <td>{{ r.country || '—' }}</td>
               <td>{{ r.regionDescription || '—' }}</td>
             </tr>
           </tbody>

@@ -1,5 +1,8 @@
 package com.immobilier.backend.entity;
 
+import com.immobilier.backend.enums.PendingSaleApprovalStatus;
+import com.immobilier.backend.enums.PropertyValidationStatus;
+import com.immobilier.backend.enums.RoleType;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -102,6 +105,61 @@ public class Property {
     private User agencyAdmin;
     // ─────────────────────────────────────────────────────────────────────────
 
+    // ─── Role-based authoring & validation workflow ──────────────────────────
+    // The user who originally created this property (never overwritten on update).
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "created_by_id")
+    private User createdBy;
+
+    // Role of the creator at creation time — used to decide the initial workflow state.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "owner_role", length = 30)
+    private RoleType ownerRole;
+
+    // Validation state — separate from `statut` (which tracks DISPONIBLE/VENDU/LOUE…).
+    // Only APPROVED properties are visible in agency lists, the public portal,
+    // the affiliate workspace, and can be shared by SUPER_ADMIN.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "validation_status", length = 30)
+    private PropertyValidationStatus validationStatus;
+
+    // True once an ADMIN/SUPER_ADMIN has set commission. Lower roles cannot edit
+    // the commission fields once locked. Defended both server-side and in the UI.
+    @Column(name = "commission_locked")
+    private Boolean commissionLocked = false;
+
+    // True once an upstream validator has confirmed the price. Prevents COMMERCIAL
+    // from changing the price after RESPONSABLE/ADMIN approval.
+    @Column(name = "price_locked")
+    private Boolean priceLocked = false;
+
+    // Reason captured when validationStatus = REJECTED
+    @Column(name = "rejection_reason", length = 1000)
+    private String rejectionReason;
+
+    // ─── Pending sale approval workflow ───────────────────────────────────────
+    // COMMERCIAL/RESPONSABLE → ADMIN → (escalate if SUPER_ADMIN_OWNED) → SUPER_ADMIN
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pending_sale_approval", length = 20)
+    private PendingSaleApprovalStatus pendingSaleApproval;
+
+    @Column(name = "pending_sale_statut", length = 20)
+    private String pendingSaleStatut;
+
+    @Column(name = "pending_sale_rejection_reason", length = 500)
+    private String pendingSaleRejectionReason;
+
+    // Who submitted the current pending request (may be updated on escalation)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "pending_sale_requested_by_id")
+    private User pendingSaleRequestedBy;
+
+    // Which role level must approve next (ADMIN first, then escalated to SUPER_ADMIN)
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pending_sale_approver_role", length = 30)
+    private RoleType pendingSaleApproverRole;
+    // ─────────────────────────────────────────────────────────────────────────
+
     // When true, active affiliates in the matching zone can see and submit offers on this property
     @Column(name = "is_affiliate_eligible")
     private Boolean isAffiliateEligible = false;
@@ -109,6 +167,23 @@ public class Property {
     // Set to true when an affiliate sale offer is accepted — hides property from other affiliates
     @Column(name = "is_reserved_by_affiliate")
     private Boolean isReservedByAffiliate = false;
+
+    // ─── Rental lock fields ────────────────────────────────────────────────────
+    // Duration of the rental in months; kept for UI input convenience.
+    @Column(name = "rental_duration_months")
+    private Integer rentalDurationMonths;
+
+    // Timestamp when the LOUE status was set.
+    @Column(name = "rental_start_date")
+    private LocalDateTime rentalStartDate;
+
+    // Computed end date (rentalStartDate + rentalDurationMonths); authoritative for lock checks.
+    @Column(name = "rental_end_date")
+    private LocalDateTime rentalEndDate;
+
+    // True once status has been set to VENDU — property is permanently finalized.
+    @Column(name = "is_finalized")
+    private Boolean isFinalized = false;
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;

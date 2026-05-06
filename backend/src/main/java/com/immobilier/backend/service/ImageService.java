@@ -224,14 +224,14 @@ public class ImageService {
         dto.setTitle(image.getTitle());
         dto.setIsPrimary(image.getIsPrimary());
         dto.setSortOrder(image.getSortOrder());
-        dto.setUrl("/api/public/images/" + image.getId());
+        dto.setUrl("/api/images/public/" + image.getId());
         dto.setCreatedAt(image.getCreatedAt());
         return dto;
     }
 
     private void applyImageUrl(ImageDTO image) {
         if (image != null) {
-            image.setUrl("/api/public/images/" + image.getId());
+            image.setUrl("/api/images/public/" + image.getId());
         }
     }
 }

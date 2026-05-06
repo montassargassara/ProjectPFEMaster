@@ -1,1 +1,208 @@
-<p>statistics works!</p>
+<div class="txn-page">
+
+  <!-- Header -->
+  <div class="txn-header">
+    <div>
+      <h1 class="txn-title"><i class="fas fa-gavel"></i> Transactions &amp; Ventes</h1>
+      <p class="txn-subtitle">Historique des biens vendus et revenus générés.</p>
+    </div>
+    <button class="btn btn-outline-secondary btn-sm" (click)="load()">
+      <i class="fas fa-sync-alt"></i> Actualiser
+    </button>
+  </div>
+
+  <!-- Error -->
+  @if (errorMessage) {
+    <div class="alert alert-danger d-flex align-items-center gap-2">
+      <i class="fas fa-exclamation-circle"></i> {{ errorMessage }}
+    </div>
+  }
+
+  <!-- KPI cards -->
+  <div class="kpi-row">
+    <div class="kpi-card">
+      <div class="kpi-icon kpi-total"><i class="fas fa-chart-bar"></i></div>
+      <div>
+        <div class="kpi-value">{{ properties.length }}</div>
+        <div class="kpi-label">Biens vendus</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon kpi-revenue"><i class="fas fa-coins"></i></div>
+      <div>
+        <div class="kpi-value">{{ fmt(totalRevenue) }}</div>
+        <div class="kpi-label">Revenu total</div>
+      </div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-icon kpi-avg"><i class="fas fa-calculator"></i></div>
+      <div>
+        <div class="kpi-value">{{ fmt(avgPrice) }}</div>
+        <div class="kpi-label">Prix moyen</div>
+      </div>
+    </div>
+    @if (cityBreakdown.length > 0) {
+      <div class="kpi-card">
+        <div class="kpi-icon kpi-city"><i class="fas fa-map-marker-alt"></i></div>
+        <div>
+          <div class="kpi-value">{{ cityBreakdown[0].city }}</div>
+          <div class="kpi-label">Ville la + active ({{ cityBreakdown[0].count }} ventes)</div>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- Breakdowns -->
+  @if (properties.length > 0) {
+    <div class="breakdown-row">
+      <!-- By type -->
+      <div class="breakdown-card">
+        <h3 class="breakdown-title"><i class="fas fa-home me-2"></i>Par type</h3>
+        @for (row of typeBreakdown; track row.type) {
+          <div class="breakdown-item">
+            <span class="bd-label">{{ row.type }}</span>
+            <div class="bd-bar-wrap">
+              <div class="bd-bar"
+                   [style.width.%]="(row.count / properties.length) * 100"></div>
+            </div>
+            <span class="bd-count">{{ row.count }}</span>
+          </div>
+        }
+      </div>
+      <!-- By city -->
+      <div class="breakdown-card">
+        <h3 class="breakdown-title"><i class="fas fa-city me-2"></i>Top villes</h3>
+        @for (row of cityBreakdown; track row.city) {
+          <div class="breakdown-item">
+            <span class="bd-label">{{ row.city }}</span>
+            <div class="bd-bar-wrap">
+              <div class="bd-bar"
+                   [style.width.%]="(row.count / properties.length) * 100"></div>
+            </div>
+            <span class="bd-count">{{ row.count }}</span>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Filters -->
+  <div class="txn-filters">
+    <div class="filter-field">
+      <i class="fas fa-search"></i>
+      <input type="text" placeholder="Rechercher…" [(ngModel)]="searchTerm" />
+    </div>
+    <select [(ngModel)]="typeFilter">
+      <option value="">Tous les types</option>
+      @for (t of availableTypes; track t) {
+        <option [value]="t">{{ t }}</option>
+      }
+    </select>
+    <select [(ngModel)]="cityFilter">
+      <option value="">Toutes les villes</option>
+      @for (c of availableCities; track c) {
+        <option [value]="c">{{ c }}</option>
+      }
+    </select>
+    @if (searchTerm || typeFilter || cityFilter) {
+      <button class="btn btn-sm btn-outline-secondary" (click)="resetFilters()">
+        <i class="fas fa-times"></i> Réinitialiser
+      </button>
+    }
+  </div>
+
+  <!-- Loading -->
+  @if (loading) {
+    <div class="txn-loading">
+      <div class="spinner-border text-primary" role="status"></div>
+      <p>Chargement des transactions…</p>
+    </div>
+  }
+
+  <!-- Empty state -->
+  @if (!loading && properties.length === 0) {
+    <div class="txn-empty">
+      <i class="fas fa-gavel fa-3x mb-3"></i>
+      <h3>Aucune vente finalisée</h3>
+      <p>Les biens dont le statut est <strong>VENDU</strong> apparaîtront ici.</p>
+    </div>
+  }
+
+  @if (!loading && filtered.length === 0 && properties.length > 0) {
+    <div class="txn-empty">
+      <i class="fas fa-search fa-2x mb-2"></i>
+      <p>Aucun résultat pour ces filtres.</p>
+    </div>
+  }
+
+  <!-- Table -->
+  @if (!loading && filtered.length > 0) {
+    <div class="txn-table-wrap">
+      <table class="txn-table">
+        <thead>
+          <tr>
+            <th>Bien</th>
+            <th>Type</th>
+            <th>Localisation</th>
+            <th>Prix de vente</th>
+            <th>Agence</th>
+            <th>Date de vente</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (p of filtered; track p.id) {
+            <tr>
+              <!-- Bien -->
+              <td>
+                <div class="prop-cell">
+                  @if (imageUrl(p)) {
+                    <img [src]="imageUrl(p)!" alt="" class="prop-thumb" />
+                  } @else {
+                    <div class="prop-thumb prop-thumb-placeholder">
+                      <i class="fas fa-home"></i>
+                    </div>
+                  }
+                  <div>
+                    <div class="prop-title">{{ p.titre }}</div>
+                    <div class="prop-ref">#{{ p.id }}</div>
+                  </div>
+                </div>
+              </td>
+              <!-- Type -->
+              <td><span class="type-badge">{{ p.type }}</span></td>
+              <!-- Localisation -->
+              <td>
+                <div class="location-cell">
+                  <i class="fas fa-map-marker-alt text-primary me-1"></i>
+                  {{ p.city || '—' }}@if (p.country) {, {{ p.country }}}
+                </div>
+                <div class="address-sub">{{ p.adresse }}</div>
+              </td>
+              <!-- Prix -->
+              <td><span class="price-badge">{{ fmt(p.prixVente) }}</span></td>
+              <!-- Agence -->
+              <td class="agency-cell">{{ p.agencyAdminName || 'Super Admin' }}</td>
+              <!-- Date -->
+              <td class="date-cell">{{ formatDate(p.updatedAt) }}</td>
+              <!-- Actions -->
+              <td>
+                <a [routerLink]="['/admin/properties', p.id]"
+                   class="btn btn-sm btn-outline-secondary">
+                  <i class="fas fa-eye"></i>
+                </a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="txn-count">
+      {{ filtered.length }} transaction{{ filtered.length > 1 ? 's' : '' }}
+      @if (filtered.length !== properties.length) {
+        <span class="text-muted"> ({{ properties.length }} au total)</span>
+      }
+    </div>
+  }
+
+</div>

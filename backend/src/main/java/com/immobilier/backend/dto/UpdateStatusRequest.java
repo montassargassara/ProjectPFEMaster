@@ -7,6 +7,8 @@ import lombok.Data;
 public class UpdateStatusRequest {
     @NotBlank(message = "Le statut est obligatoire")
     private String statut;
-    
+
     private Long propertyId;
+
+    private Integer rentalDurationMonths;
 }
