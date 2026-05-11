@@ -15,6 +15,18 @@ public class PropertyListDTO {
     private String statut;
     private Double surface;
     private Integer nbChambres;
+    private Integer nbSallesDeBain;
+    private Boolean garage;
+    private Boolean piscine;
+    private Boolean jardin;
+    private Boolean meuble;
+    private Integer etage;
+    private Integer parkingSpaces;
+    private Integer anneeConstruction;
+    private Boolean prochePlage;
+    private Boolean procheTransport;
+    private Boolean securite;
+    private Boolean climatisation;
     private String adresse;
     private String country;  // Add this field
     private String city;     // Add this field
@@ -66,6 +78,16 @@ public class PropertyListDTO {
     private Long pendingSaleRequestedById;
     private String pendingSaleRequestedByName;
     private String pendingSaleApproverRole;    // ADMIN | SUPER_ADMIN — who must approve next
+
+    // CRM: number of interest requests for this property
+    private Integer interestCount;
+
+    // True when property is EN_ATTENTE due to a cross-ownership validation request (SaleValidationRequest PENDING)
+    private boolean hasPendingValidation;
+
+    // Direct sale / rental buyer link
+    private Long   buyerId;
+    private String buyerName;
 
     // ✅ Pour les listes, pas de médias (trop lourd)
     // private List<PropertyMediaDTO> medias;

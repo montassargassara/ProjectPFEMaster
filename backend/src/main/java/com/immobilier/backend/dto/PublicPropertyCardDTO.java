@@ -14,6 +14,15 @@ public class PublicPropertyCardDTO {
     private Double prixLocation;
     private Double surface;
     private Integer nbChambres;
+    private Integer nbSallesDeBain;
+    private Boolean garage;
+    private Boolean piscine;
+    private Boolean jardin;
+    private Boolean meuble;
+    private Integer etage;
+    private Integer parkingSpaces;
+    private Boolean climatisation;
+    private Boolean securite;
     private String city;
     private String country;
     private String region;

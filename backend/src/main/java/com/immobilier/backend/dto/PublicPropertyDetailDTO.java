@@ -17,6 +17,18 @@ public class PublicPropertyDetailDTO {
     private Double prixLocation;
     private Double surface;
     private Integer nbChambres;
+    private Integer nbSallesDeBain;
+    private Boolean garage;
+    private Boolean piscine;
+    private Boolean jardin;
+    private Boolean meuble;
+    private Integer etage;
+    private Integer parkingSpaces;
+    private Integer anneeConstruction;
+    private Boolean prochePlage;
+    private Boolean procheTransport;
+    private Boolean securite;
+    private Boolean climatisation;
     private String adresse;
     private String city;
     private String country;
@@ -27,6 +39,7 @@ public class PublicPropertyDetailDTO {
     private List<String> imageUrls;
     private boolean hasModel3d;
     private String model3dUrl;
+    private String model3dFormat;
     private boolean hasVideo;
     private String mainVideoUrl;
     private List<String> videoUrls;

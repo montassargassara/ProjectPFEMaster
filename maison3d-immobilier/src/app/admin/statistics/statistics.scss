@@ -331,3 +331,153 @@
   color: var(--text-muted, #64748b);
   text-align: right;
 }
+
+// ── KPI icon variants (Super Admin sectioned view) ─────────────────────────
+
+.kpi-icon {
+  &.kpi-own    { background: rgba(99,102,241,0.12); color: #4f46e5; }
+  &.kpi-agency { background: rgba(245,158,11,0.12); color: #d97706; }
+}
+
+// ── Sectioned layout ──────────────────────────────────────────────────────
+
+.txn-section {
+  margin-bottom: 2rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: 0.875rem 0.875rem 0 0;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-bottom: none;
+  margin-bottom: 0;
+
+  &.section-header-own {
+    background: linear-gradient(135deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.02) 100%);
+    border-left: 3px solid #4f46e5;
+  }
+
+  &.section-header-agency {
+    background: linear-gradient(135deg, rgba(245,158,11,0.06) 0%, rgba(245,158,11,0.02) 100%);
+    border-left: 3px solid #d97706;
+  }
+}
+
+.section-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.section-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 0.625rem;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+
+  .section-header-own & { color: #4f46e5; }
+  .section-header-agency & { color: #d97706; }
+}
+
+.section-title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+  margin: 0 0 0.1rem;
+}
+
+.section-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted, #64748b);
+}
+
+.section-kpis {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.skpi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.skpi-val {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+  white-space: nowrap;
+}
+
+.skpi-lbl {
+  font-size: 0.7rem;
+  color: var(--text-muted, #64748b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+// When section has a table, remove top border-radius from table-wrap
+.txn-section .txn-table-wrap {
+  border-radius: 0 0 0.875rem 0.875rem;
+  border-top: 1px solid var(--border-color, #e2e8f0);
+}
+
+// Agency filter row (inside agency section)
+.agency-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.625rem 1rem;
+  background: var(--content-bg, #f8fafc);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-top: none;
+  border-bottom: none;
+  font-size: 0.8rem;
+}
+
+.agency-select {
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 0.4rem;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8rem;
+  background: var(--card-bg, #fff);
+  color: var(--text-primary, #0f172a);
+  cursor: pointer;
+}
+
+// Agency badge in table
+.agency-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #92400e;
+  background: rgba(245,158,11,0.1);
+  padding: 0.2rem 0.55rem;
+  border-radius: 0.35rem;
+  white-space: nowrap;
+}
+
+// Compact empty state inside sections
+.txn-empty-sm {
+  padding: 2rem 1rem;
+  flex-direction: row;
+  gap: 0.625rem;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 0 0 0.875rem 0.875rem;
+  i { font-size: 1rem; opacity: 0.45; }
+  span { font-size: 0.875rem; }
+}

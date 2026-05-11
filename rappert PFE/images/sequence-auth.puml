@@ -1,0 +1,57 @@
+@startuml sequence-auth
+skinparam backgroundColor #FFFFFF
+skinparam sequence {
+  ArrowColor #4F46E5
+  ActorBorderColor #1D4ED8
+  LifeLineBorderColor #6B7280
+  ParticipantBackgroundColor #EEF2FF
+  ParticipantBorderColor #4F46E5
+}
+skinparam shadowing false
+skinparam roundcorner 6
+
+actor "Utilisateur" as U
+participant "Angular\nFrontend" as FE #DBEAFE
+participant "AuthController\n(Spring Boot)" as AC #EEF2FF
+participant "UserDetailsService" as UDS #E0F2FE
+participant "JwtService" as JWT #FEF9C3
+database "MySQL" as DB #F0FDF4
+
+U -> FE : Saisir email + mot de passe
+FE -> FE : Validation formulaire (reactive form)
+FE -> AC : POST /api/auth/login\n{email, password}
+activate AC
+
+AC -> UDS : loadUserByUsername(email)
+activate UDS
+UDS -> DB : SELECT * FROM users WHERE email = ?
+DB --> UDS : User entity
+UDS --> AC : UserDetails
+deactivate UDS
+
+AC -> AC : BCrypt.verify(password, hash)
+
+alt Credentials valides
+  AC -> JWT : generateToken(UserDetails)
+  activate JWT
+  JWT -> JWT : Signer avec clé secrète\n(HS256, expiration 24h)
+  JWT --> AC : JWT Token
+  deactivate JWT
+  AC -> DB : Mettre à jour dernière connexion
+  AC --> FE : 200 OK\n{token, role, userId, agencyId}
+  FE -> FE : Stocker token (localStorage)
+  FE -> FE : Décoder payload JWT\n(role, userId)
+  FE --> U : Redirection vers dashboard
+else Credentials invalides
+  AC --> FE : 401 Unauthorized\n{message: "Credentials invalides"}
+  FE --> U : Afficher message d'erreur
+end
+
+deactivate AC
+
+note over FE, AC
+  Pour chaque requête suivante :
+  Authorization: Bearer <JWT Token>
+end note
+
+@enduml

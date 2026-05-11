@@ -7,6 +7,8 @@ import { Subscription } from 'rxjs';
 import { UserService, User } from '../../services/user.service';
 import { AdminAuthService } from '../services/admin-auth';
 import { Client, ClientNote, ClientService, CreateClientRequest, UpdateClientRequest } from '../services/client.service';
+import { PropertiesAdminService, PropertyListItem, DirectSaleRequest } from '../services/properties-admin.service';
+import { apiBaseUrl } from '../../services/api-config';
 
 declare var bootstrap: any;
 
@@ -86,7 +88,27 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
   editCities: string[] = [];
   selectedSharedAgencyIds: number[] = [];
   activeDropdown: HTMLElement | null = null;
-  
+
+  // ── Tab state ───────────────────────────────────────────────────────────────
+  activeTab: 'clients' | 'affiliates' = 'clients';
+
+  // ── Assigner un bien modal ──────────────────────────────────────────────────
+  assignPropOpen = false;
+  assignPropClient: Client | null = null;
+  assignPropList: PropertyListItem[] = [];
+  assignPropSelected: PropertyListItem | null = null;
+  assignPropStatus: 'VENDU' | 'LOUE' = 'VENDU';
+  assignPropRentalStart = '';
+  assignPropRentalMonths: number | null = null;
+  assignPropRentalAmount: number | null = null;
+  assignPropRentalNotes = '';
+  assignPropLoading = false;
+  assignPropError = '';
+  assignPropSearch = '';
+
+  @ViewChild('assignPropertyModal') assignPropertyModalElement!: ElementRef;
+  private assignPropertyModalInstance: any;
+
   private subscriptions: Subscription[] = [];
 
   constructor(
@@ -94,7 +116,8 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
     private userService: UserService,
     private authService: AdminAuthService,
     private fb: FormBuilder,
-    private cdr: ChangeDetectorRef
+    private cdr: ChangeDetectorRef,
+    private propertiesService: PropertiesAdminService
   ) {
     this.clientForm = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
@@ -163,6 +186,7 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
     if (this.noteModalElement) this.noteModal = new bootstrap.Modal(this.noteModalElement.nativeElement);
     if (this.historyModalElement) this.historyModal = new bootstrap.Modal(this.historyModalElement.nativeElement);
     if (this.shareModalElement) this.shareModal = new bootstrap.Modal(this.shareModalElement.nativeElement);
+    if (this.assignPropertyModalElement) this.assignPropertyModalInstance = new bootstrap.Modal(this.assignPropertyModalElement.nativeElement);
   }
 
   loadAgencies(): void {
@@ -222,19 +246,34 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
     this.subscriptions.push(sub);
   }
 
+  setActiveTab(tab: 'clients' | 'affiliates'): void {
+    this.activeTab = tab;
+    this.clientTypeFilter = '';
+    this.searchTerm = '';
+    this.page = 0;
+    this.applyFilters();
+  }
+
   applyFilters(): void {
     let filtered = [...this.clients];
-    
+
+    // Tab isolation
+    if (this.activeTab === 'affiliates') {
+      filtered = filtered.filter(c => c.role === 'AFFILIATE');
+    } else {
+      filtered = filtered.filter(c => c.role !== 'AFFILIATE');
+    }
+
     if (this.searchTerm) {
       const term = this.searchTerm.toLowerCase();
-      filtered = filtered.filter(c => 
-        c.email.toLowerCase().includes(term) || 
-        c.nom.toLowerCase().includes(term) || 
-        c.prenom.toLowerCase().includes(term) || 
+      filtered = filtered.filter(c =>
+        c.email.toLowerCase().includes(term) ||
+        c.nom.toLowerCase().includes(term) ||
+        c.prenom.toLowerCase().includes(term) ||
         (c.telephone && c.telephone.toLowerCase().includes(term))
       );
     }
-    
+
     if (this.clientTypeFilter) {
       filtered = filtered.filter(c => c.role === this.clientTypeFilter);
     }
@@ -321,9 +360,9 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
       cityCtrl.clearValidators();
       cityCtrl.setValue('');
       visibilityCtrl.setValidators([Validators.required]);
-      this.availableCountries = [];
       this.availableCities = [];
       this.clientForm.patchValue({ codeAffiliation: '', tauxCommission: 5, source: '' });
+      this.loadAffiliateCountries();
     }
     countryCtrl.updateValueAndValidity();
     cityCtrl.updateValueAndValidity();
@@ -352,26 +391,37 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
 
   toggleSharedAgency(event: any): void {
     const agencyId = Number(event.target.value);
-    if (event.target.checked) { 
+    if (event.target.checked) {
       if (!this.selectedSharedAgencyIds.includes(agencyId)) {
-        this.selectedSharedAgencyIds.push(agencyId); 
+        this.selectedSharedAgencyIds.push(agencyId);
       }
-    } else { 
-      const index = this.selectedSharedAgencyIds.indexOf(agencyId); 
-      if (index > -1) this.selectedSharedAgencyIds.splice(index, 1); 
+    } else {
+      const index = this.selectedSharedAgencyIds.indexOf(agencyId);
+      if (index > -1) this.selectedSharedAgencyIds.splice(index, 1);
     }
+  }
+
+  toggleSharedAgencyById(agencyId: number): void {
+    const index = this.selectedSharedAgencyIds.indexOf(agencyId);
+    if (index > -1) {
+      this.selectedSharedAgencyIds.splice(index, 1);
+    } else {
+      this.selectedSharedAgencyIds.push(agencyId);
+    }
+    this.cdr.detectChanges();
   }
 
   isAgencySelected(agencyId: number): boolean { 
     return this.selectedSharedAgencyIds.includes(agencyId); 
   }
 
-  openCreateModal(): void { 
-    this.resetClientForm(); 
-    this.isAffiliateForm = false; 
-    this.selectedSharedAgencyIds = []; 
-    this.createModal?.show(); 
-    this.cdr.detectChanges(); 
+  openCreateModal(): void {
+    this.resetClientForm();
+    this.isAffiliateForm = false;
+    this.selectedSharedAgencyIds = [];
+    this.loadAffiliateCountries();
+    this.createModal?.show();
+    this.cdr.detectChanges();
   }
   
   closeCreateModal(): void { 
@@ -433,19 +483,39 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
         error: (err) => console.error('Erreur chargement pays:', err),
       });
     } else {
-      // Normal client — keep legacy free-text fields, no country/city validators
+      // Normal client — country/city dropdowns (replaces free-text zoneRecherchee)
       countryCtrl.clearValidators();
       cityCtrl.clearValidators();
-      this.editCountries = [];
       this.editCities = [];
       this.editForm.patchValue({
-        budgetEstime: client.budgetEstime || null,
-        zoneRecherchee: client.zoneRecherchee || '',
+        budgetEstime: client.budgetEstime ?? null,
+        zoneRecherchee: '',
         country: '',
         city: '',
         codeAffiliation: '',
         tauxCommission: 5,
         source: '',
+      });
+
+      // Parse "Country, City" stored in zoneRecherchee for normal clients too
+      const { country, city } = this.parseZone(client.zoneRecherchee);
+      this.clientService.getPropertyCountries().subscribe({
+        next: (countries) => {
+          this.editCountries = countries;
+          if (country) {
+            this.editForm.patchValue({ country });
+            this.clientService.getPropertyCitiesByCountry(country).subscribe({
+              next: (cities) => {
+                this.editCities = cities;
+                if (city) this.editForm.patchValue({ city });
+                this.cdr.detectChanges();
+              },
+              error: (err) => console.error('Erreur chargement villes:', err),
+            });
+          }
+          this.cdr.detectChanges();
+        },
+        error: (err) => console.error('Erreur chargement pays:', err),
       });
     }
     countryCtrl.updateValueAndValidity();
@@ -606,9 +676,7 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
       prenom: fv.prenom,
       telephone: fv.telephone || undefined,
       budgetEstime: isAffiliate ? undefined : (fv.budgetEstime || undefined),
-      zoneRecherchee: isAffiliate
-        ? [fv.country, fv.city].filter(Boolean).join(', ') || undefined
-        : (fv.zoneRecherchee || undefined),
+      zoneRecherchee: [fv.country, fv.city].filter(Boolean).join(', ') || undefined,
       commercialId: fv.commercialId || undefined,
       clientType: fv.clientType,
       visibilityType: isAffiliate ? 'AGENCY_CLIENT' : fv.visibilityType,
@@ -650,24 +718,25 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
     const fv = this.editForm.value;
     const isAffiliate = this.selectedClient.role === 'AFFILIATE';
 
+    const budgetRaw = fv.budgetEstime;
+    const budgetValue = (budgetRaw !== null && budgetRaw !== '' && !isNaN(Number(budgetRaw)))
+      ? Number(budgetRaw)
+      : undefined;
+
     const request: UpdateClientRequest = {
       nom: fv.nom,
       prenom: fv.prenom,
       telephone: fv.telephone || undefined,
-      // Budget + free-text zone only apply to normal clients now
-      budgetEstime: isAffiliate ? undefined : (fv.budgetEstime || undefined),
-      zoneRecherchee: isAffiliate
-        ? [fv.country, fv.city].filter(Boolean).join(', ') || undefined
-        : (fv.zoneRecherchee || undefined),
-      isActive: fv.isActive
+      budgetEstime: isAffiliate ? undefined : budgetValue,
+      // Always build zoneRecherchee from the dropdowns (works for both affiliate and normal)
+      zoneRecherchee: [fv.country, fv.city].filter(Boolean).join(', ') || undefined,
+      isActive: fv.isActive,
+      // Pass country/city for all client types so the backend can update zoneRecherchee
+      country: fv.country || undefined,
+      city: fv.city || undefined,
     };
 
     if (isAffiliate) {
-      // Country + city are the new affiliate zone source of truth
-      request.country = fv.country || undefined;
-      request.city = fv.city || undefined;
-      // Preserved silently — admin no longer edits these in the UI but they remain
-      // in the form group so the previously-saved values are not lost on update.
       request.codeAffiliation = fv.codeAffiliation || undefined;
       request.tauxCommission = fv.tauxCommission;
       request.source = fv.source || undefined;
@@ -789,6 +858,7 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
     this.generatedPassword = '';
     this.showPassword = false;
     this.isAffiliateForm = false;
+    // city list always cleared on reset; countries reloaded by openCreateModal
   }
   
   passwordMatchValidator(form: FormGroup): any { 
@@ -834,16 +904,17 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
     return 'badge-agency';
   }
   
-  getRoleText(role: string): string { 
-    const roles: any = { 
-      'SUPER_ADMIN': 'Super Admin', 
-      'ADMIN': 'Administrateur', 
-      'RESPONSABLE_COMMERCIAL': 'Resp. Commercial', 
-      'COMMERCIAL': 'Commercial', 
-      'CLIENT': 'Client', 
-      'AFFILIATE': 'Affilié' 
-    }; 
-    return roles[role] || role; 
+  getRoleText(role: string): string {
+    const roles: any = {
+      'SUPER_ADMIN': 'Super Admin',
+      'ADMIN': 'Administrateur',
+      'RESPONSABLE_COMMERCIAL': 'Resp. Commercial',
+      'COMMERCIAL': 'Commercial',
+      'CLIENT': 'Client',
+      'CLIENT_PUBLIC': 'Client',
+      'AFFILIATE': 'Affilié'
+    };
+    return roles[role] || role;
   }
   
   getRoleColor(role: string): string { 
@@ -873,9 +944,9 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
     // RESPONSABLE_COMMERCIAL peut modifier les clients
     if (role === 'RESPONSABLE_COMMERCIAL') return true;
     
-    // COMMERCIAL ne peut modifier que les clients NORMALS (pas les affiliés)
+    // COMMERCIAL ne peut modifier que les clients normaux (pas les affiliés)
     if (role === 'COMMERCIAL') {
-      return client.role === 'CLIENT';
+      return client.role === 'CLIENT' || client.role === 'CLIENT_PUBLIC';
     }
     
     return false;
@@ -895,28 +966,177 @@ export class ClientManagementComponent implements OnInit, OnDestroy, AfterViewIn
   toggleDropdown(event: MouseEvent, dropdownId: string): void {
     event.stopPropagation();
     const dropdown = document.getElementById(dropdownId);
-    if (dropdown) {
-      if (this.activeDropdown && this.activeDropdown !== dropdown) {
-        this.activeDropdown.classList.remove('show');
-      }
-      dropdown.classList.toggle('show');
-      this.activeDropdown = dropdown.classList.contains('show') ? dropdown : null;
+    if (!dropdown) return;
+
+    // Close any other open dropdown
+    if (this.activeDropdown && this.activeDropdown !== dropdown) {
+      this.activeDropdown.classList.remove('show');
+    }
+
+    const willOpen = !dropdown.classList.contains('show');
+
+    if (willOpen) {
+      // Position using fixed coords so no parent overflow clips us
+      const btn = event.currentTarget as HTMLElement;
+      const rect = btn.getBoundingClientRect();
+      const menuW = 220; // matches min-width in SCSS
+      const menuH = dropdown.scrollHeight || 280;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+
+      // Horizontal: prefer right-align to the button; flip left if it would overflow
+      let left = rect.right - menuW;
+      if (left < 8) left = rect.left;
+      if (left + menuW > vw - 8) left = vw - menuW - 8;
+
+      // Vertical: prefer below; flip above if not enough space below
+      let top = rect.bottom + 4;
+      if (top + menuH > vh - 8) top = rect.top - menuH - 4;
+      if (top < 8) top = 8;
+
+      dropdown.style.top  = `${top}px`;
+      dropdown.style.left = `${left}px`;
+      dropdown.classList.add('show');
+      this.activeDropdown = dropdown;
+    } else {
+      dropdown.classList.remove('show');
+      this.activeDropdown = null;
+    }
+  }
+
+  @HostListener('document:click') onDocumentClick(): void {
+    if (this.activeDropdown) {
+      this.activeDropdown.classList.remove('show');
+      this.activeDropdown = null;
+    }
+  }
+
+  @HostListener('window:scroll')
+  @HostListener('window:resize')
+  onWindowChange(): void {
+    if (this.activeDropdown) {
+      this.activeDropdown.classList.remove('show');
+      this.activeDropdown = null;
     }
   }
   
-  @HostListener('document:click') onDocumentClick(): void { 
-    if (this.activeDropdown) { 
-      this.activeDropdown.classList.remove('show'); 
-      this.activeDropdown = null; 
-    } 
-  }
-  
-  viewAffiliateDetails(client: Client): void { 
-    this.selectedClient = client; 
-    this.detailsModal?.show(); 
+  viewAffiliateDetails(client: Client): void {
+    this.selectedClient = client;
+    this.detailsModal?.show();
   }
 
-  ngOnDestroy(): void { 
-    this.subscriptions.forEach(sub => sub.unsubscribe()); 
+  // ── Assigner un bien ────────────────────────────────────────────────────────
+
+  assignImageUrl(p: PropertyListItem): string | null {
+    if (!p.mainImageUrl) return null;
+    if (p.mainImageUrl.startsWith('http')) return p.mainImageUrl;
+    return `${apiBaseUrl}${p.mainImageUrl}`;
+  }
+
+  get assignPropFiltered(): PropertyListItem[] {
+    if (!this.assignPropSearch) return this.assignPropList;
+    const term = this.assignPropSearch.toLowerCase();
+    return this.assignPropList.filter(p =>
+      p.titre.toLowerCase().includes(term) ||
+      (p.city ?? '').toLowerCase().includes(term) ||
+      p.type.toLowerCase().includes(term)
+    );
+  }
+
+  get assignRentalEndPreview(): string {
+    if (!this.assignPropRentalStart || !this.assignPropRentalMonths) return '';
+    const d = new Date(this.assignPropRentalStart);
+    d.setMonth(d.getMonth() + Number(this.assignPropRentalMonths));
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  get assignCanConfirm(): boolean {
+    if (!this.assignPropSelected) return false;
+    if (this.assignPropStatus === 'LOUE') {
+      return !!(this.assignPropRentalStart && this.assignPropRentalMonths && this.assignPropRentalMonths >= 1);
+    }
+    return true;
+  }
+
+  openAssignPropertyModal(client: Client): void {
+    this.assignPropClient = client;
+    this.assignPropSelected = null;
+    this.assignPropStatus = 'VENDU';
+    this.assignPropRentalStart = '';
+    this.assignPropRentalMonths = null;
+    this.assignPropRentalAmount = null;
+    this.assignPropRentalNotes = '';
+    this.assignPropError = '';
+    this.assignPropSearch = '';
+    this.assignPropList = [];
+    this.assignPropLoading = true;
+    this.assignPropertyModalInstance?.show();
+    this.propertiesService.getAllProperties().subscribe({
+      next: (list) => {
+        this.assignPropList = list.filter(p => p.statut === 'DISPONIBLE' && p.isActive);
+        this.assignPropLoading = false;
+        this.cdr.detectChanges();
+      },
+      error: () => {
+        this.assignPropError = 'Impossible de charger les biens disponibles.';
+        this.assignPropLoading = false;
+        this.cdr.detectChanges();
+      }
+    });
+    this.cdr.detectChanges();
+  }
+
+  closeAssignPropertyModal(): void {
+    this.assignPropertyModalInstance?.hide();
+    this.assignPropClient = null;
+    this.assignPropSelected = null;
+    this.cdr.detectChanges();
+  }
+
+  selectAssignProp(p: PropertyListItem): void {
+    this.assignPropSelected = p;
+    // Auto-set status based on property prices
+    if (p.prixVente && p.prixVente > 0) {
+      this.assignPropStatus = 'VENDU';
+    } else if (p.prixLocation && p.prixLocation > 0) {
+      this.assignPropStatus = 'LOUE';
+    }
+    this.cdr.detectChanges();
+  }
+
+  confirmAssignProperty(): void {
+    if (!this.assignPropClient || !this.assignPropSelected || !this.assignCanConfirm) return;
+    this.assignPropError = '';
+    this.assignPropLoading = true;
+    const req: DirectSaleRequest = {
+      targetStatus: this.assignPropStatus,
+      existingClientId: this.assignPropClient.id,
+    };
+    if (this.assignPropStatus === 'LOUE') {
+      req.rentalStartDate = this.assignPropRentalStart;
+      req.rentalDurationMonths = this.assignPropRentalMonths ?? undefined;
+      req.rentalAmount = this.assignPropRentalAmount ?? undefined;
+      req.rentalNotes = this.assignPropRentalNotes || undefined;
+    }
+    this.propertiesService.directSale(this.assignPropSelected.id, req).subscribe({
+      next: () => {
+        this.successMessage = `Bien "${this.assignPropSelected!.titre}" assigné à ${this.assignPropClient!.prenom} ${this.assignPropClient!.nom}`;
+        this.assignPropLoading = false;
+        this.closeAssignPropertyModal();
+        this.loadStats();
+        this.loadClients();
+        setTimeout(() => this.hideMessageAfterDelay('success'), 3000);
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        this.assignPropError = err.error?.message || 'Erreur lors de l\'assignation du bien.';
+        this.assignPropLoading = false;
+        this.cdr.detectChanges();
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.subscriptions.forEach(sub => sub.unsubscribe());
   }
 }

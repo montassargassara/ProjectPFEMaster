@@ -26,6 +26,9 @@ import { AgencyApplicationsComponent } from './admin/agency-applications/agency-
 import { ZonePaymentRequestsComponent } from './admin/zone-payment-requests/zone-payment-requests';
 import { MessagesComponent } from './admin/messages/messages.component';
 import { AgencyAffiliatesComponent } from './admin/agency-affiliates/agency-affiliates.component';
+import { BIDashboardComponent } from './admin/bi-dashboard/bi-dashboard.component';
+import { SaleValidationsComponent } from './admin/sale-validations/sale-validations.component';
+import { PropertyDetailAdmin } from './admin/property-detail-admin/property-detail-admin';
 
 import { PublicLayoutComponent } from './public/layout/public-layout.component';
 import { RegisterChoiceComponent } from './public/pages/register/register-choice.component';
@@ -80,6 +83,8 @@ export const routes: Routes = [
       { path: 'properties', component: PropertiesAdmin },
       { path: 'properties/new', component: PropertyEdit },
       { path: 'properties/edit/:id', component: PropertyEdit },
+      // Detail page — must come AFTER the static sub-paths (new, edit/:id)
+      { path: 'properties/:id', component: PropertyDetailAdmin },
       { path: 'customers', component: ClientManagementComponent },
       { path: 'agents', component: AgentsAdmin },
       { path: 'statistics', component: Statistics },
@@ -103,8 +108,12 @@ export const routes: Routes = [
       { path: 'affiliate-incoming-offers', component: AffiliateIncomingOffersComponent },
       // Agency Admin — dedicated affiliate client management page
       { path: 'agency-affiliates', component: AgencyAffiliatesComponent },
+      // BI / Analytics
+      { path: 'bi-dashboard', component: BIDashboardComponent },
       // Internal messaging
       { path: 'messages', component: MessagesComponent },
+      // Cross-ownership sale validation workflow
+      { path: 'sale-validations', component: SaleValidationsComponent },
     ]
   },
 

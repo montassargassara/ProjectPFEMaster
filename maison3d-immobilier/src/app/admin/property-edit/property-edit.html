@@ -177,6 +177,81 @@
           </div>
         </div>
 
+        <!-- ── AMENITIES ── -->
+        <div class="amenities-section">
+          <div class="amenities-title">
+            <i class="fas fa-star"></i> Caractéristiques & Équipements
+          </div>
+
+          <!-- Numeric details row -->
+          <div class="fields-row">
+            <div class="field-group">
+              <label class="field-label">Salles de bain</label>
+              <input class="field-input" type="number" formControlName="nbSallesDeBain"
+                     placeholder="ex. 2" min="0">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Étage</label>
+              <input class="field-input" type="number" formControlName="etage"
+                     placeholder="ex. 3" min="0" max="50">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Places parking</label>
+              <input class="field-input" type="number" formControlName="parkingSpaces"
+                     placeholder="ex. 1" min="0">
+            </div>
+            <div class="field-group">
+              <label class="field-label">Année construction</label>
+              <input class="field-input" type="number" formControlName="anneeConstruction"
+                     placeholder="ex. 2015" min="1900" [max]="currentYear">
+            </div>
+          </div>
+
+          <!-- Boolean amenities grid -->
+          <div class="amenities-grid">
+            <label class="amenity-toggle">
+              <input type="checkbox" formControlName="garage">
+              <span class="amenity-icon"><i class="fas fa-car"></i></span>
+              <span class="amenity-label">Garage</span>
+            </label>
+            <label class="amenity-toggle">
+              <input type="checkbox" formControlName="piscine">
+              <span class="amenity-icon"><i class="fas fa-swimming-pool"></i></span>
+              <span class="amenity-label">Piscine</span>
+            </label>
+            <label class="amenity-toggle">
+              <input type="checkbox" formControlName="jardin">
+              <span class="amenity-icon"><i class="fas fa-tree"></i></span>
+              <span class="amenity-label">Jardin</span>
+            </label>
+            <label class="amenity-toggle">
+              <input type="checkbox" formControlName="meuble">
+              <span class="amenity-icon"><i class="fas fa-couch"></i></span>
+              <span class="amenity-label">Meublé</span>
+            </label>
+            <label class="amenity-toggle">
+              <input type="checkbox" formControlName="climatisation">
+              <span class="amenity-icon"><i class="fas fa-snowflake"></i></span>
+              <span class="amenity-label">Climatisation</span>
+            </label>
+            <label class="amenity-toggle">
+              <input type="checkbox" formControlName="securite">
+              <span class="amenity-icon"><i class="fas fa-shield-halved"></i></span>
+              <span class="amenity-label">Sécurité</span>
+            </label>
+            <label class="amenity-toggle">
+              <input type="checkbox" formControlName="prochePlage">
+              <span class="amenity-icon"><i class="fas fa-umbrella-beach"></i></span>
+              <span class="amenity-label">Proche plage</span>
+            </label>
+            <label class="amenity-toggle">
+              <input type="checkbox" formControlName="procheTransport">
+              <span class="amenity-icon"><i class="fas fa-bus"></i></span>
+              <span class="amenity-label">Proche transport</span>
+            </label>
+          </div>
+        </div>
+
         <!-- Category toggle -->
         <div class="field-group">
           <label class="field-label">Catégorie</label>
@@ -311,6 +386,87 @@
             <span class="unit">TND/mois</span>
           </div>
           <span class="error-msg" *ngIf="getFieldError('prixLocation')">{{ getFieldError('prixLocation') }}</span>
+        </div>
+
+        <!-- ============================================ -->
+        <!-- AI PRICE ESTIMATION -->
+        <!-- ============================================ -->
+        <div class="ai-estimation-block">
+          <div class="ai-estimation-header">
+            <span class="ai-badge"><i class="fas fa-robot"></i> IA</span>
+            <span class="ai-title">Estimation intelligente du prix</span>
+          </div>
+
+          <button type="button" class="btn-ai-estimate"
+                  [disabled]="aiEstimating"
+                  (click)="estimatePrice()">
+            <i class="fas fa-wand-magic-sparkles"></i>
+            <span *ngIf="!aiEstimating">Estimer automatiquement</span>
+            <span *ngIf="aiEstimating"><i class="fas fa-spinner fa-spin"></i> Analyse en cours…</span>
+          </button>
+
+          <div class="ai-error" *ngIf="aiError">
+            <i class="fas fa-triangle-exclamation"></i> {{ aiError }}
+          </div>
+
+          <div class="ai-result" *ngIf="aiEstimation">
+            <!-- SALE result -->
+            <div class="ai-result-main" *ngIf="aiSaleEstimation">
+              <span class="ai-result-label">Prix de vente conseillé</span>
+              <span class="ai-result-price">{{ aiSaleEstimation.estimatedPrice | number:'1.0-0' }} TND</span>
+              <span class="ai-result-range">
+                {{ aiSaleEstimation.minPrice | number:'1.0-0' }} – {{ aiSaleEstimation.maxPrice | number:'1.0-0' }} TND
+              </span>
+            </div>
+            <!-- RENTAL result -->
+            <div class="ai-result-main" *ngIf="aiRentalEstimation">
+              <span class="ai-result-label">Loyer mensuel conseillé</span>
+              <span class="ai-result-price">{{ aiRentalEstimation.estimatedMonthlyRent | number:'1.0-0' }} TND/mois</span>
+              <span class="ai-result-range">
+                {{ aiRentalEstimation.minRent | number:'1.0-0' }} – {{ aiRentalEstimation.maxRent | number:'1.0-0' }} TND/mois
+              </span>
+            </div>
+
+            <div class="ai-result-meta">
+              <div class="ai-meta-item">
+                <span class="ai-meta-label">Confiance</span>
+                <div class="ai-confidence-bar">
+                  <div class="ai-confidence-fill"
+                       [style.width.%]="aiEstimation.confidence"
+                       [class.high]="aiEstimation.confidence >= 75"
+                       [class.medium]="aiEstimation.confidence >= 55 && aiEstimation.confidence < 75"
+                       [class.low]="aiEstimation.confidence < 55">
+                  </div>
+                </div>
+                <span class="ai-meta-value">{{ aiEstimation.confidence }}%</span>
+              </div>
+
+              <div class="ai-meta-item">
+                <span class="ai-meta-label">Demande marché</span>
+                <span class="ai-demand-badge"
+                      [class.demand-high]="aiEstimation.marketDemand === 'HIGH'"
+                      [class.demand-medium]="aiEstimation.marketDemand === 'MEDIUM'"
+                      [class.demand-low]="aiEstimation.marketDemand === 'LOW'">
+                  <i class="fas"
+                     [class.fa-fire]="aiEstimation.marketDemand === 'HIGH'"
+                     [class.fa-chart-line]="aiEstimation.marketDemand === 'MEDIUM'"
+                     [class.fa-arrow-trend-down]="aiEstimation.marketDemand === 'LOW'">
+                  </i>
+                  {{ aiEstimation.marketDemand === 'HIGH' ? 'Forte' :
+                     aiEstimation.marketDemand === 'MEDIUM' ? 'Modérée' : 'Faible' }}
+                </span>
+              </div>
+
+              <div class="ai-meta-item">
+                <span class="ai-meta-label">Prix / m²</span>
+                <span class="ai-meta-value">{{ aiEstimation.pricePerM2 | number:'1.0-0' }} TND/m²</span>
+              </div>
+            </div>
+
+            <button type="button" class="btn-ai-apply" (click)="applyAIPrice()">
+              <i class="fas fa-check"></i> Appliquer ce prix
+            </button>
+          </div>
         </div>
 
         <!-- ============================================ -->
@@ -482,37 +638,100 @@
         </div>
 
         <div class="media-grid">
-          <div class="media-card">
-            <div class="media-card-head">
-              <div>
-                <h3><i class="fas fa-cubes"></i> Modele 3D</h3>
-                <p>Formats supportes: GLB, GLTF, OBJ, FBX.</p>
+          <!-- ═══════════════════════════════════════
+               MODÈLE 3D — Upload premium
+               ═══════════════════════════════════════ -->
+          <div class="model3d-card" [class.m3d-uploading]="uploadingModel">
+
+            <!-- Header -->
+            <div class="m3d-header">
+              <div class="m3d-header-icon">
+                <i class="fas fa-cube"></i>
               </div>
-              <span class="media-pill" *ngIf="uploadingModel">Upload…</span>
+              <div class="m3d-header-text">
+                <h3>Modèle 3D</h3>
+                <div class="m3d-fmt-row">
+                  <span class="m3d-badge">GLB</span>
+                  <span class="m3d-badge">GLTF</span>
+                  <span class="m3d-badge">OBJ</span>
+                  <span class="m3d-badge">FBX</span>
+                  <span class="m3d-badge">PLY</span>
+                  <span class="m3d-maxsize">· Max 1 GB</span>
+                </div>
+              </div>
+              <span class="m3d-status-pill m3d-pill-uploading" *ngIf="uploadingModel">
+                <i class="fas fa-spinner fa-spin"></i> Envoi…
+              </span>
+              <span class="m3d-status-pill m3d-pill-ready"
+                    *ngIf="!uploadingModel && (selectedModelFile || modelPreviewName)">
+                <i class="fas fa-check-circle"></i> Prêt
+              </span>
             </div>
 
-            <div class="media-drop" (dragover)="$event.preventDefault()" (drop)="onModelDrop($event)">
-              <div class="media-empty" *ngIf="!selectedModelFile && !modelPreviewName">
-                <i class="fas fa-cloud-upload-alt"></i>
-                <span>Glisser-deposer un fichier 3D</span>
-                <small>ou cliquer pour selectionner</small>
+            <!-- Drop zone -->
+            <div class="m3d-dropzone"
+                 [class.m3d-drag-over]="modelDragOver"
+                 [class.m3d-has-file]="selectedModelFile || modelPreviewName"
+                 [class.m3d-is-uploading]="uploadingModel"
+                 (dragover)="onModelDragOver($event)"
+                 (dragleave)="onModelDragLeave($event)"
+                 (drop)="onModelDrop($event)"
+                 (click)="!selectedModelFile && !modelPreviewName && !uploadingModel && modelInput.click()">
+
+              <!-- Empty state -->
+              <div class="m3d-empty" *ngIf="!selectedModelFile && !modelPreviewName && !uploadingModel">
+                <div class="m3d-empty-icon">
+                  <i class="fas fa-cloud-arrow-up"></i>
+                </div>
+                <p class="m3d-empty-label">Glissez votre modèle 3D ici</p>
+                <p class="m3d-empty-or">— ou —</p>
+                <button class="m3d-browse-btn" type="button" (click)="$event.stopPropagation(); modelInput.click()">
+                  <i class="fas fa-folder-open"></i>
+                  Parcourir les fichiers
+                </button>
+                <p class="m3d-hint">GLB · GLTF · OBJ · FBX · PLY</p>
               </div>
-              <div class="media-file" *ngIf="selectedModelFile || modelPreviewName">
-                <div class="file-meta">
+
+              <!-- File selected -->
+              <div class="m3d-file-preview" *ngIf="(selectedModelFile || modelPreviewName) && !uploadingModel">
+                <div class="m3d-file-icon" [ngClass]="'m3d-fmt-' + getModelFormat()">
                   <i class="fas fa-cube"></i>
-                  <div>
-                    <strong>{{ selectedModelFile?.name || modelPreviewName }}</strong>
-                    <small>{{ modelSizeLabel }}</small>
+                  <span class="m3d-ext-tag">{{ getModelFormat().toUpperCase() }}</span>
+                </div>
+                <div class="m3d-file-meta">
+                  <strong class="m3d-file-name">{{ selectedModelFile?.name || modelPreviewName }}</strong>
+                  <span class="m3d-file-size">{{ modelSizeLabel }}</span>
+                </div>
+                <button class="m3d-remove-btn" type="button" (click)="$event.stopPropagation(); clearModel()" title="Retirer le modèle">
+                  <i class="fas fa-times"></i>
+                  Retirer
+                </button>
+              </div>
+
+              <!-- Upload progress -->
+              <div class="m3d-progress-wrap" *ngIf="uploadingModel">
+                <div class="m3d-progress-icon">
+                  <i class="fas fa-cube"></i>
+                </div>
+                <p class="m3d-progress-label">Envoi du modèle 3D en cours…</p>
+                <div class="m3d-progress-track">
+                  <div class="m3d-progress-fill" [style.width.%]="modelUploadProgress">
+                    <span class="m3d-progress-glow"></span>
                   </div>
                 </div>
-                <div class="file-actions">
-                  <button class="btn-ghost" type="button" (click)="clearModel()">Retirer</button>
-                </div>
+                <span class="m3d-progress-pct">{{ modelUploadProgress }}%</span>
               </div>
-              <input #modelInput type="file" accept=".glb,.gltf,.obj,.fbx" (change)="onModelSelect($event)">
-              <button class="media-cta" type="button" (click)="modelInput.click()">Choisir un fichier</button>
+
+              <input #modelInput type="file" accept=".glb,.gltf,.obj,.fbx,.ply" hidden (change)="onModelSelect($event)">
             </div>
-          </div>
+
+            <!-- Error -->
+            <div class="m3d-error" *ngIf="modelError">
+              <i class="fas fa-triangle-exclamation"></i>
+              {{ modelError }}
+            </div>
+
+          </div><!-- /model3d-card -->
 
           <div class="media-card">
             <div class="media-card-head">

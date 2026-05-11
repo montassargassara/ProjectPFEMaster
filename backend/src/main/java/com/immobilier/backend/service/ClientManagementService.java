@@ -47,7 +47,7 @@ public class ClientManagementService {
     private final AffiliateProfileRepository affiliateProfileRepository;
     private final AffiliateRegionRepository affiliateRegionRepository;
 
-    private static final List<RoleType> CLIENT_ROLES = Arrays.asList(RoleType.CLIENT, RoleType.AFFILIATE);
+    private static final List<RoleType> CLIENT_ROLES = Arrays.asList(RoleType.CLIENT, RoleType.AFFILIATE, RoleType.CLIENT_PUBLIC);
     // ========== CREATE ==========
     
     /**
@@ -76,7 +76,7 @@ public class ClientManagementService {
             throw new IllegalArgumentException("Un utilisateur avec cet email existe déjà");
         }
         
-        RoleType role = "AFFILIATE".equalsIgnoreCase(request.getClientType()) ? RoleType.AFFILIATE : RoleType.CLIENT;
+        RoleType role = "AFFILIATE".equalsIgnoreCase(request.getClientType()) ? RoleType.AFFILIATE : RoleType.CLIENT_PUBLIC;
         
         // Créer l'utilisateur
         User user = new User();
@@ -640,15 +640,17 @@ public Map<String, Object> getClientStats() {
     
     if (agencyAdminId == null) {
         // SUPER_ADMIN - stats globales
-        totalClientsNormaux = clientInfoRepository.countByRole(RoleType.CLIENT);
+        totalClientsNormaux = clientInfoRepository.countByRole(RoleType.CLIENT)
+                            + clientInfoRepository.countByRole(RoleType.CLIENT_PUBLIC);
         totalClientsAffilies = clientInfoRepository.countByRole(RoleType.AFFILIATE);
-        totalClientsActifs = clientInfoRepository.countActiveByUserRoleSingle(RoleType.CLIENT) + 
-                              clientInfoRepository.countActiveByUserRoleSingle(RoleType.AFFILIATE);
-        // ajoutez clientsAcheteurs si nécessaire
+        totalClientsActifs = clientInfoRepository.countActiveByUserRoleSingle(RoleType.CLIENT)
+                           + clientInfoRepository.countActiveByUserRoleSingle(RoleType.CLIENT_PUBLIC)
+                           + clientInfoRepository.countActiveByUserRoleSingle(RoleType.AFFILIATE);
         stats.put("clientsAcheteurs", 0);
     } else {
         // ADMIN ou enfant - stats de l'agence uniquement
-        totalClientsNormaux = clientInfoRepository.countByAgencyAdminIdAndRole(agencyAdminId, RoleType.CLIENT);
+        totalClientsNormaux = clientInfoRepository.countByAgencyAdminIdAndRole(agencyAdminId, RoleType.CLIENT)
+                            + clientInfoRepository.countByAgencyAdminIdAndRole(agencyAdminId, RoleType.CLIENT_PUBLIC);
         totalClientsAffilies = clientInfoRepository.countByAgencyAdminIdAndRole(agencyAdminId, RoleType.AFFILIATE);
         totalClientsActifs = clientInfoRepository.countActiveByAgencyAdminId(agencyAdminId);
         stats.put("clientsAcheteurs", 0);

@@ -10,6 +10,7 @@ import { UserService } from '../../services/user.service';
 import { AdminDashboardService } from '../services/admin-dashboard.service';
 import { NotificationService, NotificationDTO } from '../services/notification.service';
 import { MessageService } from '../services/message.service';
+import { SaleValidationService } from '../services/sale-validation.service';
 import { interval } from 'rxjs';
 
 @Component({
@@ -31,6 +32,7 @@ export class AdminComponent implements OnInit, OnDestroy {
   agentsCount = 0;
   unreadNotifications = 0;
   unreadMessageCount = 0;
+  pendingValidationsCount = 0;
   notifPanelOpen = false;
   recentNotifications: NotificationDTO[] = [];
   currentAvatarBlobUrl: SafeUrl | null = null;
@@ -48,6 +50,7 @@ export class AdminComponent implements OnInit, OnDestroy {
     private dashboardService: AdminDashboardService,
     public notificationService: NotificationService,
     private messageService: MessageService,
+    private saleValidationService: SaleValidationService,
     private renderer: Renderer2,
     private cdr: ChangeDetectorRef,
     @Inject(PLATFORM_ID) private platformId: Object
@@ -169,6 +172,18 @@ export class AdminComponent implements OnInit, OnDestroy {
     } else {
       this.agentsCount = 0;
     }
+
+    // Pending sale validations badge
+    const validationPoll = interval(60000).subscribe(() => this.loadValidationCount());
+    this.subscriptions.push(validationPoll);
+    this.loadValidationCount();
+  }
+
+  private loadValidationCount(): void {
+    this.saleValidationService.getPendingCount().subscribe({
+      next: r => { this.pendingValidationsCount = r.count; this.cdr.detectChanges(); },
+      error: () => {}
+    });
   }
 
 
@@ -223,6 +238,7 @@ export class AdminComponent implements OnInit, OnDestroy {
       { path: '/admin/affiliate-offers', title: 'Mes Offres' },
       { path: '/admin/affiliate-earnings', title: 'Mes Gains' },
       { path: '/admin/affiliate-incoming-offers', title: 'Offres Affiliés Reçues' },
+      { path: '/admin/sale-validations', title: 'Validations de vente/location' },
     ];
 
     const match = routes.find(route => {
@@ -388,9 +404,9 @@ export class AdminComponent implements OnInit, OnDestroy {
     } else if (type === 'PROPERTY_SOLD_BY_AGENCY' && notif.relatedEntityId) {
       this.router.navigate(['/admin/properties/edit', notif.relatedEntityId]);
     } else if (type === 'SALE_APPROVAL_REQUESTED') {
-      this.router.navigate(['/admin/properties']);
-    } else if ((type === 'SALE_APPROVAL_GRANTED' || type === 'SALE_APPROVAL_REJECTED') && notif.relatedEntityId) {
-      this.router.navigate(['/admin/properties/edit', notif.relatedEntityId]);
+      this.router.navigate(['/admin/sale-validations']);
+    } else if (type === 'SALE_APPROVAL_GRANTED' || type === 'SALE_APPROVAL_REJECTED') {
+      this.router.navigate(['/admin/sale-validations']);
     }
   }
 

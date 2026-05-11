@@ -12,14 +12,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -36,6 +40,11 @@ public class PropertyService {
     private final PropertySharedAgencyRepository sharedAgencyRepository;
     private final PropertyVisibilityService visibilityService;
     private final PropertyWorkflowService workflowService;
+    private final InterestRequestRepository interestRequestRepository;
+    private final ClientInfoRepository clientInfoRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final SaleValidationService saleValidationService;
+    private final SaleValidationRequestRepository saleValidationRequestRepository;
 
     // ========== CREATE ==========
     
@@ -147,6 +156,18 @@ public class PropertyService {
             property.setStatut("EN_ATTENTE");
             property.setSurface(request.getSurface());
             property.setNbChambres(request.getNbChambres());
+            property.setNbSallesDeBain(request.getNbSallesDeBain());
+            property.setGarage(Boolean.TRUE.equals(request.getGarage()));
+            property.setPiscine(Boolean.TRUE.equals(request.getPiscine()));
+            property.setJardin(Boolean.TRUE.equals(request.getJardin()));
+            property.setMeuble(Boolean.TRUE.equals(request.getMeuble()));
+            property.setEtage(request.getEtage());
+            property.setParkingSpaces(request.getParkingSpaces());
+            property.setAnneeConstruction(request.getAnneeConstruction());
+            property.setProchePlage(Boolean.TRUE.equals(request.getProchePlage()));
+            property.setProcheTransport(Boolean.TRUE.equals(request.getProcheTransport()));
+            property.setSecurite(Boolean.TRUE.equals(request.getSecurite()));
+            property.setClimatisation(Boolean.TRUE.equals(request.getClimatisation()));
             property.setAdresse(request.getAdresse());
             property.setCountry(request.getCountry());
             property.setCity(request.getCity());
@@ -209,7 +230,28 @@ public class PropertyService {
      */
     public List<PropertyListDTO> getAllPropertiesListForUser(User currentUser) {
         List<Property> properties = visibilityService.getVisibleProperties(currentUser);
-        return properties.stream().map(this::convertToListDTO).collect(Collectors.toList());
+        List<PropertyListDTO> dtos = properties.stream().map(this::convertToListDTO).collect(Collectors.toList());
+        enrichWithInterestCounts(dtos);
+        enrichWithPendingValidations(dtos);
+        return dtos;
+    }
+
+    private void enrichWithPendingValidations(List<PropertyListDTO> dtos) {
+        if (dtos.isEmpty()) return;
+        List<Long> ids = dtos.stream().map(PropertyListDTO::getId).collect(Collectors.toList());
+        java.util.Set<Long> pending = saleValidationRequestRepository.findPropertyIdsWithPendingValidation(ids);
+        dtos.forEach(dto -> dto.setHasPendingValidation(pending.contains(dto.getId())));
+    }
+
+    private void enrichWithInterestCounts(List<PropertyListDTO> dtos) {
+        if (dtos.isEmpty()) return;
+        List<Long> ids = dtos.stream().map(PropertyListDTO::getId).collect(Collectors.toList());
+        List<Object[]> rows = interestRequestRepository.countByPropertyIds(ids);
+        java.util.Map<Long, Integer> countMap = new java.util.HashMap<>();
+        for (Object[] row : rows) {
+            countMap.put(((Number) row[0]).longValue(), ((Number) row[1]).intValue());
+        }
+        dtos.forEach(dto -> dto.setInterestCount(countMap.getOrDefault(dto.getId(), 0)));
     }
 
     /**
@@ -441,6 +483,174 @@ public class PropertyService {
         log.info("Partage propriété {} / agence {} révoqué", propertyId, agencyAdminId);
     }
 
+    // ========== DIRECT SALE / RENTAL (ADMIN / SUPER_ADMIN) ==========
+
+    /**
+     * Links a buyer to a property and sets its status to VENDU or LOUE directly
+     * (without going through the CRM lead pipeline).
+     * - Finds or creates a CLIENT user account for the buyer.
+     * - Increments ClientInfo.nombreAchats / totalAchats.
+     * - For LOUE: stores the rental contract dates on the property.
+     */
+    @Transactional
+    @CacheEvict(value = {"properties", "property"}, key = "#propertyId")
+    public PropertyListDTO processDirectSale(Long propertyId, DirectSaleRequest req, User currentUser) {
+        Property property = propertyRepository.findById(propertyId)
+                .orElseThrow(() -> new RuntimeException("Propriété non trouvée: " + propertyId));
+
+        if (!visibilityService.canAccess(currentUser, property)) {
+            throw new RuntimeException("Accès refusé à la propriété " + propertyId);
+        }
+
+        String targetStatus = req.getTargetStatus();
+        if (!"VENDU".equals(targetStatus) && !"LOUE".equals(targetStatus)) {
+            throw new IllegalArgumentException("targetStatus doit être VENDU ou LOUE");
+        }
+
+        // ── Cross-ownership check: if the requester doesn't own this property,
+        //    create a validation request and put the property on hold. ────────
+        if (!saleValidationService.isPropertyOwner(currentUser, property)) {
+            saleValidationService.createForDirectSale(property, req, currentUser);
+            return convertToListDTO(property); // statut is now EN_ATTENTE (cross-ownership validation pending)
+        }
+
+        // ── Resolve or create the buyer ─────────────────────────────────────
+        User buyer = resolveBuyer(req, currentUser);
+
+        // ── Update property ─────────────────────────────────────────────────
+        property.setBuyer(buyer);
+        property.setStatut(targetStatus);
+
+        if ("VENDU".equals(targetStatus)) {
+            property.setIsFinalized(true);
+        } else {
+            // LOUE — rental contract fields
+            if (req.getRentalStartDate() == null || req.getRentalDurationMonths() == null
+                    || req.getRentalDurationMonths() < 1) {
+                throw new IllegalArgumentException(
+                        "Pour une location, la date de début et la durée (≥ 1 mois) sont obligatoires");
+            }
+            LocalDateTime start = LocalDate.parse(req.getRentalStartDate()).atStartOfDay();
+            LocalDateTime end   = start.plusMonths(req.getRentalDurationMonths());
+            property.setRentalStartDate(start);
+            property.setRentalEndDate(end);
+            property.setRentalDurationMonths(req.getRentalDurationMonths());
+        }
+
+        Property saved = propertyRepository.save(property);
+
+        // ── Update buyer stats ───────────────────────────────────────────────
+        updateBuyerStats(buyer, property, targetStatus);
+
+        log.info("Vente directe propriété {} → {} par {} (acheteur ID {})",
+                propertyId, targetStatus, currentUser.getEmail(), buyer.getId());
+
+        return convertToListDTO(saved);
+    }
+
+    /**
+     * Finalises a previously-validated cross-ownership direct sale.
+     * Called by {@link SaleValidationService} after the property owner approves.
+     * The property statut was EN_ATTENTE during validation; this
+     * method applies the real VENDU / LOUE change.
+     */
+    @Transactional
+    public void completeValidatedDirectSale(Property property,
+                                            DirectSaleRequest req,
+                                            User reviewer) {
+        String targetStatus = req.getTargetStatus();
+
+        User buyer = resolveBuyer(req, reviewer);
+        property.setBuyer(buyer);
+        property.setStatut(targetStatus);
+
+        if ("VENDU".equals(targetStatus)) {
+            property.setIsFinalized(true);
+        } else {
+            // LOUE — rental contract
+            if (req.getRentalStartDate() == null || req.getRentalDurationMonths() == null
+                    || req.getRentalDurationMonths() < 1) {
+                throw new IllegalArgumentException(
+                        "Pour une location, la date de début et la durée (≥ 1 mois) sont obligatoires");
+            }
+            LocalDateTime start = LocalDate.parse(req.getRentalStartDate()).atStartOfDay();
+            LocalDateTime end   = start.plusMonths(req.getRentalDurationMonths());
+            property.setRentalStartDate(start);
+            property.setRentalEndDate(end);
+            property.setRentalDurationMonths(req.getRentalDurationMonths());
+        }
+
+        propertyRepository.save(property);
+        updateBuyerStats(buyer, property, targetStatus);
+
+        log.info("Validated direct sale completed — property {} → {} (reviewer {})",
+                property.getId(), targetStatus, reviewer.getEmail());
+    }
+
+    private User resolveBuyer(DirectSaleRequest req, User currentUser) {
+        if (req.getExistingClientId() != null) {
+            return userRepository.findById(req.getExistingClientId())
+                    .orElseThrow(() -> new IllegalArgumentException("Client introuvable: " + req.getExistingClientId()));
+        }
+
+        // Create a new lightweight buyer account
+        if (req.getClientEmail() == null || req.getClientEmail().isBlank()) {
+            throw new IllegalArgumentException("L'email du client est obligatoire pour créer un nouveau compte");
+        }
+        if (req.getClientNom() == null || req.getClientNom().isBlank()) {
+            throw new IllegalArgumentException("Le nom du client est obligatoire");
+        }
+
+        // Reuse existing account if email already exists
+        Optional<User> existing = userRepository.findByEmail(req.getClientEmail().trim().toLowerCase());
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        User newUser = new User();
+        newUser.setNom(req.getClientNom().trim());
+        newUser.setPrenom(req.getClientPrenom() != null ? req.getClientPrenom().trim() : "");
+        newUser.setEmail(req.getClientEmail().trim().toLowerCase());
+        String tel = req.getClientTelephone();
+        newUser.setTelephone((tel != null && !tel.isBlank()) ? tel.trim() : null);
+        newUser.setRole(RoleType.CLIENT);
+        newUser.setIsActive(true);
+        // Random secure password — the buyer will need to use "forgot password" to log in
+        newUser.setPassword(passwordEncoder.encode(UUID.randomUUID().toString()));
+        User savedUser = userRepository.save(newUser);
+
+        // Create ClientInfo record
+        ClientInfo info = new ClientInfo();
+        info.setUser(savedUser);
+        info.setCreatedBy(currentUser);
+        info.setVisibilityType("AGENCY_CLIENT");
+        // Resolve agency admin id for the creator
+        if (currentUser.getRole() == RoleType.ADMIN) {
+            info.setAgencyAdminId(currentUser.getId());
+        } else if (currentUser.getRole() == RoleType.SUPER_ADMIN) {
+            info.setAgencyAdminId(null);
+            info.setVisibilityType("PRIVATE_CLIENT");
+        } else {
+            // COMMERCIAL / RESPONSABLE — find their ADMIN ancestor
+            userRepository.findTopAdminAncestor(currentUser.getId())
+                    .ifPresent(admin -> info.setAgencyAdminId(admin.getId()));
+        }
+        clientInfoRepository.save(info);
+
+        return savedUser;
+    }
+
+    private void updateBuyerStats(User buyer, Property property, String status) {
+        clientInfoRepository.findByUserId(buyer.getId()).ifPresent(info -> {
+            info.setNombreAchats((info.getNombreAchats() == null ? 0 : info.getNombreAchats()) + 1);
+            double price = "VENDU".equals(status)
+                    ? (property.getPrixVente() != null ? property.getPrixVente() : 0.0)
+                    : (property.getPrixLocation() != null ? property.getPrixLocation() : 0.0);
+            info.setTotalAchats((info.getTotalAchats() == null ? 0.0 : info.getTotalAchats()) + price);
+            clientInfoRepository.save(info);
+        });
+    }
+
     /**
      * Returns the list of agency admins this property is currently shared with,
      * and all available admins with their sharing status — for the share UI.
@@ -476,6 +686,18 @@ public class PropertyService {
         property.setStatut(initialStatus);
         property.setSurface(request.getSurface());
         property.setNbChambres(request.getNbChambres());
+        property.setNbSallesDeBain(request.getNbSallesDeBain());
+        property.setGarage(Boolean.TRUE.equals(request.getGarage()));
+        property.setPiscine(Boolean.TRUE.equals(request.getPiscine()));
+        property.setJardin(Boolean.TRUE.equals(request.getJardin()));
+        property.setMeuble(Boolean.TRUE.equals(request.getMeuble()));
+        property.setEtage(request.getEtage());
+        property.setParkingSpaces(request.getParkingSpaces());
+        property.setAnneeConstruction(request.getAnneeConstruction());
+        property.setProchePlage(Boolean.TRUE.equals(request.getProchePlage()));
+        property.setProcheTransport(Boolean.TRUE.equals(request.getProcheTransport()));
+        property.setSecurite(Boolean.TRUE.equals(request.getSecurite()));
+        property.setClimatisation(Boolean.TRUE.equals(request.getClimatisation()));
         property.setAdresse(request.getAdresse());
         property.setCountry(request.getCountry());
         property.setCity(request.getCity());
@@ -929,6 +1151,18 @@ public class PropertyService {
         }
         if (request.getSurface() != null) property.setSurface(request.getSurface());
         if (request.getNbChambres() != null) property.setNbChambres(request.getNbChambres());
+        if (request.getNbSallesDeBain() != null) property.setNbSallesDeBain(request.getNbSallesDeBain());
+        if (request.getGarage() != null) property.setGarage(request.getGarage());
+        if (request.getPiscine() != null) property.setPiscine(request.getPiscine());
+        if (request.getJardin() != null) property.setJardin(request.getJardin());
+        if (request.getMeuble() != null) property.setMeuble(request.getMeuble());
+        if (request.getEtage() != null) property.setEtage(request.getEtage());
+        if (request.getParkingSpaces() != null) property.setParkingSpaces(request.getParkingSpaces());
+        if (request.getAnneeConstruction() != null) property.setAnneeConstruction(request.getAnneeConstruction());
+        if (request.getProchePlage() != null) property.setProchePlage(request.getProchePlage());
+        if (request.getProcheTransport() != null) property.setProcheTransport(request.getProcheTransport());
+        if (request.getSecurite() != null) property.setSecurite(request.getSecurite());
+        if (request.getClimatisation() != null) property.setClimatisation(request.getClimatisation());
         if (request.getAdresse() != null) property.setAdresse(request.getAdresse());
         if (request.getCountry() != null) property.setCountry(request.getCountry());
         if (request.getCity() != null) property.setCity(request.getCity());
@@ -1348,6 +1582,18 @@ public class PropertyService {
         dto.setStatut(property.getStatut());
         dto.setSurface(property.getSurface());
         dto.setNbChambres(property.getNbChambres());
+        dto.setNbSallesDeBain(property.getNbSallesDeBain());
+        dto.setGarage(Boolean.TRUE.equals(property.getGarage()));
+        dto.setPiscine(Boolean.TRUE.equals(property.getPiscine()));
+        dto.setJardin(Boolean.TRUE.equals(property.getJardin()));
+        dto.setMeuble(Boolean.TRUE.equals(property.getMeuble()));
+        dto.setEtage(property.getEtage());
+        dto.setParkingSpaces(property.getParkingSpaces());
+        dto.setAnneeConstruction(property.getAnneeConstruction());
+        dto.setProchePlage(Boolean.TRUE.equals(property.getProchePlage()));
+        dto.setProcheTransport(Boolean.TRUE.equals(property.getProcheTransport()));
+        dto.setSecurite(Boolean.TRUE.equals(property.getSecurite()));
+        dto.setClimatisation(Boolean.TRUE.equals(property.getClimatisation()));
         dto.setAdresse(property.getAdresse());
         dto.setCountry(property.getCountry());
         dto.setCity(property.getCity());
@@ -1363,6 +1609,10 @@ public class PropertyService {
         if (property.getAgencyAdmin() != null) {
             dto.setAgencyAdminId(property.getAgencyAdmin().getId());
             dto.setAgencyAdminName(property.getAgencyAdmin().getFullName());
+        }
+        if (property.getBuyer() != null) {
+            dto.setBuyerId(property.getBuyer().getId());
+            dto.setBuyerName(property.getBuyer().getFullName());
         }
 
         // Validation workflow + locks
@@ -1456,6 +1706,18 @@ public class PropertyService {
         dto.setStatut(property.getStatut());
         dto.setSurface(property.getSurface());
         dto.setNbChambres(property.getNbChambres());
+        dto.setNbSallesDeBain(property.getNbSallesDeBain());
+        dto.setGarage(Boolean.TRUE.equals(property.getGarage()));
+        dto.setPiscine(Boolean.TRUE.equals(property.getPiscine()));
+        dto.setJardin(Boolean.TRUE.equals(property.getJardin()));
+        dto.setMeuble(Boolean.TRUE.equals(property.getMeuble()));
+        dto.setEtage(property.getEtage());
+        dto.setParkingSpaces(property.getParkingSpaces());
+        dto.setAnneeConstruction(property.getAnneeConstruction());
+        dto.setProchePlage(Boolean.TRUE.equals(property.getProchePlage()));
+        dto.setProcheTransport(Boolean.TRUE.equals(property.getProcheTransport()));
+        dto.setSecurite(Boolean.TRUE.equals(property.getSecurite()));
+        dto.setClimatisation(Boolean.TRUE.equals(property.getClimatisation()));
         dto.setAdresse(property.getAdresse());
         dto.setCountry(property.getCountry());
         dto.setCity(property.getCity());

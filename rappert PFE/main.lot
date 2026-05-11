@@ -1,4 +1,11 @@
 \babel@toc {french}{}\relax 
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {1.1}{\ignorespaces Structure et rôles des équipes de We Are Tech}}{6}{}%
-\contentsline {table}{\numberline {1.2}{\ignorespaces Comparaison des solutions existantes avec Maison3D Immobilier}}{7}{}%
+\contentsline {xchapter}{Présentation générale du projet}{7}{}%
+\contentsline {table}{\numberline {1.1}{\ignorespaces Les rôles SCRUM}}{11}{}%
+\addvspace {10\p@ }
+\contentsline {xchapter}{Initiation du projet et étude technique}{13}{}%
+\contentsline {table}{\numberline {2.1}{\ignorespaces Identification des acteurs du système Maison3D Immobilier}}{15}{}%
+\contentsline {table}{\numberline {2.2}{\ignorespaces Logique des statuts des biens immobiliers}}{18}{}%
+\contentsline {table}{\numberline {2.3}{\ignorespaces Récapitulatif des besoins non fonctionnels}}{22}{}%
+\contentsline {table}{\numberline {2.4}{\ignorespaces Bibliothèques frontend utilisées dans le projet}}{24}{}%
+\contentsline {table}{\numberline {2.5}{\ignorespaces Récapitulatif des choix technologiques}}{25}{}%

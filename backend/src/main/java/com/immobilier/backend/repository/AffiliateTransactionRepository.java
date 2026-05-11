@@ -55,4 +55,51 @@ public interface AffiliateTransactionRepository extends JpaRepository<AffiliateT
     @Query("SELECT at FROM AffiliateTransaction at WHERE at.affiliate.id = :affiliateId AND at.property.agencyAdmin.id = :agencyAdminId ORDER BY at.transactionDate DESC")
     List<AffiliateTransaction> findByAffiliateIdAndAgencyAdminId(@Param("affiliateId") Long affiliateId,
                                                                   @Param("agencyAdminId") Long agencyAdminId);
+
+    // ── BI analytics ─────────────────────────────────────────────────────────
+    @Query("SELECT COALESCE(SUM(at.commissionAmount), 0) FROM AffiliateTransaction at")
+    Double getTotalCommissions();
+
+    @Query("SELECT COALESCE(SUM(at.commissionAmount), 0) FROM AffiliateTransaction at WHERE at.transactionDate >= :since")
+    Double getTotalCommissionsSince(@Param("since") java.time.LocalDateTime since);
+
+    @Query("SELECT COALESCE(SUM(at.commissionAmount), 0) FROM AffiliateTransaction at WHERE at.isPaid = false")
+    Double getTotalUnpaidCommissions();
+
+    @Query("SELECT COUNT(at) FROM AffiliateTransaction at WHERE at.isPaid = false")
+    long countUnpaidTransactions();
+
+    @Query("SELECT MONTH(at.transactionDate), YEAR(at.transactionDate), COALESCE(SUM(at.commissionAmount), 0) " +
+           "FROM AffiliateTransaction at WHERE at.transactionDate >= :since " +
+           "GROUP BY YEAR(at.transactionDate), MONTH(at.transactionDate) " +
+           "ORDER BY YEAR(at.transactionDate), MONTH(at.transactionDate)")
+    List<Object[]> getMonthlyCommissionsSince(@Param("since") java.time.LocalDateTime since);
+
+    // ── Agency-scoped BI queries ──────────────────────────────────────────────
+
+    @Query("SELECT COALESCE(SUM(at.commissionAmount), 0) FROM AffiliateTransaction at WHERE at.property.agencyAdmin.id = :adminId")
+    Double getTotalCommissionsByAgencyAdmin(@Param("adminId") Long adminId);
+
+    @Query("SELECT COALESCE(SUM(at.commissionAmount), 0) FROM AffiliateTransaction at WHERE at.property.agencyAdmin.id = :adminId AND at.transactionDate >= :since")
+    Double getTotalCommissionsSinceByAgencyAdmin(@Param("adminId") Long adminId, @Param("since") java.time.LocalDateTime since);
+
+    @Query("SELECT MONTH(at.transactionDate), YEAR(at.transactionDate), COALESCE(SUM(at.commissionAmount), 0) " +
+           "FROM AffiliateTransaction at WHERE at.property.agencyAdmin.id = :adminId AND at.transactionDate >= :since " +
+           "GROUP BY YEAR(at.transactionDate), MONTH(at.transactionDate) " +
+           "ORDER BY YEAR(at.transactionDate), MONTH(at.transactionDate)")
+    List<Object[]> getMonthlyCommissionsSinceByAgencyAdmin(@Param("adminId") Long adminId, @Param("since") java.time.LocalDateTime since);
+
+    @Query("SELECT at.affiliate, COUNT(at) as saleCount, SUM(at.commissionAmount) as totalCommission " +
+           "FROM AffiliateTransaction at WHERE at.property.agencyAdmin.id = :adminId AND at.transactionDate >= :startDate " +
+           "GROUP BY at.affiliate ORDER BY COUNT(at) DESC")
+    List<Object[]> getAffiliateRankingByAgencyAdmin(@Param("adminId") Long adminId, @Param("startDate") java.time.LocalDateTime startDate);
+
+    @Query("SELECT COALESCE(SUM(at.commissionAmount), 0) FROM AffiliateTransaction at WHERE at.property.agencyAdmin.id = :adminId AND at.isPaid = false")
+    Double getTotalUnpaidCommissionsByAgencyAdmin(@Param("adminId") Long adminId);
+
+    @Query("SELECT COUNT(at) FROM AffiliateTransaction at WHERE at.property.agencyAdmin.id = :adminId AND at.isPaid = false")
+    long countUnpaidTransactionsByAgencyAdmin(@Param("adminId") Long adminId);
+
+    @Query("SELECT COUNT(DISTINCT at.affiliate.id) FROM AffiliateTransaction at WHERE at.property.agencyAdmin.id = :adminId")
+    long countDistinctAffiliatesByAgencyAdmin(@Param("adminId") Long adminId);
 }

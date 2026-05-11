@@ -395,6 +395,25 @@ public class PropertyController {
         }
     }
 
+    @PostMapping("/{id}/direct-sale")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN', 'RESPONSABLE_COMMERCIAL')")
+    public ResponseEntity<?> directSale(@PathVariable Long id,
+                                        @RequestBody DirectSaleRequest request) {
+        try {
+            User currentUser = securityUtils.getCurrentUser();
+            PropertyListDTO updated = propertyService.processDirectSale(id, request, currentUser);
+            return ResponseEntity.ok(updated);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (RuntimeException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("Accès refusé")) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("error", msg));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", msg));
+        }
+    }
+
     @PutMapping("/{id}/commission")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     public ResponseEntity<?> updatePropertyCommission(@PathVariable Long id,

@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { PropertiesAdminService, PropertyListItem } from '../services/properties-admin.service';
+import { AdminAuthService } from '../services/admin-auth';
 import { apiBaseUrl } from '../../services/api-config';
 
 @Component({
@@ -21,13 +22,22 @@ export class Statistics implements OnInit {
   searchTerm = '';
   typeFilter = '';
   cityFilter = '';
+  agencyFilter = '';
+
+  selectedTxnProperty: PropertyListItem | null = null;
+
+  currentUserRole = '';
 
   constructor(
     private propertiesService: PropertiesAdminService,
+    private authService: AdminAuthService,
     private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
+    this.authService.currentUser.subscribe(u => {
+      this.currentUserRole = u?.role ?? '';
+    });
     this.load();
   }
 
@@ -38,33 +48,73 @@ export class Statistics implements OnInit {
       next: list => {
         this.properties = list;
         this.loading = false;
-        this.cdr.detectChanges();
+        this.cdr.markForCheck();
       },
       error: () => {
         this.errorMessage = 'Impossible de charger les transactions.';
         this.loading = false;
-        this.cdr.detectChanges();
+        this.cdr.markForCheck();
       },
     });
   }
 
-  // ── Computed stats ───────────────────────────────────────────────────────
+  get isSuperAdmin(): boolean {
+    return this.currentUserRole === 'SUPER_ADMIN';
+  }
+
+  // ── Sectioning (SUPER_ADMIN only) ─────────────────────────────────────────
+
+  get ownProperties(): PropertyListItem[] {
+    return this.properties.filter(p => p.ownerType === 'SUPER_ADMIN_OWNED');
+  }
+
+  get agencyProperties(): PropertyListItem[] {
+    return this.properties.filter(p => p.ownerType === 'AGENCY_OWNED' || !p.ownerType);
+  }
+
+  get availableAgencies(): string[] {
+    const names = this.agencyProperties
+      .map(p => p.agencyAdminName)
+      .filter((n): n is string => !!n);
+    return [...new Set(names)].sort();
+  }
+
+  // ── Global KPIs ───────────────────────────────────────────────────────────
 
   get totalRevenue(): number {
-    return this.properties.reduce((sum, p) => sum + (p.prixVente ?? 0), 0);
+    if (this.isSuperAdmin) {
+      // Only own-property revenue counts for super admin
+      return this.ownProperties.reduce((s, p) => s + (p.prixVente ?? 0), 0);
+    }
+    return this.properties.reduce((s, p) => s + (p.prixVente ?? 0), 0);
   }
 
   get avgPrice(): number {
-    if (!this.properties.length) return 0;
-    return this.totalRevenue / this.properties.length;
+    const base = this.isSuperAdmin ? this.ownProperties : this.properties;
+    if (!base.length) return 0;
+    return base.reduce((s, p) => s + (p.prixVente ?? 0), 0) / base.length;
   }
 
+  // ── Per-section KPIs ──────────────────────────────────────────────────────
+
+  get ownRevenue(): number {
+    return this.ownProperties.reduce((s, p) => s + (p.prixVente ?? 0), 0);
+  }
+
+  get agencyRevenue(): number {
+    return this.agencyProperties.reduce((s, p) => s + (p.prixVente ?? 0), 0);
+  }
+
+  get agencyCount(): number {
+    return new Set(this.agencyProperties.map(p => p.agencyAdminName).filter(Boolean)).size;
+  }
+
+  // ── City / type breakdowns ────────────────────────────────────────────────
+
   get cityBreakdown(): { city: string; count: number }[] {
+    const src = this.isSuperAdmin ? this.ownProperties : this.properties;
     const map = new Map<string, number>();
-    this.properties.forEach(p => {
-      const c = p.city || 'Inconnue';
-      map.set(c, (map.get(c) ?? 0) + 1);
-    });
+    src.forEach(p => map.set(p.city || 'Inconnue', (map.get(p.city || 'Inconnue') ?? 0) + 1));
     return Array.from(map.entries())
       .map(([city, count]) => ({ city, count }))
       .sort((a, b) => b.count - a.count)
@@ -72,20 +122,19 @@ export class Statistics implements OnInit {
   }
 
   get typeBreakdown(): { type: string; count: number }[] {
+    const src = this.isSuperAdmin ? this.ownProperties : this.properties;
     const map = new Map<string, number>();
-    this.properties.forEach(p => {
-      map.set(p.type, (map.get(p.type) ?? 0) + 1);
-    });
+    src.forEach(p => map.set(p.type, (map.get(p.type) ?? 0) + 1));
     return Array.from(map.entries())
       .map(([type, count]) => ({ type, count }))
       .sort((a, b) => b.count - a.count);
   }
 
-  // ── Filtered list ────────────────────────────────────────────────────────
+  // ── Filtered lists ────────────────────────────────────────────────────────
 
-  get filtered(): PropertyListItem[] {
+  private applyFilters(list: PropertyListItem[]): PropertyListItem[] {
     const term = this.searchTerm.trim().toLowerCase();
-    return this.properties.filter(p => {
+    return list.filter(p => {
       const matchSearch = !term
         || p.titre.toLowerCase().includes(term)
         || (p.adresse ?? '').toLowerCase().includes(term)
@@ -94,6 +143,23 @@ export class Statistics implements OnInit {
       const matchCity = !this.cityFilter || (p.city ?? '') === this.cityFilter;
       return matchSearch && matchType && matchCity;
     });
+  }
+
+  get filteredOwn(): PropertyListItem[] {
+    return this.applyFilters(this.ownProperties);
+  }
+
+  get filteredAgency(): PropertyListItem[] {
+    let list = this.agencyProperties;
+    if (this.agencyFilter) {
+      list = list.filter(p => p.agencyAdminName === this.agencyFilter);
+    }
+    return this.applyFilters(list);
+  }
+
+  /** Single-section filtered list for non-SUPER_ADMIN roles */
+  get filtered(): PropertyListItem[] {
+    return this.applyFilters(this.properties);
   }
 
   get availableTypes(): string[] {
@@ -128,5 +194,14 @@ export class Statistics implements OnInit {
     this.searchTerm = '';
     this.typeFilter = '';
     this.cityFilter = '';
+    this.agencyFilter = '';
+  }
+
+  openTxnDetail(p: PropertyListItem): void {
+    this.selectedTxnProperty = p;
+  }
+
+  closeTxnDetail(): void {
+    this.selectedTxnProperty = null;
   }
 }

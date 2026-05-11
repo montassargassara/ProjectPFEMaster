@@ -1,402 +1,754 @@
-<section class="dashboard" *ngIf="!loading && snapshot; else loadingState">
-	<header class="dashboard-header">
-		<div>
-			<p class="eyebrow">Administration</p>
-			<h2>Vue generale</h2>
-			<p class="subtext">Suivi des indicateurs cles et des activites recentes.</p>
-		</div>
-		<div class="header-actions">
-			<button class="ghost-btn" type="button" (click)="toggleTheme()">
-				<i class="fas" [class.fa-moon]="!isDarkTheme" [class.fa-sun]="isDarkTheme"></i>
-				<span>{{ isDarkTheme ? 'Mode clair' : 'Mode sombre' }}</span>
-			</button>
-			<a class="primary-btn" routerLink="/admin/properties/new">
-				<i class="fas fa-plus"></i>
-				Nouveau bien
-			</a>
-		</div>
-	</header>
+<!-- ══════════════════════════════════════════════════════════════════════
+     DASHBOARD PRINCIPAL — Vue générale + Business Intelligence
+     Angular 17+ control flow: @if / @for / @else / @empty
+     ══════════════════════════════════════════════════════════════════════ -->
 
-	<section class="stats-grid">
-		<article class="stat-card">
-			<div class="stat-header">
-				<p>Total biens</p>
-				<span class="pill pill-available">Actifs</span>
-			</div>
-			<h3>{{ getStatValue(snapshot.stats.totalProperties) }}</h3>
-			<p class="stat-foot">Dont {{ getStatValue(snapshot.stats.availableProperties) }} disponibles</p>
-		</article>
-		<article class="stat-card">
-			<div class="stat-header">
-				<p>Transactions vendues</p>
-				<span class="pill pill-sold">Vendu</span>
-			</div>
-			<h3>{{ getStatValue(snapshot.stats.soldProperties) }}</h3>
-			<p class="stat-foot">En attente: {{ getStatValue(snapshot.stats.pendingTransactions) }}</p>
-		</article>
-		<article class="stat-card">
-			<div class="stat-header">
-				<p>Locations</p>
-				<span class="pill pill-rented">Loue</span>
-			</div>
-			<h3>{{ getStatValue(snapshot.stats.rentedProperties) }}</h3>
-			<p class="stat-foot">Reserve: {{ getStatValue(snapshot.stats.reservedProperties) }}</p>
-		</article>
-		<article class="stat-card">
-			<div class="stat-header">
-				<p>Revenus annuels</p>
-				<span class="pill pill-highlight">YTD</span>
-			</div>
-			<h3>{{ formatCurrency(snapshot.stats.yearlyRevenue) }}</h3>
-			<p class="stat-foot">Dernier mois: {{ formatCurrency(snapshot.stats.monthlyRevenue) }}</p>
-		</article>
-		<article class="stat-card" *ngIf="snapshot.stats.totalClients !== null">
-			<div class="stat-header">
-				<p>Clients</p>
-				<span class="pill pill-available">Actifs</span>
-			</div>
-			<h3>{{ getStatValue(snapshot.stats.totalClients) }}</h3>
-			<p class="stat-foot">Suivi depuis le back-office</p>
-		</article>
-		<article class="stat-card" *ngIf="snapshot.stats.totalAffiliates !== null">
-			<div class="stat-header">
-				<p>Affilies</p>
-				<span class="pill pill-highlight">Partenaires</span>
-			</div>
-			<h3>{{ getStatValue(snapshot.stats.totalAffiliates) }}</h3>
-			<p class="stat-foot">Programme en croissance</p>
-		</article>
-		<article class="stat-card">
-			<div class="stat-header">
-				<p>Chiffre total</p>
-				<span class="pill pill-highlight">Global</span>
-			</div>
-			<h3>{{ formatCurrency(snapshot.stats.totalRevenue) }}</h3>
-			<p class="stat-foot">Depuis le debut de l'annee</p>
-		</article>
-	</section>
+@if (!loading && snapshot) {
+<section class="db">
 
-	<section class="charts-grid">
-		<article class="panel">
-			<div class="panel-header">
-				<div>
-					<h4>Ventes et locations mensuelles</h4>
-					<p>Evolution des transactions sur 12 mois</p>
-				</div>
-				<span class="badge-outline">2026</span>
-			</div>
+  <!-- ── HEADER ───────────────────────────────────────────────────────── -->
+  <header class="db-header">
+    <div class="db-header-brand">
+      <span class="db-eyebrow">Administration</span>
+      <h2 class="db-title">Vue générale</h2>
+      <p class="db-subtitle">Intelligence immobilière — données en temps réel</p>
+    </div>
+    <div class="db-header-actions">
+      <button class="btn-ghost" type="button" (click)="toggleTheme()">
+        <i class="fas" [class.fa-moon]="!isDarkTheme" [class.fa-sun]="isDarkTheme"></i>
+        <span>{{ isDarkTheme ? 'Mode clair' : 'Mode sombre' }}</span>
+      </button>
+      <a class="btn-primary" routerLink="/admin/properties/new">
+        <i class="fas fa-plus"></i>
+        Nouveau bien
+      </a>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       BUSINESS INTELLIGENCE — SUPER_ADMIN et ADMIN uniquement
+       ══════════════════════════════════════════════════════════════════ -->
+  @if (isBiRole) {
+
+    <!-- Skeleton pendant le chargement BI -->
+    @if (biLoading) {
+      <div class="db-kpi-grid">
+        @for (x of [1,2,3,4,5,6,7,8]; track $index) {
+          <div class="sk-kpi-card">
+            <div class="sk-icon"></div>
+            <div class="sk-body">
+              <div class="sk-line sk-w60"></div>
+              <div class="sk-line sk-w40 sk-h20 sk-mt8"></div>
+              <div class="sk-line sk-w70 sk-mt6"></div>
+            </div>
+          </div>
+        }
+      </div>
+      <div class="db-charts-row">
+        <div class="sk-chart-panel"></div>
+        <div class="sk-chart-panel"></div>
+      </div>
+    }
+
+    <!-- Contenu BI -->
+    @if (!biLoading && biKpis) {
+
+      <!-- ── KPI CARDS ──────────────────────────────────────────────── -->
+      <div class="db-kpi-grid">
+
+        <div class="kpi-card kpi-slate">
+          <div class="kpi-icon"><i class="fas fa-building"></i></div>
+          <div class="kpi-body">
+            <p class="kpi-lbl">Total biens</p>
+            <h4 class="kpi-val">{{ biKpis.totalProperties }}</h4>
+            <p class="kpi-sub">Catalogue global</p>
+          </div>
+        </div>
+
+        <div class="kpi-card kpi-green">
+          <div class="kpi-icon"><i class="fas fa-circle-check"></i></div>
+          <div class="kpi-body">
+            <p class="kpi-lbl">Disponibles</p>
+            <h4 class="kpi-val">{{ biKpis.disponibleCount }}</h4>
+            <p class="kpi-sub">En vente ou en location</p>
+          </div>
+        </div>
+
+        <div class="kpi-card kpi-red">
+          <div class="kpi-icon"><i class="fas fa-handshake"></i></div>
+          <div class="kpi-body">
+            <p class="kpi-lbl">Vendus</p>
+            <h4 class="kpi-val">{{ biKpis.venduCount }}</h4>
+            <p class="kpi-sub">Transactions conclues</p>
+          </div>
+        </div>
+
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-icon"><i class="fas fa-key"></i></div>
+          <div class="kpi-body">
+            <p class="kpi-lbl">Loués</p>
+            <h4 class="kpi-val">{{ biKpis.loueCount }}</h4>
+            <p class="kpi-sub">Locations actives</p>
+          </div>
+        </div>
+
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-icon"><i class="fas fa-coins"></i></div>
+          <div class="kpi-body">
+            <p class="kpi-lbl">Revenus du mois</p>
+            <h4 class="kpi-val">{{ compactNum(biKpis.currentMonthRevenue) }} TND</h4>
+            <span class="kpi-trend" [ngClass]="biTrendClass(biKpis.revenueTrend)">
+              <i class="fas" [ngClass]="biTrendIcon(biKpis.revenueTrend)"></i>
+              {{ biKpis.revenueTrend >= 0 ? '+' : '' }}{{ biKpis.revenueTrend }}% vs mois passé
+            </span>
+          </div>
+        </div>
+
+        @if (isSuperAdmin) {
+          <div class="kpi-card kpi-purple">
+            <div class="kpi-icon"><i class="fas fa-hand-holding-dollar"></i></div>
+            <div class="kpi-body">
+              <p class="kpi-lbl">Commissions totales</p>
+              <h4 class="kpi-val">{{ compactNum(biKpis.totalCommissions) }} TND</h4>
+              <span class="kpi-trend" [ngClass]="biTrendClass(biKpis.commissionsTrend)">
+                <i class="fas" [ngClass]="biTrendIcon(biKpis.commissionsTrend)"></i>
+                {{ biKpis.commissionsTrend >= 0 ? '+' : '' }}{{ biKpis.commissionsTrend }}% vs mois passé
+              </span>
+            </div>
+          </div>
+
+          <div class="kpi-card kpi-indigo">
+            <div class="kpi-icon"><i class="fas fa-building-columns"></i></div>
+            <div class="kpi-body">
+              <p class="kpi-lbl">Agences partenaires</p>
+              <h4 class="kpi-val">{{ biKpis.agencyCount }}</h4>
+              <p class="kpi-sub">{{ biKpis.clientCount }} clients gérés</p>
+            </div>
+          </div>
+        } @else {
+          <div class="kpi-card kpi-purple">
+            <div class="kpi-icon"><i class="fas fa-hand-holding-dollar"></i></div>
+            <div class="kpi-body">
+              <p class="kpi-lbl">Commissions affiliés</p>
+              <h4 class="kpi-val">{{ compactNum(biKpis.totalCommissions) }} TND</h4>
+              <span class="kpi-trend" [ngClass]="biTrendClass(biKpis.commissionsTrend)">
+                <i class="fas" [ngClass]="biTrendIcon(biKpis.commissionsTrend)"></i>
+                {{ biKpis.commissionsTrend >= 0 ? '+' : '' }}{{ biKpis.commissionsTrend }}% vs mois passé
+              </span>
+            </div>
+          </div>
+
+          <div class="kpi-card kpi-indigo">
+            <div class="kpi-icon"><i class="fas fa-user-tie"></i></div>
+            <div class="kpi-body">
+              <p class="kpi-lbl">Affiliés actifs</p>
+              <h4 class="kpi-val">{{ biKpis.affiliateCount }}</h4>
+              <p class="kpi-sub">{{ biKpis.clientCount }} clients CRM</p>
+            </div>
+          </div>
+        }
+
+        <div class="kpi-card kpi-teal">
+          <div class="kpi-icon"><i class="fas fa-percent"></i></div>
+          <div class="kpi-body">
+            <p class="kpi-lbl">Taux de conversion</p>
+            <h4 class="kpi-val">{{ biKpis.conversionRate }}%</h4>
+            <span class="kpi-trend" [ngClass]="biTrendClass(biKpis.salesTrend)">
+              <i class="fas" [ngClass]="biTrendIcon(biKpis.salesTrend)"></i>
+              {{ biKpis.currentMonthSales }} ventes ce mois
+            </span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── CHARTS ROW 1 — Transactions + Revenus ──────────────────── -->
+      <div class="db-charts-row">
+
+        <article class="db-card">
+          <div class="card-hdr">
+            <div class="card-hdr-text">
+              <h4>Évolution des transactions</h4>
+              <p>Ventes et locations mensuelles sur 12 mois</p>
+            </div>
+            <span class="badge-pill">12 mois</span>
+          </div>
+          @if (biSalesTrendChart) {
             <apx-chart
-            *ngIf="salesChartOptions"
-            [series]="salesChartOptions.series"
-            [chart]="salesChartOptions.chart"
-            [xaxis]="salesChartOptions.xaxis!"
-            [yaxis]="salesChartOptions.yaxis!"
-            [dataLabels]="salesChartOptions.dataLabels!"
-            [stroke]="salesChartOptions.stroke!"
-            [fill]="salesChartOptions.fill!"
-            [colors]="salesChartOptions.colors || []"
-            [grid]="salesChartOptions.grid!"
-            [tooltip]="salesChartOptions.tooltip!"
-            [legend]="salesChartOptions.legend!"
-            ></apx-chart>
-		</article>
-		<article class="panel">
-			<div class="panel-header">
-				<div>
-					<h4>Revenus</h4>
-					<p>Revenus par mois pour les biens vendus</p>
-				</div>
-				<span class="badge-outline">TND</span>
-			</div>
+              [series]="biSalesTrendChart.series"
+              [chart]="biSalesTrendChart.chart"
+              [xaxis]="biSalesTrendChart.xaxis!"
+              [yaxis]="biSalesTrendChart.yaxis!"
+              [dataLabels]="biSalesTrendChart.dataLabels!"
+              [stroke]="biSalesTrendChart.stroke!"
+              [fill]="biSalesTrendChart.fill!"
+              [colors]="biSalesTrendChart.colors || []"
+              [grid]="biSalesTrendChart.grid!"
+              [tooltip]="biSalesTrendChart.tooltip!"
+              [legend]="biSalesTrendChart.legend!">
+            </apx-chart>
+          }
+        </article>
+
+        <article class="db-card">
+          <div class="card-hdr">
+            <div class="card-hdr-text">
+              <h4>Chiffre d'affaires</h4>
+              <p>Revenus générés par mois</p>
+            </div>
+            <span class="badge-pill">TND</span>
+          </div>
+          @if (biRevenueTrendChart) {
             <apx-chart
-            *ngIf="revenueChartOptions"
-            [series]="revenueChartOptions.series"
-            [chart]="revenueChartOptions.chart"
-            [xaxis]="revenueChartOptions.xaxis!"
-            [yaxis]="revenueChartOptions.yaxis!"
-            [dataLabels]="revenueChartOptions.dataLabels!"
-            [plotOptions]="revenueChartOptions.plotOptions!"
-            [colors]="revenueChartOptions.colors || []"
-            [grid]="revenueChartOptions.grid!"
-            [tooltip]="revenueChartOptions.tooltip!"
-            ></apx-chart>
-		</article>
-		<article class="panel">
-			<div class="panel-header">
-				<div>
-					<h4>Types de biens</h4>
-					<p>Repartition du catalogue actuel</p>
-				</div>
-			</div>
+              [series]="biRevenueTrendChart.series"
+              [chart]="biRevenueTrendChart.chart"
+              [xaxis]="biRevenueTrendChart.xaxis!"
+              [yaxis]="biRevenueTrendChart.yaxis!"
+              [dataLabels]="biRevenueTrendChart.dataLabels!"
+              [plotOptions]="biRevenueTrendChart.plotOptions!"
+              [colors]="biRevenueTrendChart.colors || []"
+              [grid]="biRevenueTrendChart.grid!"
+              [tooltip]="biRevenueTrendChart.tooltip!">
+            </apx-chart>
+          }
+        </article>
+
+      </div>
+
+      <!-- ── CHARTS ROW 2 — Villes + Types ──────────────────────────── -->
+      <div class="db-charts-row">
+
+        <article class="db-card">
+          <div class="card-hdr">
+            <div class="card-hdr-text">
+              <h4>Top villes par ventes</h4>
+              <p>Meilleures zones géographiques de transaction</p>
+            </div>
+          </div>
+          @if (biTopCitiesChart && biCities.length) {
             <apx-chart
-            *ngIf="typesChartOptions"
-            [series]="typesChartOptions.series"
-            [chart]="typesChartOptions.chart"
-            [labels]="typesChartOptions.labels || []"
-            [colors]="typesChartOptions.colors || []"
-            [legend]="typesChartOptions.legend!"
-            [dataLabels]="typesChartOptions.dataLabels!"
-            ></apx-chart>
-		</article>
-		<article class="panel">
-			<div class="panel-header">
-				<div>
-					<h4>Statuts des transactions</h4>
-					<p>Pipeline des biens en traitement</p>
-				</div>
-			</div>
+              [series]="biTopCitiesChart.series"
+              [chart]="biTopCitiesChart.chart"
+              [xaxis]="biTopCitiesChart.xaxis!"
+              [plotOptions]="biTopCitiesChart.plotOptions!"
+              [dataLabels]="biTopCitiesChart.dataLabels!"
+              [colors]="biTopCitiesChart.colors || []"
+              [grid]="biTopCitiesChart.grid!"
+              [tooltip]="biTopCitiesChart.tooltip!">
+            </apx-chart>
+          } @else {
+            <div class="empty-state">
+              <i class="fas fa-map-marker-alt"></i>
+              <p>Aucune donnée géographique disponible</p>
+            </div>
+          }
+        </article>
+
+        <article class="db-card">
+          <div class="card-hdr">
+            <div class="card-hdr-text">
+              <h4>Répartition par type</h4>
+              <p>Distribution des biens dans le catalogue</p>
+            </div>
+          </div>
+          @if (biTypesPieChart && biTypes.length) {
             <apx-chart
-            *ngIf="statusChartOptions"
-            [series]="statusChartOptions.series"
-            [chart]="statusChartOptions.chart"
-            [xaxis]="statusChartOptions.xaxis!"
-            [plotOptions]="statusChartOptions.plotOptions!"
-            [colors]="statusChartOptions.colors || []"
-            [grid]="statusChartOptions.grid!"
-            [dataLabels]="statusChartOptions.dataLabels!"
-            ></apx-chart>
-		</article>
-	</section>
+              [series]="biTypesPieChart.series"
+              [chart]="biTypesPieChart.chart"
+              [labels]="biTypesPieChart.labels || []"
+              [colors]="biTypesPieChart.colors || []"
+              [legend]="biTypesPieChart.legend!"
+              [dataLabels]="biTypesPieChart.dataLabels!"
+              [plotOptions]="biTypesPieChart.plotOptions!">
+            </apx-chart>
+          } @else {
+            <div class="empty-state">
+              <i class="fas fa-chart-pie"></i>
+              <p>Aucune donnée de type disponible</p>
+            </div>
+          }
+        </article>
 
-	<section class="activity-grid">
+      </div>
 
-		<!-- Derniers biens ajoutés -->
-		<article class="panel">
-			<div class="panel-header">
-				<div>
-					<h4>Derniers biens ajoutes</h4>
-					<p>Dernieres annonces mises en ligne</p>
-				</div>
-				<a routerLink="/admin/properties" class="link">Voir tout</a>
-			</div>
-			<div class="list" *ngIf="snapshot.recentProperties.length; else emptyRecent">
-				<div class="list-row" *ngFor="let property of snapshot.recentProperties; trackBy: trackById">
-					<div class="list-main">
-						<p class="title">{{ formatPropertyTitle(property) }}</p>
-						<p class="meta">{{ property.city || property.country || '—' }} · {{ formatDate(property.createdAt) }}</p>
-					</div>
-					<span class="pill" [ngClass]="getStatusPillClass(property.statut)">
-						{{ getStatusLabel(property.statut) }}
-					</span>
-				</div>
-			</div>
-		</article>
+      <!-- ── CHARTS ROW 3 — Commissions + Clients ───────────────────── -->
+      <div class="db-charts-row">
 
-		<!-- Dernières ventes -->
-		<article class="panel">
-			<div class="panel-header">
-				<div>
-					<h4>Dernieres ventes</h4>
-					<p>Transactions conclues recemment</p>
-				</div>
-			</div>
-			<div class="list" *ngIf="snapshot.recentSales.length; else emptySales">
-				<div class="list-row" *ngFor="let property of snapshot.recentSales; trackBy: trackById">
-					<div class="list-main">
-						<p class="title">{{ formatPropertyTitle(property) }}</p>
-						<p class="meta">{{ formatCurrency(property.prixVente || 0) }} · {{ formatDate(property.updatedAt) }}</p>
-					</div>
-					<span class="pill pill-sold">Vendu</span>
-				</div>
-			</div>
-		</article>
+        <article class="db-card">
+          <div class="card-hdr">
+            <div class="card-hdr-text">
+              <h4>Commissions affiliés</h4>
+              <p>Évolution des commissions sur 12 mois</p>
+            </div>
+            <span class="badge-pill">TND</span>
+          </div>
+          @if (biCommissionsChart) {
+            <apx-chart
+              [series]="biCommissionsChart.series"
+              [chart]="biCommissionsChart.chart"
+              [xaxis]="biCommissionsChart.xaxis!"
+              [yaxis]="biCommissionsChart.yaxis!"
+              [dataLabels]="biCommissionsChart.dataLabels!"
+              [stroke]="biCommissionsChart.stroke!"
+              [fill]="biCommissionsChart.fill!"
+              [colors]="biCommissionsChart.colors || []"
+              [grid]="biCommissionsChart.grid!"
+              [tooltip]="biCommissionsChart.tooltip!">
+            </apx-chart>
+          }
+        </article>
 
-		<!-- Nouveaux clients -->
-		<article class="panel">
-			<div class="panel-header">
-				<div>
-					<h4>Nouveaux clients</h4>
-					<p>Derniers clients visibles</p>
-				</div>
-			</div>
-			<div class="list" *ngIf="recentClients.length; else emptyClients">
-				<div class="list-row" *ngFor="let client of recentClients">
-					<div class="list-main">
-						<p class="title">{{ client.prenom }} {{ client.nom }}</p>
-						<p class="meta">{{ client.email }} · {{ formatDate(client.createdAt) }}</p>
-					</div>
-					<span class="pill" [ngClass]="getVisibilityBadgeClass(client.visibilityType)">
-						{{ getVisibilityLabel(client.visibilityType) }}
-					</span>
-				</div>
-			</div>
-		</article>
+        <article class="db-card">
+          <div class="card-hdr">
+            <div class="card-hdr-text">
+              <h4>Nouveaux clients</h4>
+              <p>Acquisition mensuelle sur 12 mois</p>
+            </div>
+            <span class="badge-pill">Clients</span>
+          </div>
+          @if (biClientsChart) {
+            <apx-chart
+              [series]="biClientsChart.series"
+              [chart]="biClientsChart.chart"
+              [xaxis]="biClientsChart.xaxis!"
+              [yaxis]="biClientsChart.yaxis!"
+              [dataLabels]="biClientsChart.dataLabels!"
+              [plotOptions]="biClientsChart.plotOptions!"
+              [colors]="biClientsChart.colors || []"
+              [grid]="biClientsChart.grid!"
+              [tooltip]="biClientsChart.tooltip!">
+            </apx-chart>
+          }
+        </article>
 
-		<!-- Nouveaux affiliés -->
-		<article class="panel" *ngIf="recentAffiliates.length">
-			<div class="panel-header">
-				<div>
-					<h4>Nouveaux affilies</h4>
-					<p>Derniers affilies visibles</p>
-				</div>
-			</div>
-			<div class="list">
-				<div class="list-row" *ngFor="let affiliate of recentAffiliates">
-					<div class="list-main">
-						<p class="title">{{ affiliate.prenom }} {{ affiliate.nom }}</p>
-						<p class="meta">{{ affiliate.email }} · {{ formatDate(affiliate.createdAt) }}</p>
-					</div>
-					<span class="pill pill-highlight">Affilie</span>
-				</div>
-			</div>
-		</article>
+      </div>
 
-		<!-- Messages non lus -->
-		<article class="panel msg-panel">
-			<div class="panel-header">
-				<div>
-					<h4>Messages non lus</h4>
-					<p>Boite de reception interne</p>
-				</div>
-				<a routerLink="/admin/messages" class="link">Ouvrir</a>
-			</div>
-			<div class="msg-list" *ngIf="unreadMessages.length; else emptyMessages">
-				<div class="msg-item" *ngFor="let msg of unreadMessages" [class.unread]="!msg.read">
-					<a class="msg-avatar" [routerLink]="['/admin/messages']">
-						{{ msg.senderName ? msg.senderName.charAt(0).toUpperCase() : '?' }}
-					</a>
-					<div class="msg-body">
-						<div class="msg-meta">
-							<span class="msg-sender">{{ msg.senderName }}</span>
-							<span class="msg-role">{{ formatRoleName(msg.senderRole) }}</span>
-							<span class="msg-time">{{ formatDate(msg.createdAt) }}</span>
-						</div>
-						<p class="msg-content">{{ msg.content }}</p>
-					</div>
-					<button class="msg-read-btn" *ngIf="!msg.read" (click)="markMessageRead(msg.id)" title="Marquer comme lu">
-						<i class="fas fa-check"></i>
-					</button>
-				</div>
-			</div>
-			<ng-template #emptyMessages>
-				<div class="empty">Aucun message non lu.</div>
-			</ng-template>
-		</article>
+      <!-- ── RANKINGS ──────────────────────────────────────────────── -->
+      <div class="db-rankings-row">
 
-		<!-- Contrats à renouveler -->
-		<article class="panel renewal-panel">
-			<div class="panel-header">
-				<div>
-					<h4>Contrats a renouveler</h4>
-					<p>Locations dont le bail est expire</p>
-				</div>
-				<a routerLink="/admin/properties" class="link">Gerer</a>
-			</div>
-			<div class="list" *ngIf="expiredRentals.length; else emptyRenewals">
-				<div class="list-row renewal-row" *ngFor="let r of expiredRentals">
-					<div class="renewal-icon"><i class="fas fa-calendar-times"></i></div>
-					<div class="list-main">
-						<p class="title">{{ r.titre }}</p>
-						<p class="meta">
-							{{ r.city || r.country || '—' }} ·
-							Expiré le {{ formatDate(r.rentalEndDate) }}
-						</p>
-					</div>
-					<span class="pill pill-pending">Expiré</span>
-				</div>
-			</div>
-			<ng-template #emptyRenewals>
-				<div class="empty">Aucun contrat expiré.</div>
-			</ng-template>
-		</article>
+        <!-- Classement agences — SUPER_ADMIN uniquement -->
+        @if (isSuperAdmin) {
+          <article class="db-card">
+            <div class="card-hdr">
+              <div class="card-hdr-text">
+                <h4>Classement des agences</h4>
+                <p>Performance par CA et transactions</p>
+              </div>
+              <a routerLink="/admin/agents" class="card-link">Gérer</a>
+            </div>
+            @if (biAgencies.length) {
+              <div class="rank-table-wrap">
+                <table class="rank-table">
+                  <thead>
+                    <tr>
+                      <th class="col-rank">#</th>
+                      <th>Agence</th>
+                      <th class="text-right">Ventes</th>
+                      <th class="text-right">CA</th>
+                      <th class="text-right">Commissions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (ag of biAgencies; track ag.rank) {
+                      <tr>
+                        <td class="col-rank">
+                          <span class="medal" [ngClass]="biMedalClass(ag.rank)">
+                            @if (ag.rank <= 3) { <i class="fas fa-medal"></i> }
+                            @else { {{ ag.rank }} }
+                          </span>
+                        </td>
+                        <td>
+                          <div class="rank-identity">
+                            <div class="rank-avatar">{{ biInitials(ag.agencyName) }}</div>
+                            <div>
+                              <p class="rank-name">{{ ag.agencyName }}</p>
+                              <p class="rank-meta">{{ ag.email }}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td class="text-right">
+                          <span class="count-badge">{{ ag.propertiesSold }}</span>
+                        </td>
+                        <td class="text-right revenue-cell">{{ compactNum(ag.revenue) }}</td>
+                        <td class="text-right comm-cell">{{ compactNum(ag.commissions) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            } @else {
+              <div class="empty-state"><i class="fas fa-building"></i><p>Aucune donnée d'agence</p></div>
+            }
+          </article>
+        }
 
-		<!-- Validations rapides -->
-		<article class="panel validation-panel">
-			<div class="panel-header">
-				<div>
-					<h4>Validations rapides</h4>
-					<p *ngIf="currentUserRole === 'SUPER_ADMIN'">Biens recents des agences</p>
-					<p *ngIf="currentUserRole !== 'SUPER_ADMIN'">Biens recents visibles</p>
-				</div>
-				<a routerLink="/admin/properties" class="link">Voir tout</a>
-			</div>
-			<div class="validation-list" *ngIf="validationItems.length; else emptyValidations">
-				<div class="validation-row" *ngFor="let item of validationItems">
-					<div class="val-info">
-						<p class="title">{{ item.titre }}</p>
-						<p class="meta">
-							{{ item.city || '—' }} ·
-							<span [ngClass]="getValidationClass(item)">{{ getValidationLabel(item) }}</span>
-						</p>
-					</div>
-					<div class="val-actions">
-						<span class="pill" [ngClass]="getStatusPillClass(item.statut)">{{ getStatusLabel(item.statut) }}</span>
-						<!-- SUPER_ADMIN: send message to agency admin -->
-						<button
-							*ngIf="currentUserRole === 'SUPER_ADMIN' && item.agencyAdminId"
-							class="val-btn val-btn-msg"
-							(click)="openSendMsg(item.agencyAdminId || 0, item.agencyAdminName || 'Agence')"
-							title="Envoyer un message a l'agence">
-							<i class="fas fa-envelope"></i>
-						</button>
-						<!-- ADMIN: link to property details/edit for AGENCY_OWNED only -->
-						<a
-							*ngIf="currentUserRole === 'ADMIN' && item.ownerType !== 'SUPER_ADMIN_OWNED'"
-							[routerLink]="['/admin/properties', item.id]"
-							class="val-btn val-btn-edit"
-							title="Voir / Modifier">
-							<i class="fas fa-pencil-alt"></i>
-						</a>
-						<!-- ADMIN: view-only for SUPER_ADMIN_OWNED shared properties -->
-						<a
-							*ngIf="currentUserRole === 'ADMIN' && item.ownerType === 'SUPER_ADMIN_OWNED'"
-							[routerLink]="['/admin/properties', item.id]"
-							class="val-btn val-btn-view"
-							title="Consulter">
-							<i class="fas fa-eye"></i>
-						</a>
-					</div>
-				</div>
-			</div>
-			<ng-template #emptyValidations>
-				<div class="empty">Aucun bien a valider.</div>
-			</ng-template>
-		</article>
+        <!-- Top affiliés -->
+        <article class="db-card">
+          <div class="card-hdr">
+            <div class="card-hdr-text">
+              <h4>Top affiliés</h4>
+              <p>Classement par commissions et ventes conclues</p>
+            </div>
+            <a routerLink="/admin/affiliate-ranking" class="card-link">Voir tout</a>
+          </div>
+          @if (biAffiliates.length) {
+            <div class="aff-rank-list">
+              @for (af of biAffiliates; track af.rank) {
+                <div class="aff-rank-row">
+                  <span class="medal" [ngClass]="biMedalClass(af.rank)">
+                    @if (af.rank <= 3) { <i class="fas fa-medal"></i> }
+                    @else { {{ af.rank }} }
+                  </span>
+                  <div class="rank-avatar rank-avatar-purple">{{ biInitials(af.name) }}</div>
+                  <div class="aff-rank-info">
+                    <p class="rank-name">{{ af.name }}</p>
+                    <div class="progress-row">
+                      <div class="progress-bar">
+                        <div class="progress-fill"
+                          [style.width.%]="biBarWidth(af.totalCommissions, maxAffCommission)">
+                        </div>
+                      </div>
+                      <span class="progress-val">{{ compactNum(af.totalCommissions) }} TND</span>
+                    </div>
+                  </div>
+                  <div class="aff-sales-col">
+                    <span class="count-badge count-badge-green">{{ af.salesCompleted }}</span>
+                    <p class="aff-sales-lbl">ventes</p>
+                  </div>
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="empty-state"><i class="fas fa-user-tie"></i><p>Aucun affilié avec des transactions</p></div>
+          }
+        </article>
 
-	</section>
+      </div>
 
-	<!-- Send Message Modal -->
-	<div class="modal-backdrop" *ngIf="showSendMsgModal" (click)="closeSendMsg()"></div>
-	<div class="send-msg-modal" *ngIf="showSendMsgModal">
-		<div class="send-msg-header">
-			<h4>Envoyer un message</h4>
-			<button class="close-btn" (click)="closeSendMsg()"><i class="fas fa-times"></i></button>
-		</div>
-		<p class="send-msg-to">A : <strong>{{ sendMsgReceiverName }}</strong></p>
-		<textarea
-			class="send-msg-textarea"
-			placeholder="Votre message..."
-			[(ngModel)]="sendMsgContent"
-			rows="4"
-			maxlength="2000">
-		</textarea>
-		<p class="send-msg-error" *ngIf="sendMsgError">{{ sendMsgError }}</p>
-		<div class="send-msg-footer">
-			<button class="ghost-btn" (click)="closeSendMsg()">Annuler</button>
-			<button class="primary-btn" (click)="submitSendMsg()" [disabled]="sendMsgLoading || !sendMsgContent.trim()">
-				<i class="fas fa-paper-plane"></i>
-				{{ sendMsgLoading ? 'Envoi...' : 'Envoyer' }}
-			</button>
-		</div>
-	</div>
+      <!-- ── INSIGHTS INTELLIGENTS ──────────────────────────────────── -->
+      @if (biInsights.length) {
+        <div class="db-insights-wrap">
+          <div class="section-mini-hdr">
+            <i class="fas fa-lightbulb"></i>
+            <span>Insights intelligents</span>
+            <p>Recommandations automatiques basées sur vos données</p>
+          </div>
+          <div class="insights-grid">
+            @for (ins of biInsights; track $index) {
+              <div class="insight-card" [ngClass]="biInsightClass(ins.type)">
+                <div class="insight-icon"><i class="fas" [ngClass]="ins.icon"></i></div>
+                <div class="insight-body">
+                  <p class="insight-title">{{ ins.title }}</p>
+                  <p class="insight-msg">{{ ins.message }}</p>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
 
-	<ng-template #emptyRecent>
-		<div class="empty">Aucun bien recent.</div>
-	</ng-template>
-	<ng-template #emptySales>
-		<div class="empty">Aucune vente recente.</div>
-	</ng-template>
-	<ng-template #emptyClients>
-		<div class="empty">Aucun client recent visible.</div>
-	</ng-template>
+    } <!-- /!biLoading && biKpis -->
+  } <!-- /isBiRole -->
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       ACTIVITÉ RÉCENTE & GESTION RAPIDE
+       ══════════════════════════════════════════════════════════════════ -->
+  <div class="activity-divider">
+    <div class="activity-divider-line"></div>
+    <div class="activity-divider-label">
+      <i class="fas fa-clock"></i>
+      Activité récente &amp; Gestion rapide
+    </div>
+    <div class="activity-divider-line"></div>
+  </div>
+
+  <div class="activity-grid">
+
+    <!-- Derniers biens ajoutés -->
+    <article class="db-card">
+      <div class="card-hdr">
+        <div class="card-hdr-text">
+          <span class="card-icon card-icon-blue"><i class="fas fa-home"></i></span>
+          <h4>Derniers biens ajoutés</h4>
+        </div>
+        <a routerLink="/admin/properties" class="card-link">Voir tout</a>
+      </div>
+      @if (snapshot!.recentProperties.length) {
+        <div class="act-list">
+          @for (p of snapshot!.recentProperties; track p.id) {
+            <div class="act-row">
+              <div class="act-info">
+                <p class="act-title">{{ formatPropertyTitle(p) }}</p>
+                <p class="act-meta">{{ p.city || p.country || '—' }} · {{ formatDate(p.createdAt) }}</p>
+              </div>
+              <span class="pill" [ngClass]="getStatusPillClass(p.statut)">
+                {{ getStatusLabel(p.statut) }}
+              </span>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="empty-act"><i class="fas fa-home"></i><span>Aucun bien récent</span></div>
+      }
+    </article>
+
+    <!-- Dernières ventes -->
+    <article class="db-card">
+      <div class="card-hdr">
+        <div class="card-hdr-text">
+          <span class="card-icon card-icon-green"><i class="fas fa-handshake"></i></span>
+          <h4>Dernières ventes</h4>
+        </div>
+      </div>
+      @if (snapshot!.recentSales.length) {
+        <div class="act-list">
+          @for (p of snapshot!.recentSales; track p.id) {
+            <div class="act-row">
+              <div class="act-info">
+                <p class="act-title">{{ formatPropertyTitle(p) }}</p>
+                <p class="act-meta">{{ formatCurrency(p.prixVente || 0) }} · {{ formatDate(p.updatedAt) }}</p>
+              </div>
+              <span class="pill pill-sold">Vendu</span>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="empty-act"><i class="fas fa-handshake"></i><span>Aucune vente récente</span></div>
+      }
+    </article>
+
+    <!-- Nouveaux clients -->
+    <article class="db-card">
+      <div class="card-hdr">
+        <div class="card-hdr-text">
+          <span class="card-icon card-icon-purple"><i class="fas fa-users"></i></span>
+          <h4>Nouveaux clients</h4>
+        </div>
+      </div>
+      @if (recentClients.length) {
+        <div class="act-list">
+          @for (c of recentClients; track $index) {
+            <div class="act-row">
+              <div class="act-info">
+                <p class="act-title">{{ c.prenom }} {{ c.nom }}</p>
+                <p class="act-meta">{{ c.email }} · {{ formatDate(c.createdAt) }}</p>
+              </div>
+              <span class="pill" [ngClass]="getVisibilityBadgeClass(c.visibilityType)">
+                {{ getVisibilityLabel(c.visibilityType) }}
+              </span>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="empty-act"><i class="fas fa-users"></i><span>Aucun client récent</span></div>
+      }
+    </article>
+
+    <!-- Nouveaux affiliés -->
+    @if (recentAffiliates.length) {
+      <article class="db-card">
+        <div class="card-hdr">
+          <div class="card-hdr-text">
+            <span class="card-icon card-icon-indigo"><i class="fas fa-user-tie"></i></span>
+            <h4>Nouveaux affiliés</h4>
+          </div>
+        </div>
+        <div class="act-list">
+          @for (a of recentAffiliates; track $index) {
+            <div class="act-row">
+              <div class="act-info">
+                <p class="act-title">{{ a.prenom }} {{ a.nom }}</p>
+                <p class="act-meta">{{ a.email }} · {{ formatDate(a.createdAt) }}</p>
+              </div>
+              <span class="pill pill-highlight">Affilié</span>
+            </div>
+          }
+        </div>
+      </article>
+    }
+
+    <!-- Messages non lus -->
+    <article class="db-card">
+      <div class="card-hdr">
+        <div class="card-hdr-text">
+          <span class="card-icon card-icon-amber"><i class="fas fa-envelope"></i></span>
+          <h4>
+            Messages non lus
+            @if (unreadCount) { <span class="unread-badge">{{ unreadCount }}</span> }
+          </h4>
+        </div>
+        <a routerLink="/admin/messages" class="card-link">Ouvrir</a>
+      </div>
+      @if (unreadMessages.length) {
+        <div class="msg-list">
+          @for (msg of unreadMessages; track msg.id) {
+            <div class="msg-item" [class.msg-unread]="!msg.read">
+              <a class="msg-avatar" [routerLink]="['/admin/messages']">
+                {{ msg.senderName ? msg.senderName.charAt(0).toUpperCase() : '?' }}
+              </a>
+              <div class="msg-body">
+                <div class="msg-meta">
+                  <span class="msg-sender">{{ msg.senderName }}</span>
+                  <span class="msg-role">{{ formatRoleName(msg.senderRole) }}</span>
+                  <span class="msg-time">{{ formatDate(msg.createdAt) }}</span>
+                </div>
+                <p class="msg-content">{{ msg.content }}</p>
+              </div>
+              @if (!msg.read) {
+                <button class="msg-read-btn" (click)="markMessageRead(msg.id)" title="Marquer comme lu">
+                  <i class="fas fa-check"></i>
+                </button>
+              }
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="empty-act"><i class="fas fa-envelope-open"></i><span>Aucun message non lu</span></div>
+      }
+    </article>
+
+    <!-- Contrats à renouveler -->
+    <article class="db-card">
+      <div class="card-hdr">
+        <div class="card-hdr-text">
+          <span class="card-icon card-icon-orange"><i class="fas fa-calendar-times"></i></span>
+          <h4>Contrats à renouveler</h4>
+        </div>
+        <a routerLink="/admin/properties" class="card-link">Gérer</a>
+      </div>
+      @if (expiredRentals.length) {
+        <div class="act-list">
+          @for (r of expiredRentals; track $index) {
+            <div class="act-row renewal-row">
+              <div class="renewal-icon"><i class="fas fa-calendar-times"></i></div>
+              <div class="act-info">
+                <p class="act-title">{{ r.titre }}</p>
+                <p class="act-meta">{{ r.city || r.country || '—' }} · Exp. {{ formatDate(r.rentalEndDate) }}</p>
+              </div>
+              <span class="pill pill-pending">Expiré</span>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="empty-act"><i class="fas fa-calendar-check"></i><span>Aucun contrat expiré</span></div>
+      }
+    </article>
+
+    <!-- Validations rapides -->
+    <article class="db-card val-card">
+      <div class="card-hdr">
+        <div class="card-hdr-text">
+          <span class="card-icon card-icon-teal"><i class="fas fa-tasks"></i></span>
+          <div>
+            <h4>Validations rapides</h4>
+            @if (currentUserRole === 'SUPER_ADMIN') {
+              <p>Biens récents des agences</p>
+            } @else {
+              <p>Biens récents visibles</p>
+            }
+          </div>
+        </div>
+        <a routerLink="/admin/properties" class="card-link">Voir tout</a>
+      </div>
+      @if (validationItems.length) {
+        <div class="val-list">
+          @for (item of validationItems; track $index) {
+            <div class="val-row">
+              <div class="val-info">
+                <p class="act-title">{{ item.titre }}</p>
+                <p class="act-meta">
+                  {{ item.city || '—' }} ·
+                  <span [ngClass]="getValidationClass(item)">{{ getValidationLabel(item) }}</span>
+                </p>
+              </div>
+              <div class="val-actions">
+                <span class="pill" [ngClass]="getStatusPillClass(item.statut)">
+                  {{ getStatusLabel(item.statut) }}
+                </span>
+                @if (currentUserRole === 'SUPER_ADMIN' && item.agencyAdminId) {
+                  <button class="icon-btn icon-btn-blue"
+                    (click)="openSendMsg(item.agencyAdminId || 0, item.agencyAdminName || 'Agence')"
+                    title="Envoyer un message">
+                    <i class="fas fa-envelope"></i>
+                  </button>
+                }
+                @if (currentUserRole === 'ADMIN' && item.ownerType !== 'SUPER_ADMIN_OWNED') {
+                  <a [routerLink]="['/admin/properties', item.id]"
+                    class="icon-btn icon-btn-amber" title="Modifier">
+                    <i class="fas fa-pencil-alt"></i>
+                  </a>
+                }
+                @if (currentUserRole === 'ADMIN' && item.ownerType === 'SUPER_ADMIN_OWNED') {
+                  <a [routerLink]="['/admin/properties', item.id]"
+                    class="icon-btn icon-btn-slate" title="Consulter">
+                    <i class="fas fa-eye"></i>
+                  </a>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      } @else {
+        <div class="empty-act"><i class="fas fa-check-circle"></i><span>Aucun bien à valider</span></div>
+      }
+    </article>
+
+  </div><!-- /activity-grid -->
+
+  <!-- ── SEND MESSAGE MODAL ────────────────────────────────────────── -->
+  @if (showSendMsgModal) {
+    <div class="modal-backdrop" (click)="closeSendMsg()"></div>
+    <div class="send-modal">
+      <div class="send-modal-hdr">
+        <h4>Envoyer un message</h4>
+        <button class="close-btn" (click)="closeSendMsg()"><i class="fas fa-times"></i></button>
+      </div>
+      <p class="send-modal-to">À : <strong>{{ sendMsgReceiverName }}</strong></p>
+      <textarea class="send-modal-textarea" placeholder="Votre message..."
+        [(ngModel)]="sendMsgContent" rows="4" maxlength="2000">
+      </textarea>
+      @if (sendMsgError) {
+        <p class="send-modal-error">{{ sendMsgError }}</p>
+      }
+      <div class="send-modal-footer">
+        <button class="btn-ghost" (click)="closeSendMsg()">Annuler</button>
+        <button class="btn-primary" (click)="submitSendMsg()"
+          [disabled]="sendMsgLoading || !sendMsgContent.trim()">
+          <i class="fas fa-paper-plane"></i>
+          {{ sendMsgLoading ? 'Envoi...' : 'Envoyer' }}
+        </button>
+      </div>
+    </div>
+  }
+
+</section><!-- /db -->
+
+} @else {
+
+<!-- ── LOADING STATE ─────────────────────────────────────────────── -->
+<section class="db db-loading">
+  <div class="sk-header">
+    <div class="sk-line sk-w200 sk-h24"></div>
+    <div class="sk-line sk-w300 sk-mt8"></div>
+  </div>
+  <div class="db-kpi-grid">
+    @for (x of [1,2,3,4,5,6,7,8]; track $index) {
+      <div class="sk-kpi-card">
+        <div class="sk-icon"></div>
+        <div class="sk-body">
+          <div class="sk-line sk-w60"></div>
+          <div class="sk-line sk-w40 sk-h20 sk-mt8"></div>
+        </div>
+      </div>
+    }
+  </div>
+  <div class="db-charts-row">
+    <div class="sk-chart-panel"></div>
+    <div class="sk-chart-panel"></div>
+  </div>
+  @if (errorMessage) {
+    <p class="error-msg">{{ errorMessage }}</p>
+  }
 </section>
 
-<ng-template #loadingState>
-	<section class="dashboard loading">
-		<div class="loading-card" *ngFor="let item of [1,2,3,4,5,6]">
-			<div class="loading-line"></div>
-			<div class="loading-line short"></div>
-		</div>
-		<p *ngIf="errorMessage" class="error">{{ errorMessage }}</p>
-	</section>
-</ng-template>
+}

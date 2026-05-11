@@ -64,8 +64,8 @@ public class ClientPublicAuthService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
 
-        if (user.getRole() != RoleType.CLIENT_PUBLIC) {
-            throw new RuntimeException("Cet espace est réservé aux clients publics. Utilisez le portail Pro.");
+        if (user.getRole() != RoleType.CLIENT_PUBLIC && user.getRole() != RoleType.CLIENT) {
+            throw new RuntimeException("Cet espace est réservé aux clients. Utilisez le portail Pro.");
         }
         if (Boolean.FALSE.equals(user.getIsActive())) {
             throw new RuntimeException("Compte désactivé");

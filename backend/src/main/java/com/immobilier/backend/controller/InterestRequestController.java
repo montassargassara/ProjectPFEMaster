@@ -20,13 +20,13 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/client/interests")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('CLIENT_PUBLIC')")
 public class InterestRequestController {
 
     private final InterestRequestService interestRequestService;
     private final SecurityUtils securityUtils;
 
     @PostMapping
+    @PreAuthorize("hasRole('CLIENT_PUBLIC')")
     public ResponseEntity<?> submit(@Valid @RequestBody InterestRequestCreateRequest request) {
         try {
             User user = securityUtils.getCurrentUser();
@@ -42,8 +42,10 @@ public class InterestRequestController {
     }
 
     @GetMapping("/mine")
+    @PreAuthorize("hasRole('CLIENT_PUBLIC')")
     public ResponseEntity<List<InterestRequestDTO>> mine() {
         User user = securityUtils.getCurrentUser();
         return ResponseEntity.ok(interestRequestService.myInterests(user));
     }
+
 }

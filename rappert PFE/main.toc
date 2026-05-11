@@ -1,36 +1,72 @@
 \babel@toc {french}{}\relax 
-\contentsline {chapter}{\numberline {1}Cadre général du projet}{4}{}%
-\contentsline {section}{Introduction}{4}{}%
-\contentsline {section}{\numberline {1.1}Présentation de l'organisme d'accueil}{4}{}%
-\contentsline {subsection}{\numberline {1.1.1}Présentation générale de We Are Tech}{4}{}%
-\contentsline {subsection}{\numberline {1.1.2}Services de la société}{5}{}%
-\contentsline {subsubsection}{Développement web et mobile}{5}{}%
-\contentsline {subsubsection}{Marketing digital}{5}{}%
-\contentsline {subsubsection}{Optimisation SEO}{5}{}%
-\contentsline {subsubsection}{Création de contenu}{5}{}%
-\contentsline {subsection}{\numberline {1.1.3}Structure des équipes}{5}{}%
-\contentsline {section}{\numberline {1.2}Étude de l'existant}{6}{}%
-\contentsline {subsection}{\numberline {1.2.1}Analyse des solutions actuelles}{6}{}%
-\contentsline {subsubsection}{Gestion manuelle par tableurs et documents papier}{6}{}%
-\contentsline {subsubsection}{Logiciels de gestion immobilière propriétaires}{6}{}%
-\contentsline {subsubsection}{Plateformes d'annonces immobilières en ligne}{6}{}%
-\contentsline {subsection}{\numberline {1.2.2}Étude concurrentielle}{6}{}%
-\contentsline {subsection}{\numberline {1.2.3}Critique de l'existant}{7}{}%
-\contentsline {section}{\numberline {1.3}Méthodologie de développement}{7}{}%
-\contentsline {subsection}{\numberline {1.3.1}Présentation de la méthodologie Agile}{7}{}%
-\contentsline {subsection}{\numberline {1.3.2}Méthodologie Scrum}{8}{}%
-\contentsline {subsubsection}{Les rôles Scrum}{8}{}%
-\contentsline {subsubsection}{Les artefacts Scrum}{8}{}%
-\contentsline {subsection}{\numberline {1.3.3}Modélisation UML}{9}{}%
-\contentsline {subsubsection}{Sélection des diagrammes UML adaptés aux processus agiles}{9}{}%
-\contentsline {section}{\numberline {1.4}Problématique}{9}{}%
-\contentsline {section}{\numberline {1.5}Spécifications des besoins}{9}{}%
-\contentsline {subsection}{\numberline {1.5.1}Identification des acteurs}{9}{}%
-\contentsline {subsection}{\numberline {1.5.2}Besoins fonctionnels}{10}{}%
-\contentsline {subsubsection}{Module de gestion des biens}{10}{}%
-\contentsline {subsubsection}{Module d'affiliation}{10}{}%
-\contentsline {subsection}{\numberline {1.5.3}Besoins non fonctionnels}{10}{}%
-\contentsline {subsubsection}{Sécurité}{10}{}%
-\contentsline {subsubsection}{Performance}{10}{}%
-\contentsline {subsubsection}{Évolutivité et maintenabilité}{10}{}%
-\contentsline {section}{Conclusion}{10}{}%
+\contentsline {chapter}{Remerciements}{1}{}%
+\contentsline {chapter}{Introduction générale}{6}{}%
+\contentsline {chapter}{\numberline {1}Présentation générale du projet}{7}{}%
+\contentsline {section}{\numberline {1.1}Introduction}{7}{}%
+\contentsline {section}{\numberline {1.2}Présentation de l'organisme d'accueil}{7}{}%
+\contentsline {section}{\numberline {1.3}Présentation du projet}{8}{}%
+\contentsline {section}{\numberline {1.4}Étude de l'existant}{8}{}%
+\contentsline {subsection}{\numberline {1.4.1}Analyse de l'existant}{8}{}%
+\contentsline {subsubsection}{Plateforme Properstar}{9}{}%
+\contentsline {subsubsection}{Plateforme Mubawab}{9}{}%
+\contentsline {subsubsection}{Gestion manuelle}{10}{}%
+\contentsline {subsection}{\numberline {1.4.2}Critique de l'existant}{10}{}%
+\contentsline {section}{\numberline {1.5}Solution proposée}{10}{}%
+\contentsline {section}{\numberline {1.6}Méthodologie de développement}{11}{}%
+\contentsline {subsection}{\numberline {1.6.1}Choix de la méthodologie}{11}{}%
+\contentsline {subsection}{\numberline {1.6.2}L'équipe SCRUM}{11}{}%
+\contentsline {section}{\numberline {1.7}Conclusion}{12}{}%
+\contentsline {chapter}{\numberline {2}Initiation du projet et étude technique}{13}{}%
+\contentsline {section}{\numberline {2.1}Introduction}{13}{}%
+\contentsline {section}{\numberline {2.2}Objectifs du projet}{13}{}%
+\contentsline {subsection}{\numberline {2.2.1}Objectif principal}{13}{}%
+\contentsline {subsection}{\numberline {2.2.2}Objectifs spécifiques}{13}{}%
+\contentsline {subsubsection}{Axe organisationnel}{13}{}%
+\contentsline {subsubsection}{Axe commercial}{14}{}%
+\contentsline {subsubsection}{Axe technique}{14}{}%
+\contentsline {section}{\numberline {2.3}Identification des acteurs du système}{14}{}%
+\contentsline {section}{\numberline {2.4}Description détaillée des acteurs}{15}{}%
+\contentsline {subsection}{\numberline {2.4.1}SUPER\_ADMIN}{15}{}%
+\contentsline {subsection}{\numberline {2.4.2}ADMIN}{15}{}%
+\contentsline {subsection}{\numberline {2.4.3}RESPONSABLE\_COMMERCIAL}{16}{}%
+\contentsline {subsection}{\numberline {2.4.4}COMMERCIAL}{16}{}%
+\contentsline {subsection}{\numberline {2.4.5}AFFILIATE}{16}{}%
+\contentsline {subsection}{\numberline {2.4.6}CLIENT\_PUBLIC}{17}{}%
+\contentsline {section}{\numberline {2.5}Besoins fonctionnels}{17}{}%
+\contentsline {subsection}{\numberline {2.5.1}Module Authentification et Sécurité}{17}{}%
+\contentsline {subsection}{\numberline {2.5.2}Module Gestion des Agences}{17}{}%
+\contentsline {subsection}{\numberline {2.5.3}Module Gestion des Biens Immobiliers}{18}{}%
+\contentsline {subsection}{\numberline {2.5.4}Module Gestion des Transactions}{19}{}%
+\contentsline {subsection}{\numberline {2.5.5}Module Messagerie Interne}{19}{}%
+\contentsline {subsection}{\numberline {2.5.6}Module Gestion des Affiliés}{19}{}%
+\contentsline {subsection}{\numberline {2.5.7}Module Dashboard Intelligent}{20}{}%
+\contentsline {section}{\numberline {2.6}Besoins non fonctionnels}{20}{}%
+\contentsline {subsection}{\numberline {2.6.1}Sécurité}{20}{}%
+\contentsline {subsection}{\numberline {2.6.2}Performance}{21}{}%
+\contentsline {subsection}{\numberline {2.6.3}Disponibilité et Fiabilité}{21}{}%
+\contentsline {subsection}{\numberline {2.6.4}Ergonomie et Accessibilité}{21}{}%
+\contentsline {subsection}{\numberline {2.6.5}Maintenabilité et Évolutivité}{21}{}%
+\contentsline {section}{\numberline {2.7}Architecture générale du système}{22}{}%
+\contentsline {subsection}{\numberline {2.7.1}Vue d'ensemble}{22}{}%
+\contentsline {subsection}{\numberline {2.7.2}Flux de communication}{22}{}%
+\contentsline {section}{\numberline {2.8}Architecture technique détaillée}{23}{}%
+\contentsline {subsection}{\numberline {2.8.1}Architecture Backend}{23}{}%
+\contentsline {subsection}{\numberline {2.8.2}Architecture Frontend}{23}{}%
+\contentsline {section}{\numberline {2.9}Choix technologiques}{23}{}%
+\contentsline {subsection}{\numberline {2.9.1}Frontend : Angular 21}{23}{}%
+\contentsline {subsection}{\numberline {2.9.2}Backend : Spring Boot 3.2}{24}{}%
+\contentsline {subsection}{\numberline {2.9.3}Base de données : MySQL 8.0}{24}{}%
+\contentsline {subsection}{\numberline {2.9.4}Authentification : JSON Web Token (JWT)}{25}{}%
+\contentsline {subsection}{\numberline {2.9.5}Infrastructure : Docker et GitHub}{25}{}%
+\contentsline {section}{\numberline {2.10}Modélisation UML du système}{26}{}%
+\contentsline {subsection}{\numberline {2.10.1}Diagramme de cas d'utilisation global}{26}{}%
+\contentsline {subsection}{\numberline {2.10.2}Diagramme de cas d'utilisation — Module Authentification}{28}{}%
+\contentsline {subsection}{\numberline {2.10.3}Diagramme de cas d'utilisation — Module Gestion des Biens}{28}{}%
+\contentsline {subsection}{\numberline {2.10.4}Diagramme de classes}{29}{}%
+\contentsline {subsection}{\numberline {2.10.5}Diagramme de séquence — Authentification JWT}{31}{}%
+\contentsline {subsection}{\numberline {2.10.6}Diagramme de séquence — Changement de statut d'un bien}{31}{}%
+\contentsline {subsection}{\numberline {2.10.7}Diagramme de séquence — Cycle de vie d'une offre affilié}{32}{}%
+\contentsline {subsection}{\numberline {2.10.8}Diagramme d'activités — Ajout et validation d'un bien immobilier}{33}{}%
+\contentsline {subsection}{\numberline {2.10.9}Diagramme de déploiement}{35}{}%
+\contentsline {subsection}{\numberline {2.10.10}Diagramme de composants}{35}{}%
+\contentsline {section}{\numberline {2.11}Conclusion}{35}{}%

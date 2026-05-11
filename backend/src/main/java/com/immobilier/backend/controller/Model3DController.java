@@ -188,17 +188,18 @@ public class Model3DController {
             }
             
             String contentType = file.getContentType();
-            String fileName = file.getOriginalFilename();
-            if (contentType == null || 
-                (!contentType.contains("gltf") && !contentType.contains("glb") && 
-                 !contentType.contains("obj") && !contentType.contains("fbx") &&
-                 !fileName.toLowerCase().endsWith(".gltf") && 
-                 !fileName.toLowerCase().endsWith(".glb") &&
-                 !fileName.toLowerCase().endsWith(".obj") && 
-                 !fileName.toLowerCase().endsWith(".fbx"))) {
+            String fileName = file.getOriginalFilename() != null ? file.getOriginalFilename().toLowerCase() : "";
+            boolean validExtension = fileName.endsWith(".glb") || fileName.endsWith(".gltf")
+                    || fileName.endsWith(".obj") || fileName.endsWith(".fbx") || fileName.endsWith(".ply");
+            boolean validMime = contentType != null && (
+                    contentType.contains("gltf") || contentType.contains("glb")
+                    || contentType.contains("obj") || contentType.contains("fbx")
+                    || contentType.contains("ply") || contentType.contains("model")
+                    || contentType.equals("application/octet-stream"));
+            if (!validExtension && !validMime) {
                 Map<String, String> error = new HashMap<>();
-                error.put("error", "Invalid file type. Only 3D model files are allowed.");
-                error.put("supported", "GLTF, GLB, OBJ, FBX");
+                error.put("error", "Format non supporté. Formats acceptés : GLB, GLTF, OBJ, FBX, PLY");
+                error.put("supported", "GLB, GLTF, OBJ, FBX, PLY");
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
             }
             

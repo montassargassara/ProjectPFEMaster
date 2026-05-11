@@ -1,6 +1,7 @@
 package com.immobilier.backend.service;
 
 import com.immobilier.backend.dto.ImageDTO;
+import com.immobilier.backend.dto.Model3DDTO;
 import com.immobilier.backend.dto.PublicPropertyCardDTO;
 import com.immobilier.backend.dto.PublicPropertyDetailDTO;
 import com.immobilier.backend.dto.VideoDTO;
@@ -37,6 +38,7 @@ public class PublicPortalService {
     private final PropertyRepository propertyRepository;
     private final ImageService imageService;
     private final VideoService videoService;
+    private final Model3DService model3DService;
 
     public List<PublicPropertyCardDTO> listForSale(PublicSearchFilters filters) {
         return browsable()
@@ -208,6 +210,15 @@ public class PublicPortalService {
         dto.setPrixLocation(p.getPrixLocation());
         dto.setSurface(p.getSurface());
         dto.setNbChambres(p.getNbChambres());
+        dto.setNbSallesDeBain(p.getNbSallesDeBain());
+        dto.setGarage(Boolean.TRUE.equals(p.getGarage()));
+        dto.setPiscine(Boolean.TRUE.equals(p.getPiscine()));
+        dto.setJardin(Boolean.TRUE.equals(p.getJardin()));
+        dto.setMeuble(Boolean.TRUE.equals(p.getMeuble()));
+        dto.setEtage(p.getEtage());
+        dto.setParkingSpaces(p.getParkingSpaces());
+        dto.setClimatisation(Boolean.TRUE.equals(p.getClimatisation()));
+        dto.setSecurite(Boolean.TRUE.equals(p.getSecurite()));
         dto.setCity(p.getCity());
         dto.setCountry(p.getCountry());
         dto.setRegion(p.getRegion());
@@ -236,6 +247,18 @@ public class PublicPortalService {
         dto.setPrixLocation(p.getPrixLocation());
         dto.setSurface(p.getSurface());
         dto.setNbChambres(p.getNbChambres());
+        dto.setNbSallesDeBain(p.getNbSallesDeBain());
+        dto.setGarage(Boolean.TRUE.equals(p.getGarage()));
+        dto.setPiscine(Boolean.TRUE.equals(p.getPiscine()));
+        dto.setJardin(Boolean.TRUE.equals(p.getJardin()));
+        dto.setMeuble(Boolean.TRUE.equals(p.getMeuble()));
+        dto.setEtage(p.getEtage());
+        dto.setParkingSpaces(p.getParkingSpaces());
+        dto.setAnneeConstruction(p.getAnneeConstruction());
+        dto.setProchePlage(Boolean.TRUE.equals(p.getProchePlage()));
+        dto.setProcheTransport(Boolean.TRUE.equals(p.getProcheTransport()));
+        dto.setSecurite(Boolean.TRUE.equals(p.getSecurite()));
+        dto.setClimatisation(Boolean.TRUE.equals(p.getClimatisation()));
         dto.setAdresse(p.getAdresse());
         dto.setCity(p.getCity());
         dto.setCountry(p.getCountry());
@@ -265,6 +288,12 @@ public class PublicPortalService {
         if (p.getMainModel3dId() != null) {
             dto.setHasModel3d(true);
             dto.setModel3dUrl(MODEL_URL_PREFIX + p.getMainModel3dId());
+            try {
+                Model3DDTO modelInfo = model3DService.getModel3DInfoById(p.getMainModel3dId());
+                if (modelInfo != null && modelInfo.getFormat() != null) {
+                    dto.setModel3dFormat(modelInfo.getFormat());
+                }
+            } catch (Exception ignored) {}
         }
 
         try {

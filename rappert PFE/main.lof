@@ -1,2 +1,19 @@
 \babel@toc {french}{}\relax 
 \addvspace {10\p@ }
+\contentsline {xchapter}{Présentation générale du projet}{7}{}%
+\contentsline {figure}{\numberline {1.1}{\ignorespaces Logo de l'entreprise We Are Tech}}{8}{}%
+\contentsline {figure}{\numberline {1.2}{\ignorespaces Interface de la plateforme Properstar}}{9}{}%
+\contentsline {figure}{\numberline {1.3}{\ignorespaces Interface de la plateforme Mubawab}}{10}{}%
+\contentsline {figure}{\numberline {1.4}{\ignorespaces Cycle de vie d'un projet Scrum}}{11}{}%
+\addvspace {10\p@ }
+\contentsline {xchapter}{Initiation du projet et étude technique}{13}{}%
+\contentsline {figure}{\numberline {2.1}{\ignorespaces Diagramme de cas d'utilisation global de la plateforme Maison3D Immobilier}}{27}{}%
+\contentsline {figure}{\numberline {2.2}{\ignorespaces Diagramme de cas d'utilisation du module Authentification et Sécurité}}{28}{}%
+\contentsline {figure}{\numberline {2.3}{\ignorespaces Diagramme de cas d'utilisation du module Gestion des Biens Immobiliers}}{28}{}%
+\contentsline {figure}{\numberline {2.4}{\ignorespaces Diagramme de classes de la plateforme Maison3D Immobilier}}{30}{}%
+\contentsline {figure}{\numberline {2.5}{\ignorespaces Diagramme de séquence du processus d'authentification JWT}}{31}{}%
+\contentsline {figure}{\numberline {2.6}{\ignorespaces Diagramme de séquence du processus de changement de statut d'un bien immobilier}}{32}{}%
+\contentsline {figure}{\numberline {2.7}{\ignorespaces Diagramme de séquence du cycle de vie d'une offre soumise par un affilié}}{33}{}%
+\contentsline {figure}{\numberline {2.8}{\ignorespaces Diagramme d'activités du processus d'ajout et de validation d'un bien immobilier}}{34}{}%
+\contentsline {figure}{\numberline {2.9}{\ignorespaces Diagramme de déploiement de la plateforme Maison3D Immobilier}}{35}{}%
+\contentsline {figure}{\numberline {2.10}{\ignorespaces Diagramme de composants de la plateforme Maison3D Immobilier}}{35}{}%

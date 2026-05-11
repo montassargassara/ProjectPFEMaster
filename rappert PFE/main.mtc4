@@ -1,0 +1,53 @@
+{\reset@font\mtcSfont\mtc@string\contentsline{section}{\noexpand \leavevmode \numberline {2.1}Introduction}{\reset@font\mtcSfont 13}{}}
+{\reset@font\mtcSfont\mtc@string\contentsline{section}{\noexpand \leavevmode \numberline {2.2}Objectifs du projet}{\reset@font\mtcSfont 13}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.2.1}Objectif principal}{\reset@font\mtcSSfont 13}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.2.2}Objectifs spécifiques}{\reset@font\mtcSSfont 13}{}}
+{\reset@font\mtcSSSfont\mtc@string\contentsline{subsubsection}{\noexpand \leavevmode Axe organisationnel}{\reset@font\mtcSSSfont 13}{}}
+{\reset@font\mtcSSSfont\mtc@string\contentsline{subsubsection}{\noexpand \leavevmode Axe commercial}{\reset@font\mtcSSSfont 14}{}}
+{\reset@font\mtcSSSfont\mtc@string\contentsline{subsubsection}{\noexpand \leavevmode Axe technique}{\reset@font\mtcSSSfont 14}{}}
+{\reset@font\mtcSfont\mtc@string\contentsline{section}{\noexpand \leavevmode \numberline {2.3}Identification des acteurs du système}{\reset@font\mtcSfont 14}{}}
+{\reset@font\mtcSfont\mtc@string\contentsline{section}{\noexpand \leavevmode \numberline {2.4}Description détaillée des acteurs}{\reset@font\mtcSfont 15}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.4.1}SUPER\_ADMIN}{\reset@font\mtcSSfont 15}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.4.2}ADMIN}{\reset@font\mtcSSfont 15}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.4.3}RESPONSABLE\_COMMERCIAL}{\reset@font\mtcSSfont 16}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.4.4}COMMERCIAL}{\reset@font\mtcSSfont 16}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.4.5}AFFILIATE}{\reset@font\mtcSSfont 16}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.4.6}CLIENT\_PUBLIC}{\reset@font\mtcSSfont 17}{}}
+{\reset@font\mtcSfont\mtc@string\contentsline{section}{\noexpand \leavevmode \numberline {2.5}Besoins fonctionnels}{\reset@font\mtcSfont 17}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.5.1}Module Authentification et Sécurité}{\reset@font\mtcSSfont 17}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.5.2}Module Gestion des Agences}{\reset@font\mtcSSfont 17}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.5.3}Module Gestion des Biens Immobiliers}{\reset@font\mtcSSfont 18}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.5.4}Module Gestion des Transactions}{\reset@font\mtcSSfont 19}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.5.5}Module Messagerie Interne}{\reset@font\mtcSSfont 19}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.5.6}Module Gestion des Affiliés}{\reset@font\mtcSSfont 19}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.5.7}Module Dashboard Intelligent}{\reset@font\mtcSSfont 20}{}}
+{\reset@font\mtcSfont\mtc@string\contentsline{section}{\noexpand \leavevmode \numberline {2.6}Besoins non fonctionnels}{\reset@font\mtcSfont 20}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.6.1}Sécurité}{\reset@font\mtcSSfont 20}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.6.2}Performance}{\reset@font\mtcSSfont 21}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.6.3}Disponibilité et Fiabilité}{\reset@font\mtcSSfont 21}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.6.4}Ergonomie et Accessibilité}{\reset@font\mtcSSfont 21}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.6.5}Maintenabilité et Évolutivité}{\reset@font\mtcSSfont 21}{}}
+{\reset@font\mtcSfont\mtc@string\contentsline{section}{\noexpand \leavevmode \numberline {2.7}Architecture générale du système}{\reset@font\mtcSfont 22}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.7.1}Vue d'ensemble}{\reset@font\mtcSSfont 22}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.7.2}Flux de communication}{\reset@font\mtcSSfont 22}{}}
+{\reset@font\mtcSfont\mtc@string\contentsline{section}{\noexpand \leavevmode \numberline {2.8}Architecture technique détaillée}{\reset@font\mtcSfont 23}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.8.1}Architecture Backend}{\reset@font\mtcSSfont 23}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.8.2}Architecture Frontend}{\reset@font\mtcSSfont 23}{}}
+{\reset@font\mtcSfont\mtc@string\contentsline{section}{\noexpand \leavevmode \numberline {2.9}Choix technologiques}{\reset@font\mtcSfont 23}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.9.1}Frontend : Angular 21}{\reset@font\mtcSSfont 23}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.9.2}Backend : Spring Boot 3.2}{\reset@font\mtcSSfont 24}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.9.3}Base de données : MySQL 8.0}{\reset@font\mtcSSfont 24}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.9.4}Authentification : JSON Web Token (JWT)}{\reset@font\mtcSSfont 25}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.9.5}Infrastructure : Docker et GitHub}{\reset@font\mtcSSfont 25}{}}
+{\reset@font\mtcSfont\mtc@string\contentsline{section}{\noexpand \leavevmode \numberline {2.10}Modélisation UML du système}{\reset@font\mtcSfont 26}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.10.1}Diagramme de cas d'utilisation global}{\reset@font\mtcSSfont 26}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.10.2}Diagramme de cas d'utilisation — Module Authentification}{\reset@font\mtcSSfont 28}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.10.3}Diagramme de cas d'utilisation — Module Gestion des Biens}{\reset@font\mtcSSfont 28}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.10.4}Diagramme de classes}{\reset@font\mtcSSfont 29}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.10.5}Diagramme de séquence — Authentification JWT}{\reset@font\mtcSSfont 31}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.10.6}Diagramme de séquence — Changement de statut d'un bien}{\reset@font\mtcSSfont 31}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.10.7}Diagramme de séquence — Cycle de vie d'une offre affilié}{\reset@font\mtcSSfont 32}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.10.8}Diagramme d'activités — Ajout et validation d'un bien immobilier}{\reset@font\mtcSSfont 33}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.10.9}Diagramme de déploiement}{\reset@font\mtcSSfont 35}{}}
+{\reset@font\mtcSSfont\mtc@string\contentsline{subsection}{\noexpand \leavevmode \numberline {2.10.10}Diagramme de composants}{\reset@font\mtcSSfont 35}{}}
+{\reset@font\mtcSfont\mtc@string\contentsline{section}{\noexpand \leavevmode \numberline {2.11}Conclusion}{\reset@font\mtcSfont 35}{}}

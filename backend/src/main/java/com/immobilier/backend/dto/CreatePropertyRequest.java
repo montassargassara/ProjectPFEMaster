@@ -29,6 +29,18 @@ public class CreatePropertyRequest implements PropertyStatusValidatable {
     
     private Double surface;
     private Integer nbChambres;
+    private Integer nbSallesDeBain;
+    private Boolean garage;
+    private Boolean piscine;
+    private Boolean jardin;
+    private Boolean meuble;
+    private Integer etage;
+    private Integer parkingSpaces;
+    private Integer anneeConstruction;
+    private Boolean prochePlage;
+    private Boolean procheTransport;
+    private Boolean securite;
+    private Boolean climatisation;
     
     @NotBlank(message = "L'adresse est obligatoire")
     private String adresse;

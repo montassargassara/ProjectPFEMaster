@@ -59,6 +59,12 @@ public class SecurityConfig {
                 .requestMatchers("/api/client/auth/**").authenticated()
                 .requestMatchers("/api/client/**").hasRole("CLIENT_PUBLIC")
 
+                // ── Admin CRM leads (separate namespace — admin token is used) ────────
+                .requestMatchers("/api/admin/interests/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "RESPONSABLE_COMMERCIAL", "COMMERCIAL")
+
+                // ── Cross-ownership sale validation workflow ──────────────────────────
+                .requestMatchers("/api/sale-validations/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "RESPONSABLE_COMMERCIAL", "COMMERCIAL")
+
                 // ── Super Admin only ─────────────────────────────────────────────────
                 .requestMatchers("/api/super-admin/**").hasRole("SUPER_ADMIN")
                 .requestMatchers("/api/admin/affiliates/**").hasRole("SUPER_ADMIN")

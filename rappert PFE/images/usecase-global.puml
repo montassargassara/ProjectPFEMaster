@@ -1,0 +1,148 @@
+@startuml usecase-global
+skinparam backgroundColor #FFFFFF
+skinparam usecase {
+  BackgroundColor #EEF2FF
+  BorderColor #4F46E5
+  ArrowColor #374151
+}
+skinparam actor {
+  BackgroundColor #DBEAFE
+  BorderColor #1D4ED8
+}
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam roundcorner 8
+
+left to right direction
+
+actor "SUPER_ADMIN" as SA #LightCoral
+actor "ADMIN" as AD #LightBlue
+actor "RESPONSABLE_COMMERCIAL" as RC #LightGreen
+actor "COMMERCIAL" as CO #LightYellow
+actor "AFFILIATE" as AF #Plum
+actor "CLIENT_PUBLIC" as CP #LightGray
+
+rectangle "Maison3D Immobilier" {
+
+  package "Authentification" {
+    usecase "Se connecter" as UC1
+    usecase "Gérer son profil" as UC2
+    usecase "Réinitialiser mot de passe" as UC3
+  }
+
+  package "Gestion des agences" {
+    usecase "Gérer les agences" as UC4
+    usecase "Approuver une agence" as UC5
+    usecase "Consulter les agences" as UC6
+  }
+
+  package "Gestion des biens" {
+    usecase "Ajouter un bien" as UC7
+    usecase "Modifier un bien" as UC8
+    usecase "Supprimer un bien" as UC9
+    usecase "Valider un bien" as UC10
+    usecase "Gérer les statuts" as UC11
+    usecase "Consulter les biens" as UC12
+    usecase "Géolocaliser un bien" as UC13
+    usecase "Uploader des images" as UC14
+  }
+
+  package "Gestion des transactions" {
+    usecase "Gérer les ventes" as UC15
+    usecase "Gérer les locations" as UC16
+    usecase "Gérer les renouvellements" as UC17
+    usecase "Consulter historique" as UC18
+  }
+
+  package "Messagerie interne" {
+    usecase "Envoyer un message" as UC19
+    usecase "Consulter messages" as UC20
+    usecase "Recevoir notifications" as UC21
+  }
+
+  package "Gestion des affiliés" {
+    usecase "Gérer les affiliés" as UC22
+    usecase "Gérer les commissions" as UC23
+    usecase "Consulter statistiques" as UC24
+    usecase "Soumettre une offre" as UC25
+  }
+
+  package "Dashboard" {
+    usecase "Consulter dashboard" as UC26
+    usecase "Consulter statistiques globales" as UC27
+  }
+}
+
+SA --> UC1
+SA --> UC2
+SA --> UC4
+SA --> UC5
+SA --> UC6
+SA --> UC12
+SA --> UC18
+SA --> UC19
+SA --> UC20
+SA --> UC21
+SA --> UC22
+SA --> UC27
+
+AD --> UC1
+AD --> UC2
+AD --> UC7
+AD --> UC10
+AD --> UC11
+AD --> UC15
+AD --> UC16
+AD --> UC17
+AD --> UC19
+AD --> UC20
+AD --> UC21
+AD --> UC22
+AD --> UC23
+AD --> UC26
+
+RC --> UC1
+RC --> UC2
+RC --> UC7
+RC --> UC8
+RC --> UC11
+RC --> UC15
+RC --> UC16
+RC --> UC19
+RC --> UC20
+RC --> UC21
+RC --> UC26
+
+CO --> UC1
+CO --> UC2
+CO --> UC7
+CO --> UC8
+CO --> UC9
+CO --> UC13
+CO --> UC14
+CO --> UC15
+CO --> UC16
+CO --> UC19
+CO --> UC20
+CO --> UC21
+CO --> UC26
+
+AF --> UC1
+AF --> UC2
+AF --> UC12
+AF --> UC24
+AF --> UC25
+AF --> UC19
+AF --> UC20
+
+CP --> UC3
+CP --> UC12
+CP --> UC19
+
+UC7 ..> UC13 : <<include>>
+UC7 ..> UC14 : <<include>>
+UC11 ..> UC15 : <<extend>>
+UC11 ..> UC16 : <<extend>>
+UC16 ..> UC17 : <<extend>>
+
+@enduml

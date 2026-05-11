@@ -63,7 +63,13 @@ public class NotificationService {
             case MONTHLY_BONUS_AWARDED:
                 return "MONTHLY_BONUS";
             case PROPERTY_INTEREST_RECEIVED:
+            case LEAD_REFUSED:
+            case LEAD_CONVERTED_SALE:
+            case LEAD_CONVERTED_RENTAL:
+            case LEAD_AUTO_REFUSED:
                 return "PROPERTY_INTEREST";
+            case PROPERTY_AVAILABLE_AGAIN:
+                return "PROPERTY";
             case PROPERTY_PENDING_VALIDATION:
             case PROPERTY_VALIDATED:
             case PROPERTY_REJECTED:

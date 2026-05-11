@@ -1,5 +1,4 @@
 import {
-  CUSTOM_ELEMENTS_SCHEMA,
   ChangeDetectorRef,
   Component,
   OnDestroy,
@@ -14,13 +13,13 @@ import { PublicPortalService } from '../../services/public-portal.service';
 import { PublicPropertyCard, PublicPropertyDetail } from '../../models/public-property.model';
 import { PublicPropertyCardComponent } from '../../components/property-card.component';
 import { ClientAuthService } from '../../services/client-auth.service';
-import { InterestModalComponent } from '../../components/interest-modal.component';
+import { InterestModalComponent } from '../../components/interest-modal/interest-modal.component';
+import { ModelViewerComponent } from '../../../components/model-viewer/model-viewer.component';
 
 @Component({
   selector: 'app-public-property-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink, PublicPropertyCardComponent, InterestModalComponent],
-  schemas: [CUSTOM_ELEMENTS_SCHEMA],
+  imports: [CommonModule, RouterLink, PublicPropertyCardComponent, InterestModalComponent, ModelViewerComponent],
   template: `
     <ng-container *ngIf="!loading && property; else loaderTpl">
       <section class="hero">
@@ -79,20 +78,75 @@ import { InterestModalComponent } from '../../components/interest-modal.componen
         <div class="main-col">
           <div class="quick-facts">
             <div *ngIf="property.surface">
+              <i class="fas fa-ruler-combined qf-icon"></i>
               <span class="label">Surface</span>
               <strong>{{ property.surface }} m²</strong>
             </div>
             <div *ngIf="property.nbChambres">
+              <i class="fas fa-bed qf-icon"></i>
               <span class="label">Chambres</span>
               <strong>{{ property.nbChambres }}</strong>
             </div>
+            <div *ngIf="property.nbSallesDeBain">
+              <i class="fas fa-shower qf-icon"></i>
+              <span class="label">Salles de bain</span>
+              <strong>{{ property.nbSallesDeBain }}</strong>
+            </div>
+            <div *ngIf="property.etage != null && property.etage! > 0">
+              <i class="fas fa-building qf-icon"></i>
+              <span class="label">Étage</span>
+              <strong>{{ property.etage }}</strong>
+            </div>
+            <div *ngIf="property.parkingSpaces && property.parkingSpaces > 0">
+              <i class="fas fa-square-parking qf-icon"></i>
+              <span class="label">Parking</span>
+              <strong>{{ property.parkingSpaces }} place{{ property.parkingSpaces > 1 ? 's' : '' }}</strong>
+            </div>
+            <div *ngIf="property.anneeConstruction">
+              <i class="fas fa-calendar-check qf-icon"></i>
+              <span class="label">Construction</span>
+              <strong>{{ property.anneeConstruction }}</strong>
+            </div>
             <div *ngIf="property.type">
+              <i class="fas fa-home qf-icon"></i>
               <span class="label">Type</span>
               <strong>{{ formatType(property.type) }}</strong>
             </div>
             <div *ngIf="property.statut">
+              <i class="fas fa-tag qf-icon"></i>
               <span class="label">Statut</span>
               <strong>{{ formatStatus(property.statut) }}</strong>
+            </div>
+          </div>
+
+          <!-- Amenity pills -->
+          <div class="section-block amenities-panel" *ngIf="hasAmenities()">
+            <h2>Équipements &amp; atouts</h2>
+            <div class="amenity-pills">
+              <span class="a-pill" *ngIf="property.garage">
+                <i class="fas fa-car"></i> Garage
+              </span>
+              <span class="a-pill" *ngIf="property.piscine">
+                <i class="fas fa-swimming-pool"></i> Piscine
+              </span>
+              <span class="a-pill" *ngIf="property.jardin">
+                <i class="fas fa-tree"></i> Jardin
+              </span>
+              <span class="a-pill" *ngIf="property.meuble">
+                <i class="fas fa-couch"></i> Meublé
+              </span>
+              <span class="a-pill" *ngIf="property.climatisation">
+                <i class="fas fa-snowflake"></i> Climatisation
+              </span>
+              <span class="a-pill" *ngIf="property.securite">
+                <i class="fas fa-shield-halved"></i> Système de sécurité
+              </span>
+              <span class="a-pill" *ngIf="property.prochePlage">
+                <i class="fas fa-umbrella-beach"></i> Proche plage
+              </span>
+              <span class="a-pill" *ngIf="property.procheTransport">
+                <i class="fas fa-bus"></i> Proche transports
+              </span>
             </div>
           </div>
 
@@ -122,32 +176,27 @@ import { InterestModalComponent } from '../../components/interest-modal.componen
                 </div>
               </div>
 
+              <!-- ═══════════════════════════════════════════════
+                   3D VIEWER — Three.js multi-format viewer
+                   ═══════════════════════════════════════════════ -->
               <div class="immersive-card tridi" *ngIf="property.hasModel3d && property.model3dUrl">
                 <div class="im-head">
-                  <span class="im-icon">3D</span>
+                  <div class="im-icon-3d">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                    </svg>
+                  </div>
                   <div>
-                    <strong>Visite 3D / Plan virtuel</strong>
-                    <span class="im-sub">Cliquez et faites glisser pour explorer</span>
+                    <strong>Visite 3D Interactive</strong>
+                    <span class="im-sub">Rotation · Zoom · Exploration libre · GLB, GLTF, OBJ, FBX, PLY</span>
                   </div>
                 </div>
-                <div class="tridi-frame">
-                  <model-viewer
-                    [attr.src]="resolve(property.model3dUrl)"
-                    camera-controls
-                    auto-rotate
-                    auto-rotate-delay="3000"
-                    interaction-prompt="auto"
-                    shadow-intensity="1"
-                    exposure="1"
-                    style="width: 100%; height: 360px; background: #f8fafc; --poster-color: transparent;">
-                    <div slot="progress-bar" class="tridi-progress"></div>
-                  </model-viewer>
-                </div>
-                <div class="im-actions">
-                  <button type="button" class="btn-link" (click)="openModelFullscreen($event)">
-                    Plein écran ⤢
-                  </button>
-                </div>
+                <app-model-viewer
+                  [src]="resolve(property.model3dUrl)"
+                  [format]="property.model3dFormat || undefined"
+                  [autoRotate]="true"
+                  height="480px">
+                </app-model-viewer>
               </div>
             </div>
           </div>
@@ -332,7 +381,7 @@ import { InterestModalComponent } from '../../components/interest-modal.componen
       }
       .quick-facts {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
         gap: 12px;
         background: #fff;
         padding: 20px;
@@ -350,6 +399,32 @@ import { InterestModalComponent } from '../../components/interest-modal.componen
       .quick-facts strong {
         font-size: 17px;
         color: #0f172a;
+      }
+      .qf-icon {
+        font-size: 13px;
+        color: #0b6bcb;
+        margin-bottom: 2px;
+      }
+
+      /* Amenity pills */
+      .amenities-panel h2 { font-size: 20px; margin: 0 0 14px; color: #0f172a; }
+      .amenity-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .a-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 16px;
+        background: #f0f4ff;
+        color: #3730a3;
+        border: 1px solid #c7d2fe;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 600;
+        i { font-size: 12px; color: #4f46e5; }
       }
       .section-block {
         margin-top: 28px;
@@ -465,10 +540,8 @@ import { InterestModalComponent } from '../../components/interest-modal.componen
         background: #0f172a; aspect-ratio: 16 / 9;
       }
       .video-frame video { width: 100%; height: 100%; display: block; }
-      .tridi-frame {
-        border-radius: 12px; overflow: hidden;
-        background: #f8fafc; border: 1px solid #e2e8f0;
-      }
+      /* app-model-viewer fills the card naturally */
+      .immersive-card.tridi app-model-viewer { display: block; }
       .im-actions { margin-top: 10px; text-align: right; }
       .btn-link {
         color: #0b6bcb; text-decoration: none; font-weight: 600; font-size: 13px;
@@ -518,6 +591,14 @@ import { InterestModalComponent } from '../../components/interest-modal.componen
       @media (max-width: 1024px) {
         .immersive-grid { grid-template-columns: 1fr; }
       }
+      /* ─── 3D card icon ─── */
+      .im-icon-3d {
+        width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+        display: inline-flex; align-items: center; justify-content: center;
+        background: linear-gradient(135deg, #6366f1, #4338ca);
+        color: #fff;
+      }
+
       @media (max-width: 600px) {
         .quick-facts { grid-template-columns: 1fr 1fr; }
         .grid { grid-template-columns: 1fr; }
@@ -541,7 +622,6 @@ export class PublicPropertyDetailComponent implements OnInit, OnDestroy {
   loading = true;
   activeImageIdx = 0;
   interestOpen = false;
-
   private subs: Subscription[] = [];
 
   ngOnInit(): void {
@@ -663,13 +743,10 @@ export class PublicPropertyDetailComponent implements OnInit, OnDestroy {
     return !!(this.property?.hasVideo || this.property?.hasModel3d);
   }
 
-  openModelFullscreen(event: MouseEvent): void {
-    event.preventDefault();
-    const card = (event.target as HTMLElement).closest('.immersive-card.tridi');
-    const viewer = card?.querySelector('model-viewer') as any;
-    if (viewer && typeof viewer.requestFullscreen === 'function') {
-      viewer.requestFullscreen().catch(() => {/* user denied fullscreen */});
-    }
+  hasAmenities(): boolean {
+    const p = this.property as any;
+    return !!(p?.garage || p?.piscine || p?.jardin || p?.meuble
+           || p?.climatisation || p?.securite || p?.prochePlage || p?.procheTransport);
   }
 
   isLoggedIn(): boolean {

@@ -59,6 +59,42 @@ public class Property {
     @Column(name = "nb_chambres")
     private Integer nbChambres;
 
+    @Column(name = "nb_salles_de_bain")
+    private Integer nbSallesDeBain;
+
+    @Column(name = "garage")
+    private Boolean garage = false;
+
+    @Column(name = "piscine")
+    private Boolean piscine = false;
+
+    @Column(name = "jardin")
+    private Boolean jardin = false;
+
+    @Column(name = "meuble")
+    private Boolean meuble = false;
+
+    @Column(name = "etage")
+    private Integer etage;
+
+    @Column(name = "parking_spaces")
+    private Integer parkingSpaces;
+
+    @Column(name = "annee_construction")
+    private Integer anneeConstruction;
+
+    @Column(name = "proche_plage")
+    private Boolean prochePlage = false;
+
+    @Column(name = "proche_transport")
+    private Boolean procheTransport = false;
+
+    @Column(name = "securite")
+    private Boolean securite = false;
+
+    @Column(name = "climatisation")
+    private Boolean climatisation = false;
+
     @Column(nullable = false, length = 500)
     private String adresse;
 
@@ -103,6 +139,11 @@ public class Property {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "agency_admin_id")
     private User agencyAdmin;
+
+    // The buyer linked by a direct sale (VENDU) or rental (LOUE) workflow.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "buyer_id")
+    private User buyer;
     // ─────────────────────────────────────────────────────────────────────────
 
     // ─── Role-based authoring & validation workflow ──────────────────────────
@@ -319,9 +360,9 @@ public class Property {
         } else if ("LOCATION".equals(category)) {
             return java.util.Arrays.asList("DISPONIBLE", "EN_ATTENTE", "LOUE");
         }
-        return java.util.Arrays.asList("DISPONIBLE", "EN_ATTENTE", "VENDU", "LOUE", "RESERVE");
+        return java.util.Arrays.asList("DISPONIBLE", "EN_ATTENTE", "VENDU", "LOUE");
     }
-    
+
     /**
      * Get valid statuses for a given category (static version)
      */
@@ -331,9 +372,9 @@ public class Property {
         } else if ("LOCATION".equals(category)) {
             return java.util.Arrays.asList("DISPONIBLE", "EN_ATTENTE", "LOUE");
         }
-        return java.util.Arrays.asList("DISPONIBLE", "EN_ATTENTE", "VENDU", "LOUE", "RESERVE");
+        return java.util.Arrays.asList("DISPONIBLE", "EN_ATTENTE", "VENDU", "LOUE");
     }
-    
+
     /**
      * Validate if a status is allowed for a category
      */
@@ -343,7 +384,7 @@ public class Property {
         } else if ("LOCATION".equals(category)) {
             return java.util.Arrays.asList("DISPONIBLE", "EN_ATTENTE", "LOUE").contains(status);
         }
-        return true;
+        return java.util.Arrays.asList("DISPONIBLE", "EN_ATTENTE", "VENDU", "LOUE").contains(status);
     }
 
     private Double getDefaultCommissionByType(String propertyType) {

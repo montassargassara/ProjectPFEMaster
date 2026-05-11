@@ -48,6 +48,14 @@
             </a>
           </li>
 
+          <li routerLinkActive="active"
+              *ngIf="currentUser?.role === 'SUPER_ADMIN' || currentUser?.role === 'ADMIN'">
+            <a routerLink="/admin/bi-dashboard">
+              <i class="fas fa-chart-line"></i>
+              <span *ngIf="!isSidebarCollapsed">Business Intelligence</span>
+            </a>
+          </li>
+
           <li routerLinkActive="active">
             <a routerLink="/admin/statistics">
               <i class="fas fa-gavel"></i>
@@ -84,6 +92,15 @@
               <i class="fas fa-inbox"></i>
               <span *ngIf="!isSidebarCollapsed">Propositions reçues</span>
               <span class="badge badge-pending" *ngIf="!isSidebarCollapsed && unreadNotifications > 0">{{ unreadNotifications }}</span>
+            </a>
+          </li>
+
+          <!-- Validations de vente/location (owner approves cross-ownership deals) -->
+          <li routerLinkActive="active">
+            <a routerLink="/admin/sale-validations">
+              <i class="fas fa-gavel"></i>
+              <span *ngIf="!isSidebarCollapsed">Validations</span>
+              <span class="badge badge-pending" *ngIf="pendingValidationsCount > 0">{{ pendingValidationsCount }}</span>
             </a>
           </li>
 
@@ -330,6 +347,9 @@
             </div>
             <div class="notification-footer" *ngIf="currentUser?.role === 'AFFILIATE'">
               <a routerLink="/admin/affiliate-offers" (click)="notifPanelOpen = false">Voir mes offres</a>
+            </div>
+            <div class="notification-footer" *ngIf="currentUser?.role !== 'AFFILIATE' && pendingValidationsCount > 0">
+              <a routerLink="/admin/sale-validations" (click)="notifPanelOpen = false">Voir les validations ({{ pendingValidationsCount }})</a>
             </div>
           </div>
         </div>

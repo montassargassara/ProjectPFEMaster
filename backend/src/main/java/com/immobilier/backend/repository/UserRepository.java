@@ -88,4 +88,16 @@ Optional<User> findTopAdminAncestor(@Param("userId") Long userId);
     SELECT COUNT(*) > 0 FROM user_tree WHERE role = 'ADMIN' AND id = :adminId
     """, nativeQuery = true)
 boolean isUnderAdmin(@Param("userId") Long userId, @Param("adminId") Long adminId);
+
+    // ── BI growth analytics ──────────────────────────────────────────────────
+    @Query("SELECT MONTH(u.createdAt), YEAR(u.createdAt), COUNT(u) FROM User u " +
+           "WHERE u.role = :role AND u.createdAt >= :since " +
+           "GROUP BY YEAR(u.createdAt), MONTH(u.createdAt) ORDER BY YEAR(u.createdAt), MONTH(u.createdAt)")
+    List<Object[]> countNewUsersByRoleByMonth(@Param("role") com.immobilier.backend.enums.RoleType role,
+                                              @Param("since") java.time.LocalDateTime since);
+
+    @Query("SELECT COUNT(u) FROM User u WHERE u.role = :role AND u.createdAt >= :start AND u.createdAt < :end")
+    long countNewUsersByRoleBetween(@Param("role") com.immobilier.backend.enums.RoleType role,
+                                    @Param("start") java.time.LocalDateTime start,
+                                    @Param("end") java.time.LocalDateTime end);
 }

@@ -1,0 +1,212 @@
+@startuml class-diagram
+skinparam backgroundColor #FFFFFF
+skinparam class {
+  BackgroundColor #EEF2FF
+  BorderColor #4F46E5
+  ArrowColor #374151
+  HeaderBackgroundColor #4F46E5
+  HeaderFontColor #FFFFFF
+}
+skinparam shadowing false
+skinparam roundcorner 6
+skinparam linetype ortho
+
+enum RoleType {
+  SUPER_ADMIN
+  ADMIN
+  RESPONSABLE_COMMERCIAL
+  COMMERCIAL
+  AFFILIATE
+  CLIENT_PUBLIC
+}
+
+enum PropertyStatus {
+  DISPONIBLE
+  EN_ATTENTE
+  VENDU
+  LOUE
+}
+
+enum TransactionType {
+  VENTE
+  LOCATION
+}
+
+enum AffiliateStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+class User {
+  - id : Long
+  - nom : String
+  - prenom : String
+  - email : String
+  - motDePasse : String
+  - telephone : String
+  - role : RoleType
+  - actif : Boolean
+  - dateCreation : LocalDateTime
+  - parent : User
+  + authenticate() : String
+  + updateProfile() : void
+}
+
+class Agency {
+  - id : Long
+  - nom : String
+  - adresse : String
+  - ville : String
+  - telephone : String
+  - email : String
+  - logoUrl : String
+  - approuve : Boolean
+  - dateCreation : LocalDateTime
+  + approve() : void
+  + getStatistics() : DashboardDTO
+}
+
+class Property {
+  - id : Long
+  - titre : String
+  - description : String
+  - prix : Double
+  - superficie : Double
+  - nombrePieces : Integer
+  - adresse : String
+  - ville : String
+  - pays : String
+  - latitude : Double
+  - longitude : Double
+  - statut : PropertyStatus
+  - type : String
+  - categorie : String
+  - valide : Boolean
+  - commissionPercentage : Double
+  - isReservedByAffiliate : Boolean
+  - dateCreation : LocalDateTime
+  + updateStatus(status: PropertyStatus) : void
+  + validate() : void
+  + addImage(url: String) : void
+}
+
+class PropertyImage {
+  - id : Long
+  - imageUrl : String
+  - principale : Boolean
+  - dateUpload : LocalDateTime
+}
+
+class Transaction {
+  - id : Long
+  - type : TransactionType
+  - montant : Double
+  - dateTransaction : LocalDateTime
+  - dateDebut : LocalDate
+  - dateFin : LocalDate
+  - statut : String
+  - notes : String
+  + complete() : void
+  + renew() : void
+}
+
+class Contract {
+  - id : Long
+  - dateDebut : LocalDate
+  - dateFin : LocalDate
+  - montantLoyer : Double
+  - statut : String
+  - renouvele : Boolean
+  + checkExpiry() : Boolean
+  + renew(newEndDate: LocalDate) : void
+}
+
+class Message {
+  - id : Long
+  - contenu : String
+  - lu : Boolean
+  - dateEnvoi : LocalDateTime
+  + markAsRead() : void
+}
+
+class Conversation {
+  - id : Long
+  - dateCreation : LocalDateTime
+  - dernierMessage : String
+  - dateDernierMessage : LocalDateTime
+}
+
+class Notification {
+  - id : Long
+  - titre : String
+  - message : String
+  - type : String
+  - lu : Boolean
+  - dateCreation : LocalDateTime
+  + markAsRead() : void
+}
+
+class AffiliateProfile {
+  - id : Long
+  - statut : AffiliateStatus
+  - zones : List<String>
+  - dateInscription : LocalDateTime
+  - totalCommissions : Double
+}
+
+class SaleOffer {
+  - id : Long
+  - prixPropose : Double
+  - statut : String
+  - dateOffre : LocalDateTime
+  - notes : String
+  + accept() : void
+  + reject() : void
+  + complete() : void
+}
+
+class Commission {
+  - id : Long
+  - montant : Double
+  - pourcentage : Double
+  - statut : String
+  - dateCalcul : LocalDateTime
+  + calculate() : Double
+}
+
+class AffiliateRegion {
+  - id : Long
+  - pays : String
+  - ville : String
+  - isPremium : Boolean
+}
+
+class ZonePayment {
+  - id : Long
+  - montant : Double
+  - statut : String
+  - proofImageUrl : String
+  - datePayment : LocalDateTime
+}
+
+' Relations
+User "1" -- "0..*" User : parent >
+User "1" -- "0..*" Property : crée >
+User "1" -- "1" Agency : appartient >
+Agency "1" -- "0..*" Property : possède >
+Property "1" -- "0..*" PropertyImage : contient >
+Property "1" -- "0..*" Transaction : génère >
+Transaction "1" -- "0..1" Contract : associé >
+User "1" -- "0..*" Message : envoie >
+Conversation "1" -- "0..*" Message : contient >
+Conversation "0..*" -- "2" User : participe >
+User "1" -- "0..*" Notification : reçoit >
+User "1" -- "0..1" AffiliateProfile : possède >
+AffiliateProfile "1" -- "0..*" AffiliateRegion : couvre >
+AffiliateProfile "1" -- "0..*" SaleOffer : soumet >
+SaleOffer "0..*" -- "1" Property : concerne >
+SaleOffer "1" -- "0..1" Commission : génère >
+AffiliateRegion "1" -- "0..*" ZonePayment : paiement >
+
+@enduml

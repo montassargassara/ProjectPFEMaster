@@ -281,6 +281,120 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
     @Query("SELECT p FROM Property p WHERE p.validationStatus IS NULL")
     List<Property> findAllNeedingValidationBackfill();
 
+    // ========== BI / ANALYTICS QUERIES ==========
+
+    @Query("SELECT MONTH(p.updatedAt), YEAR(p.updatedAt), COUNT(p) FROM Property p " +
+           "WHERE p.statut = 'VENDU' AND p.updatedAt >= :since " +
+           "GROUP BY YEAR(p.updatedAt), MONTH(p.updatedAt) ORDER BY YEAR(p.updatedAt), MONTH(p.updatedAt)")
+    List<Object[]> getMonthlySalesSince(@Param("since") java.time.LocalDateTime since);
+
+    @Query("SELECT MONTH(p.updatedAt), YEAR(p.updatedAt), COUNT(p) FROM Property p " +
+           "WHERE p.statut = 'LOUE' AND p.updatedAt >= :since " +
+           "GROUP BY YEAR(p.updatedAt), MONTH(p.updatedAt) ORDER BY YEAR(p.updatedAt), MONTH(p.updatedAt)")
+    List<Object[]> getMonthlyRentalsSince(@Param("since") java.time.LocalDateTime since);
+
+    @Query("SELECT MONTH(p.updatedAt), YEAR(p.updatedAt), COALESCE(SUM(p.prixVente), 0) FROM Property p " +
+           "WHERE p.statut = 'VENDU' AND p.updatedAt >= :since " +
+           "GROUP BY YEAR(p.updatedAt), MONTH(p.updatedAt) ORDER BY YEAR(p.updatedAt), MONTH(p.updatedAt)")
+    List<Object[]> getMonthlyRevenueSince(@Param("since") java.time.LocalDateTime since);
+
+    @Query("SELECT p.city, p.country, COUNT(p), COALESCE(SUM(p.prixVente), 0) FROM Property p " +
+           "WHERE p.statut = 'VENDU' AND p.city IS NOT NULL " +
+           "GROUP BY p.city, p.country ORDER BY COUNT(p) DESC")
+    List<Object[]> getTopCitiesBySales(org.springframework.data.domain.Pageable pageable);
+
+    @Query("SELECT p.city, p.country, COUNT(p) FROM Property p " +
+           "WHERE p.isActive = true AND p.statut = 'DISPONIBLE' AND p.city IS NOT NULL " +
+           "GROUP BY p.city, p.country ORDER BY COUNT(p) DESC")
+    List<Object[]> getTopCitiesByActive(org.springframework.data.domain.Pageable pageable);
+
+    @Query("SELECT p.type, COUNT(p), p.statut FROM Property p WHERE p.isActive = true GROUP BY p.type, p.statut")
+    List<Object[]> getTypeStatsByStatus();
+
+    @Query("SELECT p.agencyAdmin.id, p.agencyAdmin.nom, p.agencyAdmin.prenom, p.agencyAdmin.email, " +
+           "COUNT(p), COALESCE(SUM(p.prixVente), 0) FROM Property p " +
+           "WHERE p.statut = 'VENDU' AND p.ownerType = 'AGENCY_OWNED' AND p.agencyAdmin IS NOT NULL " +
+           "GROUP BY p.agencyAdmin.id, p.agencyAdmin.nom, p.agencyAdmin.prenom, p.agencyAdmin.email " +
+           "ORDER BY COUNT(p) DESC")
+    List<Object[]> getAgencyRankingBySales(org.springframework.data.domain.Pageable pageable);
+
+    @Query("SELECT p.agencyAdmin.id, COUNT(p) FROM Property p " +
+           "WHERE p.isActive = true AND p.statut = 'DISPONIBLE' AND p.agencyAdmin IS NOT NULL " +
+           "GROUP BY p.agencyAdmin.id")
+    List<Object[]> getActiveCountByAgency();
+
+    @Query("SELECT COUNT(p) FROM Property p " +
+           "WHERE p.isActive = true AND p.statut = 'DISPONIBLE' AND p.createdAt < :threshold")
+    long countStagnantProperties(@Param("threshold") java.time.LocalDateTime threshold);
+
+    @Query("SELECT COUNT(p) FROM Property p WHERE p.statut = 'VENDU' AND p.updatedAt >= :start AND p.updatedAt < :end")
+    long countVenduBetween(@Param("start") java.time.LocalDateTime start,
+                           @Param("end") java.time.LocalDateTime end);
+
+    @Query("SELECT COUNT(p) FROM Property p WHERE p.statut = 'LOUE' AND p.updatedAt >= :start AND p.updatedAt < :end")
+    long countLoueBetween(@Param("start") java.time.LocalDateTime start,
+                          @Param("end") java.time.LocalDateTime end);
+
+    // ── Agency-scoped BI queries ──────────────────────────────────────────────
+
+    @Query("SELECT COUNT(p) FROM Property p WHERE p.agencyAdmin.id = :adminId")
+    long countByAgencyAdmin(@Param("adminId") Long adminId);
+
+    @Query("SELECT COUNT(p) FROM Property p WHERE p.agencyAdmin.id = :adminId AND p.statut = 'DISPONIBLE'")
+    long countAvailableByAgencyAdmin(@Param("adminId") Long adminId);
+
+    @Query("SELECT COUNT(p) FROM Property p WHERE p.agencyAdmin.id = :adminId AND p.statut = 'VENDU'")
+    long countSoldByAgencyAdmin(@Param("adminId") Long adminId);
+
+    @Query("SELECT COUNT(p) FROM Property p WHERE p.agencyAdmin.id = :adminId AND p.statut = 'LOUE'")
+    long countRentedByAgencyAdmin(@Param("adminId") Long adminId);
+
+    @Query("SELECT COALESCE(SUM(p.prixVente), 0) FROM Property p WHERE p.statut = 'VENDU' AND p.agencyAdmin.id = :adminId")
+    Double calculateTotalRevenueByAgencyAdmin(@Param("adminId") Long adminId);
+
+    @Query("SELECT COALESCE(SUM(p.prixVente), 0) FROM Property p WHERE p.statut = 'VENDU' AND p.agencyAdmin.id = :adminId AND p.updatedAt >= :startDate")
+    Double calculateMonthlyRevenueByAgencyAdmin(@Param("adminId") Long adminId, @Param("startDate") java.time.LocalDateTime startDate);
+
+    @Query("SELECT COALESCE(SUM(p.prixVente), 0) FROM Property p WHERE p.statut = 'VENDU' AND p.agencyAdmin.id = :adminId AND MONTH(p.updatedAt) = :month AND YEAR(p.updatedAt) = :year")
+    Double calculateRevenueByMonthByAgencyAdmin(@Param("adminId") Long adminId, @Param("month") int month, @Param("year") int year);
+
+    @Query("SELECT MONTH(p.updatedAt), YEAR(p.updatedAt), COUNT(p) FROM Property p " +
+           "WHERE p.statut = 'VENDU' AND p.agencyAdmin.id = :adminId AND p.updatedAt >= :since " +
+           "GROUP BY YEAR(p.updatedAt), MONTH(p.updatedAt) ORDER BY YEAR(p.updatedAt), MONTH(p.updatedAt)")
+    List<Object[]> getMonthlySalesByAgencyAdminSince(@Param("adminId") Long adminId, @Param("since") java.time.LocalDateTime since);
+
+    @Query("SELECT MONTH(p.updatedAt), YEAR(p.updatedAt), COUNT(p) FROM Property p " +
+           "WHERE p.statut = 'LOUE' AND p.agencyAdmin.id = :adminId AND p.updatedAt >= :since " +
+           "GROUP BY YEAR(p.updatedAt), MONTH(p.updatedAt) ORDER BY YEAR(p.updatedAt), MONTH(p.updatedAt)")
+    List<Object[]> getMonthlyRentalsByAgencyAdminSince(@Param("adminId") Long adminId, @Param("since") java.time.LocalDateTime since);
+
+    @Query("SELECT MONTH(p.updatedAt), YEAR(p.updatedAt), COALESCE(SUM(p.prixVente), 0) FROM Property p " +
+           "WHERE p.statut = 'VENDU' AND p.agencyAdmin.id = :adminId AND p.updatedAt >= :since " +
+           "GROUP BY YEAR(p.updatedAt), MONTH(p.updatedAt) ORDER BY YEAR(p.updatedAt), MONTH(p.updatedAt)")
+    List<Object[]> getMonthlyRevenueByAgencyAdminSince(@Param("adminId") Long adminId, @Param("since") java.time.LocalDateTime since);
+
+    @Query("SELECT p.city, p.country, COUNT(p), COALESCE(SUM(p.prixVente), 0) FROM Property p " +
+           "WHERE p.statut = 'VENDU' AND p.agencyAdmin.id = :adminId AND p.city IS NOT NULL " +
+           "GROUP BY p.city, p.country ORDER BY COUNT(p) DESC")
+    List<Object[]> getTopCitiesBySalesByAgencyAdmin(@Param("adminId") Long adminId, org.springframework.data.domain.Pageable pageable);
+
+    @Query("SELECT p.city, p.country, COUNT(p) FROM Property p " +
+           "WHERE p.isActive = true AND p.statut = 'DISPONIBLE' AND p.agencyAdmin.id = :adminId AND p.city IS NOT NULL " +
+           "GROUP BY p.city, p.country ORDER BY COUNT(p) DESC")
+    List<Object[]> getTopCitiesByActiveByAgencyAdmin(@Param("adminId") Long adminId, org.springframework.data.domain.Pageable pageable);
+
+    @Query("SELECT p.type, COUNT(p), p.statut FROM Property p WHERE p.isActive = true AND p.agencyAdmin.id = :adminId GROUP BY p.type, p.statut")
+    List<Object[]> getTypeStatsByStatusByAgencyAdmin(@Param("adminId") Long adminId);
+
+    @Query("SELECT COUNT(p) FROM Property p WHERE p.isActive = true AND p.statut = 'DISPONIBLE' AND p.agencyAdmin.id = :adminId AND p.createdAt < :threshold")
+    long countStagnantByAgencyAdmin(@Param("adminId") Long adminId, @Param("threshold") java.time.LocalDateTime threshold);
+
+    @Query("SELECT COUNT(p) FROM Property p WHERE p.statut = 'VENDU' AND p.agencyAdmin.id = :adminId AND p.updatedAt >= :start AND p.updatedAt < :end")
+    long countVenduBetweenByAgencyAdmin(@Param("adminId") Long adminId, @Param("start") java.time.LocalDateTime start, @Param("end") java.time.LocalDateTime end);
+
+    @Query("SELECT COUNT(p) FROM Property p WHERE p.statut = 'LOUE' AND p.agencyAdmin.id = :adminId AND p.updatedAt >= :start AND p.updatedAt < :end")
+    long countLoueBetweenByAgencyAdmin(@Param("adminId") Long adminId, @Param("start") java.time.LocalDateTime start, @Param("end") java.time.LocalDateTime end);
+
     /** Single property access check for an agency (visible = owns it OR it's shared with them). */
     @Query("SELECT COUNT(p) > 0 FROM Property p WHERE p.id = :propertyId AND p.isActive = true AND (" +
            "  p.ownerType IS NULL OR" +
@@ -291,4 +405,16 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
            ")")
     boolean isPropertyVisibleForAgency(@Param("propertyId") Long propertyId,
                                        @Param("agencyAdminId") Long agencyAdminId);
+
+    /**
+     * Finds all LOUE properties whose rental end date has passed — used by the
+     * daily scheduler to reset them to DISPONIBLE.
+     */
+    @Query("""
+        SELECT p FROM Property p
+        WHERE p.statut = 'LOUE'
+          AND p.rentalEndDate IS NOT NULL
+          AND p.rentalEndDate < :now
+        """)
+    List<Property> findExpiredRentals(@Param("now") java.time.LocalDateTime now);
 }

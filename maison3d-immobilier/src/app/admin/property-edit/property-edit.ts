@@ -2,14 +2,15 @@ import { Component, OnInit, ChangeDetectorRef, AfterViewInit, OnDestroy, ViewChi
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormsModule, FormBuilder, FormControl, FormGroup, Validators } from '@angular/forms';
 import { RouterModule, ActivatedRoute, Router } from '@angular/router';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpEventType } from '@angular/common/http';
 import * as L from 'leaflet';
-import { firstValueFrom, of, combineLatest, Subscription } from 'rxjs';
+import { firstValueFrom, of, combineLatest, Observable, Subscription } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, filter, finalize, map, switchMap, tap } from 'rxjs/operators';
 import { apiBaseUrl } from '../../services/api-config';
 import { GeocodingService } from '../../services/geocoding-service';
 import { AdminAuthService } from '../services/admin-auth';
 import { AgencyAdminItem, PropertiesAdminService } from '../services/properties-admin.service';
+import { AiService, AIPriceResponse, AIRentalPriceResponse } from '../services/ai.service';
 
 interface PropertyPayload {
   titre: string;
@@ -20,6 +21,18 @@ interface PropertyPayload {
   statut: string;
   surface: number | null;
   nbChambres: number | null;
+  nbSallesDeBain: number | null;
+  garage: boolean;
+  piscine: boolean;
+  jardin: boolean;
+  meuble: boolean;
+  etage: number | null;
+  parkingSpaces: number | null;
+  anneeConstruction: number | null;
+  prochePlage: boolean;
+  procheTransport: boolean;
+  securite: boolean;
+  climatisation: boolean;
   adresse: string;
   country: string;
   city: string;
@@ -54,6 +67,9 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
   modelPreviewUrl = '';
   selectedModelFile: File | null = null;
   uploadingModel = false;
+  modelUploadProgress = 0;
+  modelDragOver = false;
+  modelError = '';
   videoPreviewName = '';
   videoPreviewUrl = '';
   selectedVideoFile: File | null = null;
@@ -145,6 +161,13 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
   statusLockReason: string | null = null;
   rentalEndDate: string | null = null;   // ISO date from backend DTO
 
+  readonly currentYear = new Date().getFullYear();
+
+  // ─── AI price estimation ──────────────────────────────────────────────────
+  aiEstimation: AIPriceResponse | AIRentalPriceResponse | null = null;
+  aiEstimating = false;
+  aiError: string | null = null;
+
   // ─── Status confirmation modal ────────────────────────────────────────────
   statusConfirmModalOpen = false;
   pendingStatusValue: string | null = null;   // the status the user wants to switch to
@@ -162,7 +185,8 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     private ngZone: NgZone,
     private geocodingService: GeocodingService,
     private authService: AdminAuthService,
-    private propertiesService: PropertiesAdminService
+    private propertiesService: PropertiesAdminService,
+    private aiService: AiService
   ) {}
 
   get currentRole(): string {
@@ -308,6 +332,18 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       prixLocation: [null],
       surface: [null, [Validators.min(1)]],
       nbChambres: [null, [Validators.min(0)]],
+      nbSallesDeBain: [null, [Validators.min(0)]],
+      garage: [false],
+      piscine: [false],
+      jardin: [false],
+      meuble: [false],
+      etage: [null, [Validators.min(0), Validators.max(50)]],
+      parkingSpaces: [null, [Validators.min(0)]],
+      anneeConstruction: [null, [Validators.min(1900), Validators.max(new Date().getFullYear())]],
+      prochePlage: [false],
+      procheTransport: [false],
+      securite: [false],
+      climatisation: [false],
       adresse: ['', Validators.required],
       country: ['Tunisie'],
       city: [''],
@@ -514,6 +550,18 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       prixLocation: property.prixLocation,
       surface: property.surface,
       nbChambres: property.nbChambres,
+      nbSallesDeBain: (property as any).nbSallesDeBain ?? null,
+      garage: !!(property as any).garage,
+      piscine: !!(property as any).piscine,
+      jardin: !!(property as any).jardin,
+      meuble: !!(property as any).meuble,
+      etage: (property as any).etage ?? null,
+      parkingSpaces: (property as any).parkingSpaces ?? null,
+      anneeConstruction: (property as any).anneeConstruction ?? null,
+      prochePlage: !!(property as any).prochePlage,
+      procheTransport: !!(property as any).procheTransport,
+      securite: !!(property as any).securite,
+      climatisation: !!(property as any).climatisation,
       adresse: property.adresse,
       country: property.country,
       city: property.city,
@@ -711,8 +759,9 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     const input = event.target as HTMLInputElement;
     if (!input.files?.length) return;
     const file = input.files[0];
+    this.modelError = '';
     if (!this.isValidModelFile(file)) {
-      this.errorMessage = 'Format 3D non supporte (GLB, GLTF, OBJ, FBX).';
+      this.modelError = 'Format non supporté. Formats acceptés : GLB, GLTF, OBJ, FBX, PLY.';
       return;
     }
     this.selectedModelFile = file;
@@ -722,10 +771,13 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
 
   onModelDrop(event: DragEvent): void {
     event.preventDefault();
+    this.modelDragOver = false;
     const file = event.dataTransfer?.files?.[0];
     if (!file) return;
+    this.modelError = '';
     if (!this.isValidModelFile(file)) {
-      this.errorMessage = 'Format 3D non supporte (GLB, GLTF, OBJ, FBX).';
+      this.modelError = 'Format non supporté. Formats acceptés : GLB, GLTF, OBJ, FBX, PLY.';
+      this.cdr.markForCheck();
       return;
     }
     this.selectedModelFile = file;
@@ -733,10 +785,34 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     this.cdr.markForCheck();
   }
 
+  onModelDragOver(event: DragEvent): void {
+    event.preventDefault();
+    if (!this.modelDragOver) {
+      this.modelDragOver = true;
+      this.cdr.markForCheck();
+    }
+  }
+
+  onModelDragLeave(event: DragEvent): void {
+    this.modelDragOver = false;
+    this.cdr.markForCheck();
+  }
+
   clearModel(): void {
     this.selectedModelFile = null;
     this.modelPreviewName = '';
+    this.modelError = '';
     this.cdr.markForCheck();
+  }
+
+  getModelFormat(): string {
+    const name = (this.selectedModelFile?.name || this.modelPreviewName).toLowerCase();
+    if (name.endsWith('.glb'))  return 'glb';
+    if (name.endsWith('.gltf')) return 'gltf';
+    if (name.endsWith('.obj'))  return 'obj';
+    if (name.endsWith('.fbx'))  return 'fbx';
+    if (name.endsWith('.ply'))  return 'ply';
+    return '3d';
   }
 
   onVideoSelect(event: Event): void {
@@ -771,6 +847,73 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     this.cdr.markForCheck();
   }
  
+  estimatePrice(): void {
+    const v       = this.form.getRawValue();
+    const city    = v.city;
+    const type    = v.type;
+    const surface = v.surface;
+
+    if (!city || !type || !surface || surface <= 0) {
+      this.aiError = 'Veuillez renseigner la ville, le type et la surface avant d\'estimer.';
+      this.cdr.markForCheck();
+      return;
+    }
+
+    const req = {
+      city,
+      type,
+      surface,
+      bedrooms:          v.nbChambres        ?? 0,
+      bathrooms:         v.nbSallesDeBain     ?? 1,
+      garage:            !!v.garage,
+      piscine:           !!v.piscine,
+      jardin:            !!v.jardin,
+      meuble:            !!v.meuble,
+      etage:             v.etage             ?? 0,
+      parkingSpaces:     v.parkingSpaces      ?? 0,
+      anneeConstruction: v.anneeConstruction  ?? null,
+      prochePlage:       !!v.prochePlage,
+      procheTransport:   !!v.procheTransport,
+      securite:          !!v.securite,
+      climatisation:     !!v.climatisation,
+    };
+
+    this.aiEstimating = true;
+    this.aiError = null;
+    this.aiEstimation = null;
+    this.cdr.markForCheck();
+
+    const call$: Observable<AIPriceResponse | AIRentalPriceResponse> = this.isVente
+      ? this.aiService.predictSalePrice(req)
+      : this.aiService.predictRentalPrice(req);
+
+    call$
+      .pipe(finalize(() => { this.aiEstimating = false; this.cdr.markForCheck(); }))
+      .subscribe({
+        next: (res: AIPriceResponse | AIRentalPriceResponse) => { this.aiEstimation = res; },
+        error: () => { this.aiError = 'Service IA indisponible. Vérifiez que le microservice Python tourne sur le port 8000.'; },
+      });
+  }
+
+  get aiSaleEstimation(): AIPriceResponse | null {
+    return this.isVente ? (this.aiEstimation as AIPriceResponse) : null;
+  }
+
+  get aiRentalEstimation(): AIRentalPriceResponse | null {
+    return !this.isVente ? (this.aiEstimation as AIRentalPriceResponse) : null;
+  }
+
+  applyAIPrice(): void {
+    if (!this.aiEstimation) return;
+    const price = this.isVente
+      ? (this.aiEstimation as AIPriceResponse).estimatedPrice
+      : (this.aiEstimation as AIRentalPriceResponse).estimatedMonthlyRent;
+    const field = this.isVente ? 'prixVente' : 'prixLocation';
+    this.form.get(field)?.setValue(price);
+    this.form.get(field)?.markAsTouched();
+    this.cdr.markForCheck();
+  }
+
   getFieldError(fieldName: string): string {
     const control = this.form.get(fieldName);
     if (!control?.invalid || !control.touched) return '';
@@ -829,6 +972,18 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
       prixLocation: isVente ? null : v.prixLocation,
       surface: v.surface,
       nbChambres: v.nbChambres,
+      nbSallesDeBain: v.nbSallesDeBain ?? null,
+      garage: !!v.garage,
+      piscine: !!v.piscine,
+      jardin: !!v.jardin,
+      meuble: !!v.meuble,
+      etage: v.etage ?? null,
+      parkingSpaces: v.parkingSpaces ?? null,
+      anneeConstruction: v.anneeConstruction ?? null,
+      prochePlage: !!v.prochePlage,
+      procheTransport: !!v.procheTransport,
+      securite: !!v.securite,
+      climatisation: !!v.climatisation,
       adresse: v.adresse,
       country: v.country,
       city: v.city,
@@ -925,17 +1080,38 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
     await Promise.all(deletes);
   }
 
-  private async uploadModel(propertyId: number, file: File): Promise<void> {
+  private uploadModel(propertyId: number, file: File): Promise<void> {
     this.uploadingModel = true;
+    this.modelUploadProgress = 0;
     this.cdr.markForCheck();
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      await firstValueFrom(this.http.post(`${this.modelUploadUrl}/${propertyId}/upload`, formData));
-    } finally {
-      this.uploadingModel = false;
-      this.cdr.markForCheck();
-    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return new Promise((resolve, reject) => {
+      this.http
+        .post(`${this.modelUploadUrl}/${propertyId}/upload`, formData, {
+          reportProgress: true,
+          observe: 'events',
+        })
+        .pipe(
+          finalize(() => {
+            this.uploadingModel = false;
+            this.modelUploadProgress = 0;
+            this.cdr.markForCheck();
+          }),
+        )
+        .subscribe({
+          next: event => {
+            if (event.type === HttpEventType.UploadProgress && event.total) {
+              this.modelUploadProgress = Math.round((100 * event.loaded) / event.total);
+              this.cdr.markForCheck();
+            }
+            if (event.type === HttpEventType.Response) resolve();
+          },
+          error: err => reject(err),
+        });
+    });
   }
 
   private async uploadVideo(propertyId: number, file: File): Promise<void> {
@@ -954,10 +1130,11 @@ export class PropertyEdit implements OnInit, AfterViewInit, OnDestroy {
   private isValidModelFile(file: File): boolean {
     const name = file.name.toLowerCase();
     return (
-      name.endsWith('.glb') ||
+      name.endsWith('.glb')  ||
       name.endsWith('.gltf') ||
-      name.endsWith('.obj') ||
-      name.endsWith('.fbx')
+      name.endsWith('.obj')  ||
+      name.endsWith('.fbx')  ||
+      name.endsWith('.ply')
     );
   }
 

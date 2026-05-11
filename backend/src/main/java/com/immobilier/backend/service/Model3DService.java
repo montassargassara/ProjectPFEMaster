@@ -75,15 +75,19 @@ public class Model3DService {
             model.setFormat("obj");
         } else if (fileName.endsWith(".fbx")) {
             model.setFormat("fbx");
+        } else if (fileName.endsWith(".ply")) {
+            model.setFormat("ply");
         } else if (file.getContentType() != null) {
             if (file.getContentType().contains("gltf")) {
                 model.setFormat("gltf");
-            } else if (file.getContentType().contains("glb")) {
-                model.setFormat("glb");
             } else if (file.getContentType().contains("obj")) {
                 model.setFormat("obj");
             } else if (file.getContentType().contains("fbx")) {
                 model.setFormat("fbx");
+            } else if (file.getContentType().contains("ply")) {
+                model.setFormat("ply");
+            } else {
+                model.setFormat("glb");
             }
         }
         
@@ -172,25 +176,27 @@ public class Model3DService {
         String fileName = file.getOriginalFilename();
         String contentType = file.getContentType();
         
-        // Check by file extension first
+        // Check by file extension
         if (fileName != null) {
             String lowerFileName = fileName.toLowerCase();
-            if (lowerFileName.endsWith(".gltf") || lowerFileName.endsWith(".glb") ||
-                lowerFileName.endsWith(".obj") || lowerFileName.endsWith(".fbx")) {
+            if (lowerFileName.endsWith(".glb") || lowerFileName.endsWith(".gltf")
+                    || lowerFileName.endsWith(".obj") || lowerFileName.endsWith(".fbx")
+                    || lowerFileName.endsWith(".ply")) {
                 return; // Valid by extension
             }
         }
-        
-        // Check by content type
+
+        // Check by content type (browsers send application/octet-stream for binary 3D files)
         if (contentType != null) {
-            if (contentType.contains("gltf") || contentType.contains("glb") ||
-                contentType.contains("obj") || contentType.contains("fbx") ||
-                contentType.contains("model")) {
+            if (contentType.contains("gltf") || contentType.contains("glb")
+                    || contentType.contains("obj") || contentType.contains("fbx")
+                    || contentType.contains("ply") || contentType.contains("model")
+                    || contentType.equals("application/octet-stream")) {
                 return; // Valid by content type
             }
         }
-        
-        throw new RuntimeException("Invalid file type. Only 3D model files are allowed (GLTF, GLB, OBJ, FBX)");
+
+        throw new RuntimeException("Format non supporté. Formats acceptés : GLB, GLTF, OBJ, FBX, PLY");
     }
 
     private Model3DDTO convertToDTO(Model3D model) {

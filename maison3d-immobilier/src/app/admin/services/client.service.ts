@@ -221,6 +221,7 @@ export class ClientService {
       'RESPONSABLE_COMMERCIAL': '#fd7e14',
       'COMMERCIAL': '#28a745',
       'CLIENT': '#17a2b8',
+      'CLIENT_PUBLIC': '#17a2b8',
       'AFFILIATE': '#6f42c1',
       'AFFILIATE_CLIENT': '#6f42c1'
     };

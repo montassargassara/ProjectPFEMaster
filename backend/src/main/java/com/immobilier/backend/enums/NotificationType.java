@@ -47,5 +47,12 @@ public enum NotificationType {
     // ── Zone payment workflow ─────────────────────────────────────────────────
     ZONE_PAYMENT_SUBMITTED,     // super admin notified of a new zone payment proof
     ZONE_PAYMENT_APPROVED,      // affiliate notified their zone payment was approved
-    ZONE_PAYMENT_REJECTED       // affiliate notified their zone payment was rejected
+    ZONE_PAYMENT_REJECTED,      // affiliate notified their zone payment was rejected
+
+    // ── CRM lead lifecycle ────────────────────────────────────────────────────
+    LEAD_REFUSED,               // public client notified their interest was refused
+    LEAD_CONVERTED_SALE,        // admin notified lead converted → property sold
+    LEAD_CONVERTED_RENTAL,      // admin notified lead converted → property rented
+    LEAD_AUTO_REFUSED,          // public client notified: another buyer was selected
+    PROPERTY_AVAILABLE_AGAIN    // admin notified: rental expired, property is DISPONIBLE again
 }

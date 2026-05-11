@@ -15,6 +15,18 @@ public class UpdatePropertyRequest implements PropertyStatusValidatable {
     private String statut;
     private Double surface;
     private Integer nbChambres;
+    private Integer nbSallesDeBain;
+    private Boolean garage;
+    private Boolean piscine;
+    private Boolean jardin;
+    private Boolean meuble;
+    private Integer etage;
+    private Integer parkingSpaces;
+    private Integer anneeConstruction;
+    private Boolean prochePlage;
+    private Boolean procheTransport;
+    private Boolean securite;
+    private Boolean climatisation;
     private String adresse;
     private String country;
     private String city;

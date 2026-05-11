@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { PropertiesAdminService, PropertyListItem } from '../services/properties-admin.service';
+import { AdminAuthService } from '../services/admin-auth';
 import { apiBaseUrl } from '../../services/api-config';
 
 @Component({
@@ -21,13 +22,22 @@ export class TransactionsLocation implements OnInit {
   searchTerm = '';
   typeFilter = '';
   cityFilter = '';
+  agencyFilter = '';
+
+  selectedTxnProperty: PropertyListItem | null = null;
+
+  currentUserRole = '';
 
   constructor(
     private propertiesService: PropertiesAdminService,
+    private authService: AdminAuthService,
     private cdr: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
+    this.authService.currentUser.subscribe(u => {
+      this.currentUserRole = u?.role ?? '';
+    });
     this.load();
   }
 
@@ -38,20 +48,45 @@ export class TransactionsLocation implements OnInit {
       next: list => {
         this.properties = list;
         this.loading = false;
-        this.cdr.detectChanges();
+        this.cdr.markForCheck();
       },
       error: () => {
         this.errorMessage = 'Impossible de charger les locations.';
         this.loading = false;
-        this.cdr.detectChanges();
+        this.cdr.markForCheck();
       },
     });
   }
 
-  // ── Computed stats ───────────────────────────────────────────────────────
+  get isSuperAdmin(): boolean {
+    return this.currentUserRole === 'SUPER_ADMIN';
+  }
+
+  // ── Sectioning (SUPER_ADMIN only) ─────────────────────────────────────────
+
+  get ownProperties(): PropertyListItem[] {
+    return this.properties.filter(p => p.ownerType === 'SUPER_ADMIN_OWNED');
+  }
+
+  get agencyProperties(): PropertyListItem[] {
+    return this.properties.filter(p => p.ownerType === 'AGENCY_OWNED' || !p.ownerType);
+  }
+
+  get availableAgencies(): string[] {
+    const names = this.agencyProperties
+      .map(p => p.agencyAdminName)
+      .filter((n): n is string => !!n);
+    return [...new Set(names)].sort();
+  }
+
+  get agencyCount(): number {
+    return new Set(this.agencyProperties.map(p => p.agencyAdminName).filter(Boolean)).size;
+  }
+
+  // ── Global / per-section stats ────────────────────────────────────────────
 
   get totalRevenue(): number {
-    return this.properties.reduce((sum, p) => sum + (p.prixLocation ?? 0), 0);
+    return this.properties.reduce((s, p) => s + (p.prixLocation ?? 0), 0);
   }
 
   get avgPrice(): number {
@@ -59,26 +94,12 @@ export class TransactionsLocation implements OnInit {
     return this.totalRevenue / this.properties.length;
   }
 
-  get cityBreakdown(): { city: string; count: number }[] {
-    const map = new Map<string, number>();
-    this.properties.forEach(p => {
-      const c = p.city || 'Inconnue';
-      map.set(c, (map.get(c) ?? 0) + 1);
-    });
-    return Array.from(map.entries())
-      .map(([city, count]) => ({ city, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
+  get ownRevenue(): number {
+    return this.ownProperties.reduce((s, p) => s + (p.prixLocation ?? 0), 0);
   }
 
-  get typeBreakdown(): { type: string; count: number }[] {
-    const map = new Map<string, number>();
-    this.properties.forEach(p => {
-      map.set(p.type, (map.get(p.type) ?? 0) + 1);
-    });
-    return Array.from(map.entries())
-      .map(([type, count]) => ({ type, count }))
-      .sort((a, b) => b.count - a.count);
+  get agencyRevenue(): number {
+    return this.agencyProperties.reduce((s, p) => s + (p.prixLocation ?? 0), 0);
   }
 
   get activeRentals(): number {
@@ -89,11 +110,48 @@ export class TransactionsLocation implements OnInit {
     }).length;
   }
 
-  // ── Filtered list ────────────────────────────────────────────────────────
+  get ownActiveRentals(): number {
+    const now = new Date();
+    return this.ownProperties.filter(p => {
+      if (!p.rentalEndDate) return true;
+      return new Date(p.rentalEndDate) > now;
+    }).length;
+  }
 
-  get filtered(): PropertyListItem[] {
+  get agencyActiveRentals(): number {
+    const now = new Date();
+    return this.agencyProperties.filter(p => {
+      if (!p.rentalEndDate) return true;
+      return new Date(p.rentalEndDate) > now;
+    }).length;
+  }
+
+  // ── City / type breakdowns ────────────────────────────────────────────────
+
+  get cityBreakdown(): { city: string; count: number }[] {
+    const src = this.isSuperAdmin ? this.ownProperties : this.properties;
+    const map = new Map<string, number>();
+    src.forEach(p => map.set(p.city || 'Inconnue', (map.get(p.city || 'Inconnue') ?? 0) + 1));
+    return Array.from(map.entries())
+      .map(([city, count]) => ({ city, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }
+
+  get typeBreakdown(): { type: string; count: number }[] {
+    const src = this.isSuperAdmin ? this.ownProperties : this.properties;
+    const map = new Map<string, number>();
+    src.forEach(p => map.set(p.type, (map.get(p.type) ?? 0) + 1));
+    return Array.from(map.entries())
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  // ── Filtered lists ────────────────────────────────────────────────────────
+
+  private applyFilters(list: PropertyListItem[]): PropertyListItem[] {
     const term = this.searchTerm.trim().toLowerCase();
-    return this.properties.filter(p => {
+    return list.filter(p => {
       const matchSearch = !term
         || p.titre.toLowerCase().includes(term)
         || (p.adresse ?? '').toLowerCase().includes(term)
@@ -102,6 +160,22 @@ export class TransactionsLocation implements OnInit {
       const matchCity = !this.cityFilter || (p.city ?? '') === this.cityFilter;
       return matchSearch && matchType && matchCity;
     });
+  }
+
+  get filteredOwn(): PropertyListItem[] {
+    return this.applyFilters(this.ownProperties);
+  }
+
+  get filteredAgency(): PropertyListItem[] {
+    let list = this.agencyProperties;
+    if (this.agencyFilter) {
+      list = list.filter(p => p.agencyAdminName === this.agencyFilter);
+    }
+    return this.applyFilters(list);
+  }
+
+  get filtered(): PropertyListItem[] {
+    return this.applyFilters(this.properties);
   }
 
   get availableTypes(): string[] {
@@ -146,5 +220,14 @@ export class TransactionsLocation implements OnInit {
     this.searchTerm = '';
     this.typeFilter = '';
     this.cityFilter = '';
+    this.agencyFilter = '';
+  }
+
+  openTxnDetail(p: PropertyListItem): void {
+    this.selectedTxnProperty = p;
+  }
+
+  closeTxnDetail(): void {
+    this.selectedTxnProperty = null;
   }
 }

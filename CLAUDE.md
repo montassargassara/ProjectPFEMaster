@@ -105,11 +105,13 @@ Standard Spring Boot layered architecture:
 ```
 controller/   → REST endpoints (Auth, Dashboard, PropertyShareRequest, Notification,
                 AffiliateController, SuperAdminAffiliateController, SaleOfferController,
-                ZonePaymentController, SuperAdminZonePaymentController, etc.)
+                ZonePaymentController, SuperAdminZonePaymentController,
+                AdminInterestController, etc.)
 service/      → Business logic
+scheduler/    → Spring @Scheduled jobs (RentalExpiryScheduler — daily rental expiry check)
 repository/   → Spring Data JPA repositories
 entity/       → JPA domain models
-dto/          → Request / response data transfer objects
+dto/          → Request / response data transfer objects (incl. ConvertLeadRequest)
 security/     → JWT filter, UserDetailsService, Spring Security config
 config/       → CORS, file upload, and other beans
 exception/    → Global exception handler
@@ -149,8 +151,10 @@ admin/
   affiliate-incoming-offers/    → Agency Admin: incoming sale offers from affiliates
   agency-applications/          → Super Admin: review PENDING agency self-registrations
   zone-payment-requests/        → Super Admin: review zone payment proofs (approve/reject)
+  sale-validations/             → Cross-ownership sale/rental validation workflow
+                                  (two-tab: pending approvals + sent requests)
   services/                     → HTTP wrappers (properties, share-request, notification,
-                                  auth, affiliate, agency-registration, …)
+                                  auth, affiliate, agency-registration, sale-validation, …)
   guards/                       → Route guards (auth protection + role isolation)
 public/                         → Public visitor portal — fully isolated from admin shell
   layout/                       → Public header + footer + outlet
@@ -703,6 +707,111 @@ gates everything downstream.
 
 `GET /api/client/interests/mine` returns the current client's submissions.
 
+---
+
+# CRM LEAD WORKFLOW (Admin side)
+
+## Lead Pipeline
+
+When a public client submits "Intéressé par ce bien", an `InterestRequest` (lead) is created at `PENDING`. Admins advance it through the pipeline:
+
+```
+PENDING → CONTACTED → VISITE_PROGRAMMEE → EN_NEGOCIATION
+                                                ↓
+                              CONVERTI_VENTE | CONVERTI_LOCATION | REFUSE
+```
+
+**Terminal states** (CONVERTI_VENTE, CONVERTI_LOCATION, REFUSE) lock the lead permanently — no further changes allowed.
+
+## Category-Conditional Conversion
+
+The conversion options shown in the UI depend on the property's category:
+
+| Property category | Allowed terminal statuses        |
+|-------------------|----------------------------------|
+| VENTE             | CONVERTI_VENTE, REFUSE           |
+| LOCATION          | CONVERTI_LOCATION, REFUSE        |
+
+The backend validates this at `PUT /api/admin/interests/{id}/convert` and rejects invalid combinations.
+
+## Conversion Effects
+
+### CONVERTI_VENTE
+- `property.statut → VENDU`, `property.isFinalized = true`
+- All other **active** leads on the same property are auto-refused (`LEAD_AUTO_REFUSED` notification to each losing client)
+- Lead locked. Owner notified via `LEAD_CONVERTED_SALE`.
+
+### CONVERTI_LOCATION
+- `property.statut → LOUE`
+- Rental contract fields stored on the lead: `rentalStartDate`, `rentalEndDate` (= start + duration), `rentalDurationMonths`, `rentalAmount`, `rentalNotes`
+- Same property fields updated: `property.rentalStartDate`, `property.rentalEndDate`, `property.rentalDurationMonths`
+- All sibling active leads auto-refused. Owner notified via `LEAD_CONVERTED_RENTAL`.
+- **Rental end date is auto-calculated**: `rentalEndDate = rentalStartDate + rentalDurationMonths months`.
+
+### REFUSE
+- Lead locked with optional `rejectionMessage`
+- Public client notified via `LEAD_REFUSED`
+- A refused lead can only be "re-opened" if the client submits a **new** "Intéressé" request — which creates a fresh `InterestRequest` row. The old one stays archived.
+
+## Multi-Client / Auto-Refuse Rule
+
+A property can have multiple concurrent active leads (one per interested client). When any lead is converted:
+1. The converted lead is locked with the new status.
+2. Every other non-terminal lead on the **same property** is immediately set to REFUSE + locked.
+3. Each losing client receives a `LEAD_AUTO_REFUSED` notification.
+
+This is enforced by `InterestRequestService.autoRefuseSiblings()` called inside `convertLead()`.
+
+## Rental Expiry Scheduler
+
+`RentalExpiryScheduler` runs daily at **02:00** (`@Scheduled(cron = "0 0 2 * * *")`):
+- Queries `Property` rows where `statut = 'LOUE'` AND `rentalEndDate < NOW()`
+- For each expired rental:
+  - `property.statut → DISPONIBLE`
+  - `property.rentalStartDate/EndDate/DurationMonths` cleared
+  - Agency admin (or all super admins if no agency) notified via `PROPERTY_AVAILABLE_AGAIN`
+- Each property is processed independently; an error on one does not stop others.
+
+## Admin-Side API
+
+All endpoints are at `/api/admin/interests/**` (admin JWT required — never `/api/client/interests/**` which uses the client token).
+
+- `GET  /api/admin/interests/my-leads` — all leads where the caller is the property owner
+- `PUT  /api/admin/interests/{id}/status` — non-terminal pipeline moves (PENDING → CONTACTED → VISITE_PROGRAMMEE → EN_NEGOCIATION); rejects terminal statuses
+- `PUT  /api/admin/interests/{id}/convert` — terminal transition (`ConvertLeadRequest` body with `targetStatus` + optional rental/refusal fields)
+
+## ConvertLeadRequest DTO
+
+```json
+{
+  "targetStatus": "CONVERTI_LOCATION",
+  "rentalStartDate": "2026-06-01",
+  "rentalDurationMonths": 12,
+  "rentalAmount": 800,
+  "rentalNotes": "Caution 2 mois",
+  "rejectionMessage": null
+}
+```
+
+For `CONVERTI_LOCATION`, `rentalStartDate` and `rentalDurationMonths` (≥ 1) are mandatory. For `REFUSE`, all rental fields are ignored; `rejectionMessage` is optional.
+
+## Frontend Lead Card Behaviour
+
+- Dropdown is filtered by property category (no CONVERTI_LOCATION shown for VENTE properties and vice versa).
+- Selecting CONVERTI_VENTE → confirmation modal (warns about auto-refuse of siblings).
+- Selecting CONVERTI_LOCATION → rental contract modal (start date, duration, amount, notes; end date previewed live).
+- Selecting REFUSE → refusal modal with optional message field.
+- Locked leads show a coloured ribbon (green = converted, red = refused) and a "Lecture seule" label. Contact buttons (call, WhatsApp, email) remain clickable even on locked leads.
+- After conversion, `loadProperties()` is re-called to reflect the updated `statut` on the property card.
+
+## Working Rules
+
+- **Never call terminal transitions through `PUT /{id}/status`** — that endpoint rejects CONVERTI_* and REFUSE and instructs the caller to use `/convert`. This prevents accidental locking without the proper modal confirmation.
+- **Terminal state is final.** There is no "unlock" endpoint. If a conversion was wrong, the property status must be corrected directly via the property update endpoint; a new lead must be submitted by the client.
+- **The `status` column is `VARCHAR(50)`, not VARCHAR(20).** `VISITE_PROGRAMMEE` is 18 chars; `CONVERTI_LOCATION` is 17 chars. Any migration from an old schema must run: `ALTER TABLE interest_requests MODIFY COLUMN status VARCHAR(50) NOT NULL;`
+- **Rental contract fields live on `InterestRequest`, not a separate table.** One lead = one contract snapshot. Do not add a separate `RentalContract` entity unless the domain genuinely needs contract amendments.
+- **Auto-refuse siblings happens inside the same transaction as the conversion.** If the sibling notifications fail (e.g. a recipient user was deleted), that must not roll back the conversion. Wrap notification calls so they never bubble exceptions.
+
 ## 3D Model Viewer
 
 Inline rendering uses Google's `<model-viewer>` web component, loaded once
@@ -714,8 +823,10 @@ browsers treat it as a download and prompt the user to install something.
 ## Key Public Portal Backend Entities
 
 - `User.role = CLIENT_PUBLIC` — distinct from the legacy in-agency `CLIENT`.
-- `InterestRequest` — links public client + property + owner-at-submission;
-  status PENDING / CONTACTED / CLOSED.
+- `InterestRequest` — links public client + property + owner-at-submission.
+  Full status pipeline: `PENDING → CONTACTED → VISITE_PROGRAMMEE → EN_NEGOCIATION → CONVERTI_VENTE / CONVERTI_LOCATION / REFUSE`.
+  Terminal states are **locked** — no further status changes are possible.
+  `status` column is `VARCHAR(50)` (not 20 — VISITE_PROGRAMMEE is 18 chars).
 - `users.role` column **must be VARCHAR(40)**, not MySQL ENUM. Same trap as
   `notifications.type` — a fresh role added to the enum will trigger
   `Data truncated for column 'role'` until you run:
@@ -828,6 +939,14 @@ Users receive in-app notifications for all key lifecycle events relevant to thei
 | `ZONE_PAYMENT_SUBMITTED`     | Super Admin                     | Affiliate uploads a wire transfer proof to unlock a paid zone                                                   |
 | `ZONE_PAYMENT_APPROVED`      | Affiliate                       | Super Admin approves the zone payment — zone is now active                                                      |
 | `ZONE_PAYMENT_REJECTED`      | Affiliate                       | Super Admin rejects the zone payment with a reason                                                              |
+| `LEAD_REFUSED`               | Public client                   | Admin refuses the client's interest request (with optional message)                                             |
+| `LEAD_CONVERTED_SALE`        | Admin / agency                  | Lead converted → property set VENDU                                                                             |
+| `LEAD_CONVERTED_RENTAL`      | Admin / agency                  | Lead converted → property set LOUE (with rental contract dates)                                                 |
+| `LEAD_AUTO_REFUSED`          | Public client                   | Another buyer was selected for the property; sibling leads auto-refused                                         |
+| `PROPERTY_AVAILABLE_AGAIN`   | Admin / agency                  | Daily scheduler: rental period expired, property automatically reset to DISPONIBLE                              |
+| `SALE_APPROVAL_REQUESTED`    | Property owner (Admin/SuperAdmin)| Cross-ownership validation: requester submitted a sale/rental for owner approval                                |
+| `SALE_APPROVAL_GRANTED`      | Requester                       | Property owner approved the cross-ownership sale/rental request                                                  |
+| `SALE_APPROVAL_REJECTED`     | Requester                       | Property owner rejected the cross-ownership sale/rental request                                                  |
 
 `NotificationType` is a Java enum stored as `VARCHAR(50)` in MySQL — **not** a MySQL ENUM column. If migrating an older schema: `ALTER TABLE notifications MODIFY COLUMN type VARCHAR(50) NOT NULL;`
 
@@ -848,6 +967,8 @@ Users receive in-app notifications for all key lifecycle events relevant to thei
   - `AGENCY_APPROVED/REJECTED` + ADMIN → `/admin/dashboard`
   - `ZONE_PAYMENT_SUBMITTED` + SUPER_ADMIN → `/admin/zone-payment-requests`
   - `ZONE_PAYMENT_APPROVED/REJECTED` + AFFILIATE → `/admin/affiliate-dashboard`
+  - `SALE_APPROVAL_REQUESTED` → `/admin/sale-validations` (for any role — owner clicks to approve/reject)
+  - `SALE_APPROVAL_GRANTED` / `SALE_APPROVAL_REJECTED` → `/admin/sale-validations` (requester sees status)
 
 ## Notification API
 
@@ -855,6 +976,135 @@ Users receive in-app notifications for all key lifecycle events relevant to thei
 - `GET  /api/notifications/unread-count` — `{ count: number }`
 - `PUT  /api/notifications/{id}/read` — mark one as read
 - `PUT  /api/notifications/read-all` — mark all as read
+
+---
+
+# CROSS-OWNERSHIP SALE VALIDATION WORKFLOW
+
+## Purpose
+
+When a staff member (COMMERCIAL, RESPONSABLE_COMMERCIAL, or even ADMIN) tries to close a sale or rental on a property they do not own, the system cannot finalise the transaction directly. Instead, it creates a **pending validation request** that the property owner must approve or reject. This enforces a clean chain of authority across multi-tenant and cross-agency transactions.
+
+## Ownership Rules
+
+`PropertyOwnershipService.isOwner(user, property)` is the single source of truth:
+
+| Property `ownerType`   | Who is the owner                                                      |
+|------------------------|-----------------------------------------------------------------------|
+| `SUPER_ADMIN_OWNED`    | Only SUPER_ADMIN                                                      |
+| `AGENCY_OWNED`         | The `agencyAdmin` User (ADMIN) of that property's agency              |
+| `null` (legacy)        | Nobody specific — no validation required (treated as ownerless)       |
+
+For `AGENCY_OWNED`, non-ADMIN internal users (COMMERCIAL, RESPONSABLE_COMMERCIAL) are resolved to their top ADMIN ancestor via `userRepository.findTopAdminAncestor(userId)`. If that ancestor matches the property's `agencyAdmin`, they are considered the owner.
+
+`requiresValidation(user, property)` = `!isOwner(user, property)`.
+
+## When Validation Is Triggered
+
+Two entry points both call `saleValidationService.isPropertyOwner()` and create a request if the requester is not the owner:
+
+1. **Direct sale path** — `PropertyService.processDirectSale()`:
+   - If requester does NOT own the property → `SaleValidationService.createForDirectSale(property, req, requester)` → returns early (property status: `EN_ATTENTE_VALIDATION`)
+   - If requester OWNS the property → `completeValidatedDirectSale()` runs immediately
+
+2. **CRM lead conversion path** — `InterestRequestService.convertLead()`:
+   - `REFUSE` never requires validation (no ownership change).
+   - For `CONVERTI_VENTE` / `CONVERTI_LOCATION` + non-owner → `SaleValidationService.createForCrmLead(...)` → lead stays unlocked, returns as-is
+   - For owner → inline conversion proceeds immediately
+
+## Workflow States
+
+```
+[Requester] → createForDirectSale / createForCrmLead
+                          ↓
+              SaleValidationRequest (status = PENDING)
+              property.statut = EN_ATTENTE_VALIDATION
+                          ↓
+              Owner notified: SALE_APPROVAL_REQUESTED
+                     ↙              ↘
+             approve()            reject()
+                ↓                    ↓
+     complete sale/rental    property → DISPONIBLE
+     notify requester:       notify requester:
+     SALE_APPROVAL_GRANTED   SALE_APPROVAL_REJECTED
+```
+
+## Property Status During Validation
+
+`EN_ATTENTE_VALIDATION` is a transient status set while a validation request is PENDING. The property is effectively locked:
+- Not DISPONIBLE → no new leads or affiliate offers accepted
+- Not VENDU/LOUE → not shown as finalised
+
+On approval → property moves to VENDU or LOUE (via the normal completion path).
+On rejection → property reverts to DISPONIBLE.
+
+## Approve Path (by source)
+
+`SaleValidationService.approve(id, reviewer)`:
+
+- **DIRECT_SALE**: reconstructs a `DirectSaleRequest` from the stored SVR fields → calls `propertyService.completeValidatedDirectSale(property, req, reviewer)` which runs the same logic as a direct sale by the owner (marks VENDU/LOUE, applies rental fields, etc.)
+- **CRM_LEAD**: calls `completeLeadConversion(svr, property, targetStatus, reviewer)` inline — sets property statut, locks the lead as CONVERTI_VENTE or CONVERTI_LOCATION, auto-refuses sibling leads, notifies losing clients via `LEAD_AUTO_REFUSED`
+
+Both paths then set `svr.status = APPROVED`, record `reviewedBy` + `reviewedAt`, and send `SALE_APPROVAL_GRANTED` to the requester.
+
+## Reject Path
+
+`SaleValidationService.reject(id, reviewer, reason)`:
+- Property reverts to `DISPONIBLE`
+- `svr.status = REJECTED`, optional `rejectionReason` stored
+- Requester notified via `SALE_APPROVAL_REJECTED`
+
+## Circular Dependency Resolution
+
+`PropertyService` injects `SaleValidationService` (to create validation requests when a non-owner tries to close a deal). `SaleValidationService` injects `PropertyService` (to complete an approved direct-sale validation). This is a circular dependency.
+
+**Solution**: `SaleValidationService` uses an **explicit constructor** with `@Lazy PropertyService propertyService`. The ownership check itself is moved to `PropertyOwnershipService` (a neutral service with no back-references), which both services can inject without cycles.
+
+## Backend Components
+
+- `PropertyOwnershipService` — `isOwner(User, Property)` and `requiresValidation(User, Property)`. No circular deps.
+- `SaleValidationRequest` (entity) — fields: `property`, `requester`, `buyer` (nullable), `clientNom/Prenom/Email/Tel`, `targetStatus` (VENDU/LOUE), `source` (DIRECT_SALE/CRM_LEAD), `interestRequest` (nullable), rental fields, `status` (PendingSaleApprovalStatus), `rejectionReason`, `reviewedBy`, `reviewedAt`, `createdAt`. `@PrePersist` sets `status = PENDING`.
+- `SaleValidationRequestRepository` — JPQL queries:
+  - `findPendingForAgencyAdmin(adminId)` — AGENCY_OWNED pending requests where agencyAdmin matches
+  - `findPendingForSuperAdmin()` — SUPER_ADMIN_OWNED pending requests
+  - `findByRequesterIdOrderByCreatedAtDesc(requesterId)` — requester's history
+  - `findByPropertyIdAndStatus(propertyId, status)` — uniqueness guard
+  - `countPendingForAgencyAdmin(adminId)` / `countPendingForSuperAdmin()` — sidebar badge
+- `SaleValidationRequestDTO` — static factory `from(SaleValidationRequest, apiBase)` builds absolute image URL
+- `SaleValidationService` — business logic (see above)
+- `SaleValidationController` — `@PreAuthorize("hasAnyRole('SUPER_ADMIN','ADMIN','RESPONSABLE_COMMERCIAL','COMMERCIAL')")`
+  - `GET /api/sale-validations/pending-for-me` — owner's pending validations
+  - `GET /api/sale-validations/my-requests` — requester's sent requests
+  - `GET /api/sale-validations/pending-count` — `{ count: N }` for sidebar badge
+  - `PUT /api/sale-validations/{id}/approve` — owner approves
+  - `PUT /api/sale-validations/{id}/reject` — owner rejects (body: `{ "reason": "…" }`)
+
+Security config: `.requestMatchers("/api/sale-validations/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "RESPONSABLE_COMMERCIAL", "COMMERCIAL")`
+
+## Frontend Components
+
+- `sale-validation.service.ts` — Angular HTTP service (`admin/services/`): `getPendingForMe()`, `getMyRequests()`, `getPendingCount()`, `approve(id)`, `reject(id, reason)`
+- `SaleValidationsComponent` (`admin/sale-validations/`) — Two-tab page:
+  - **"Validations à traiter"** — Cards for pending approvals (property thumbnail, requester/buyer info, rental contract details). Approve button → confirmation modal (warns about auto-refuse siblings + irreversibility). Reject button → modal with optional reason textarea.
+  - **"Mes demandes envoyées"** — Table view of sent requests with status (PENDING / APPROVED / REJECTED) and rejection reason.
+- Route: `/admin/sale-validations` registered in `app.routes.ts`
+- Sidebar: "Validations" menu item (all non-affiliate roles) with red badge showing `pendingValidationsCount`
+- `admin-component.ts`:
+  - `pendingValidationsCount: number` field
+  - `loadValidationCount()` called on login + every 60 seconds via `interval(60000)`
+  - `SALE_APPROVAL_REQUESTED` → navigate to `/admin/sale-validations`
+  - `SALE_APPROVAL_GRANTED` / `SALE_APPROVAL_REJECTED` → navigate to `/admin/sale-validations`
+- Notification panel footer shows "Voir les validations (N)" when `pendingValidationsCount > 0`
+
+## Working Rules
+
+- **`EN_ATTENTE_VALIDATION` is the only status that signals a pending cross-ownership validation.** Do not use it for any other purpose. It blocks the property from public listings and from new affiliate offers.
+- **Never skip the validation path.** Both `processDirectSale()` and `convertLead()` MUST call `isPropertyOwner()` before proceeding. Owners bypass validation and complete immediately; non-owners always go through the approval workflow.
+- **Auto-refuse siblings only on approval, never on request creation.** The lead (InterestRequest) stays unlocked until the owner approves. Only on `approve()` does the CRM lead get locked and sibling leads refused.
+- **`PropertyOwnershipService` is the single source of truth.** Never inline the ownership check logic in other services — always delegate to `PropertyOwnershipService.isOwner()`.
+- **`@Lazy` on `PropertyService` in `SaleValidationService` constructor is mandatory.** Removing it restores the circular dependency and crashes the Spring context on startup.
+- **Reject notifications must include an optional reason.** `rejectionReason` is stored on the `SaleValidationRequest`. The frontend reject modal has an optional textarea. The backend reject endpoint accepts `{ "reason": "…" }` (nullable).
+- **Sidebar badge polls every 60 seconds** (not 30) to avoid overloading the backend with count queries. The `loadValidationCount()` helper is separate from `loadCounts()` and uses its own interval subscription.
 
 ---
 
@@ -967,6 +1217,17 @@ Do **not** make proof endpoints `permitAll` — that would expose sensitive fina
 - **Public registration components must use `finalize()` + `ChangeDetectorRef.markForCheck()`.** Both `RegisterAgencyComponent` and `RegisterAffiliateComponent` wrap the HTTP call in `finalize(() => { this.loading = false; this.cdr.markForCheck(); })` so the spinner always stops even if zone.js doesn't trigger a detection cycle after the callback.
 - **Never include `provideClientHydration(withEventReplay())` in `app.config.ts` for a pure CSR app.** This SSR feature captures and replays DOM events during the Angular init phase, causing click events on registration buttons to fire twice — the first fires while `loading=true` (spinner already set), the second fires the actual HTTP call. Remove it if present.
 
+## CRM Lead Module
+
+- **Admin lead endpoints live at `/api/admin/interests/**`, never `/api/client/interests/**`.** The JWT interceptor routes all `/api/client/**` URLs through the client token. Admin users have no client token → 403. The `clientAuthErrorInterceptor` then redirects to `/compte/login`. Always use the `/api/admin/` namespace for admin-side CRM calls.
+- **Non-terminal moves go through `PUT /{id}/status`; terminal moves go through `PUT /{id}/convert`.** The `/status` endpoint actively rejects CONVERTI_* and REFUSE to prevent bypassing the confirmation modals.
+- **Locked leads are read-only forever.** There is no unlock endpoint. Correction path: update the property directly via `/api/properties/{id}`; client must re-submit a new interest request.
+- **The `status` column is `VARCHAR(50)`.** `VISITE_PROGRAMMEE` (18 chars) and `CONVERTI_LOCATION` (17 chars) exceed the old VARCHAR(20) size. On first deploy against an existing schema: `ALTER TABLE interest_requests MODIFY COLUMN status VARCHAR(50) NOT NULL;`
+- **Auto-refuse runs in the same `@Transactional` boundary as the conversion.** If notifications throw, catch and log — never let a notification failure roll back the conversion itself.
+- **`getAvailableLeadStatuses(lead)` uses `lead.propertyCategory` (backend-supplied) first, with `leadsPanelProperty` as a fallback.** Never call `getPropertyCategory(null!)` — always guard: `(this.leadsPanelProperty ? this.getPropertyCategory(this.leadsPanelProperty) : null)`.
+- **After a conversion the property list must be refreshed.** `executeConvert()` calls `loadProperties()` when `targetStatus` is CONVERTI_VENTE or CONVERTI_LOCATION so the property card reflects the new `statut` without a page reload.
+- **`RentalExpiryScheduler` is the only place that flips LOUE → DISPONIBLE automatically.** Do not add ad-hoc status resets elsewhere. The scheduler fires at 02:00 daily and clears rental date fields upon reset.
+
 ## Affiliate Module
 
 - **Never expose admin spaces to affiliate users.** `AdminAuthGuard` must reject all non-affiliate routes for `ROLE_AFFILIATE`.
@@ -991,18 +1252,21 @@ Do **not** make proof endpoints `permitAll` — that would expose sensitive fina
 
 # CURRENT PRIORITIES
 
-1. Property multi-tenant security (ownership isolation, visibility enforcement)
-2. Sharing approval workflow (request → notify → accept/reject → activate)
-3. Affiliate module completion (profile, offers, ranking, earnings, zone filtering)
-4. Zone monetization system (free first zone, paid additional zones, payment proof workflow)
-5. Role visibility isolation (AFFILIATE workspace, route guard, sidebar, API guard)
-6. Commission engine (agency per-share negotiation + affiliate property-based rates)
-7. Dashboard financial accuracy (commission-only revenue for shared properties)
-8. Public client portal (browsing, CLIENT_PUBLIC accounts, Intéressé workflow,
+1. ✅ Property multi-tenant security (ownership isolation, visibility enforcement)
+2. ✅ Sharing approval workflow (request → notify → accept/reject → activate)
+3. ✅ Affiliate module completion (profile, offers, ranking, earnings, zone filtering)
+4. ✅ Zone monetization system (free first zone, paid additional zones, payment proof workflow)
+5. ✅ Role visibility isolation (AFFILIATE workspace, route guard, sidebar, API guard)
+6. ✅ Commission engine (agency per-share negotiation + affiliate property-based rates)
+7. ✅ Dashboard financial accuracy (commission-only revenue for shared properties)
+8. ✅ Public client portal (browsing, CLIENT_PUBLIC accounts, Intéressé workflow,
    per-agency lead auto-creation, in-page 3D viewer)
-9. Mobile responsive UI
-10. 3D premium module
-11. Reviews + favorites for public clients (Phase 3 — pending)
+9. ✅ CRM lead workflow (pipeline, terminal conversions, rental contract, auto-refuse siblings)
+10. ✅ Cross-ownership sale validation workflow (PropertyOwnershipService, SaleValidationService,
+    SaleValidationController, SaleValidationsComponent, sidebar badge, notification routing)
+11. Mobile responsive UI
+12. 3D premium module
+13. Reviews + favorites for public clients (Phase 3 — pending)
 
 ---
 

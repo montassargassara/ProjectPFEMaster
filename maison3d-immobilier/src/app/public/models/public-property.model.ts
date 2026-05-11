@@ -7,6 +7,15 @@ export interface PublicPropertyCard {
   prixLocation?: number | null;
   surface?: number | null;
   nbChambres?: number | null;
+  nbSallesDeBain?: number | null;
+  garage?: boolean | null;
+  piscine?: boolean | null;
+  jardin?: boolean | null;
+  meuble?: boolean | null;
+  etage?: number | null;
+  parkingSpaces?: number | null;
+  climatisation?: boolean | null;
+  securite?: boolean | null;
   city?: string | null;
   country?: string | null;
   region?: string | null;
@@ -22,8 +31,12 @@ export interface PublicPropertyDetail extends PublicPropertyCard {
   description?: string | null;
   statut?: string | null;
   adresse?: string | null;
+  anneeConstruction?: number | null;
+  prochePlage?: boolean | null;
+  procheTransport?: boolean | null;
   imageUrls?: string[];
   model3dUrl?: string | null;
+  model3dFormat?: string | null;
   hasVideo?: boolean;
   mainVideoUrl?: string | null;
   videoUrls?: string[];
